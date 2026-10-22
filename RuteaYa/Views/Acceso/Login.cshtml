@@ -1,0 +1,121 @@
+﻿@model RuteaYa.Web.Models.LoginUsuarioViewModel
+
+@{
+    ViewData["Title"] = "Iniciar sesión";
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] - RuteaYa</title>
+    <link rel="stylesheet" href="~/css/acceso.css" asp-append-version="true" />
+</head>
+<body class="acceso-page">
+    <main class="acceso-shell">
+        <section class="acceso-panel acceso-panel-form">
+            <a class="acceso-brand" asp-controller="Acceso" asp-action="Login">
+                <span class="acceso-brand-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 11.5 12 4l9 7.5" />
+                        <path d="M5.5 10v10h13V10" />
+                        <path d="M9 20v-6h6v6" />
+                    </svg>
+                </span>
+                RuteaYa
+            </a>
+
+            <p class="acceso-eyebrow">Tu próximo destino</p>
+            <h1 class="acceso-title">Qué bueno verte de nuevo.</h1>
+            <p class="acceso-subtitle">
+                Iniciá sesión para continuar organizando tus viajes y recorridos.
+            </p>
+
+            @if (TempData["Mensaje"] is string mensaje)
+            {
+                <div class="acceso-alert-success" role="status">@mensaje</div>
+            }
+
+            <form asp-controller="Acceso" asp-action="Login" method="post"
+                  class="acceso-form">
+                @Html.AntiForgeryToken()
+
+                <div asp-validation-summary="ModelOnly"
+                     class="acceso-validation-summary" role="alert"></div>
+
+                <div class="acceso-field">
+                    <label asp-for="Email" class="acceso-label">
+                        Correo electrónico
+                    </label>
+                    <input asp-for="Email" class="acceso-input"
+                           type="email" placeholder="nombre@ejemplo.com"
+                           autocomplete="email" />
+                    <span asp-validation-for="Email" class="acceso-validation"></span>
+                </div>
+
+                <div class="acceso-field">
+                    <label asp-for="Password" class="acceso-label">
+                        Contraseña
+                    </label>
+                    <input asp-for="Password" class="acceso-input"
+                           type="password" placeholder="Ingresá tu contraseña"
+                           autocomplete="current-password" />
+                    <span asp-validation-for="Password" class="acceso-validation"></span>
+                </div>
+
+                <button type="submit" class="acceso-button">
+                    Iniciar sesión
+                    <span aria-hidden="true">→</span>
+                </button>
+            </form>
+
+            <p class="acceso-footer">
+                ¿Todavía no tenés cuenta?
+                <a class="acceso-link" asp-controller="Acceso" asp-action="Registro">
+                    Crear una cuenta
+                </a>
+            </p>
+        </section>
+
+        <aside class="acceso-panel acceso-panel-visual">
+            <div class="acceso-visual-content">
+                <span class="acceso-visual-tag">
+                    <span aria-hidden="true">✦</span>
+                    Viajá a tu manera
+                </span>
+
+                <h2 class="acceso-visual-title">
+                    Cada ruta tiene una historia.
+                </h2>
+
+                <p class="acceso-visual-description">
+                    Planificá tus recorridos, organizá tus destinos y preparate
+                    para tu próxima aventura con RuteaYa.
+                </p>
+
+                <div class="acceso-feature-list">
+                    <div class="acceso-feature">
+                        <span class="acceso-feature-icon" aria-hidden="true">⌖</span>
+                        <span>Organizá tus próximos destinos</span>
+                    </div>
+                    <div class="acceso-feature">
+                        <span class="acceso-feature-icon" aria-hidden="true">↗</span>
+                        <span>Tené tus recorridos a mano</span>
+                    </div>
+                    <div class="acceso-feature">
+                        <span class="acceso-feature-icon" aria-hidden="true">✓</span>
+                        <span>Continuá donde lo dejaste</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="acceso-visual-bottom">
+                RuteaYa · Tu viaje empieza acá.
+            </div>
+        </aside>
+    </main>
+</body>
+</html>

@@ -1,0 +1,161 @@
+﻿@model RuteaYa.Web.Models.RegistroUsuarioViewModel
+
+@{
+    ViewData["Title"] = "Crear cuenta";
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] - RuteaYa</title>
+    <link rel="stylesheet" href="~/css/acceso.css" asp-append-version="true" />
+</head>
+<body class="acceso-page">
+    <main class="acceso-shell">
+        <section class="acceso-panel acceso-panel-form">
+            <a class="acceso-brand" asp-controller="Acceso" asp-action="Login">
+                <span class="acceso-brand-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 11.5 12 4l9 7.5" />
+                        <path d="M5.5 10v10h13V10" />
+                        <path d="M9 20v-6h6v6" />
+                    </svg>
+                </span>
+                RuteaYa
+            </a>
+
+            <p class="acceso-eyebrow">Empezá tu recorrido</p>
+            <h1 class="acceso-title">Creá tu cuenta.</h1>
+            <p class="acceso-subtitle">
+                Registrate para empezar a organizar tus próximos viajes.
+            </p>
+
+            <form asp-controller="Acceso" asp-action="Registro" method="post"
+                  class="acceso-form">
+                @Html.AntiForgeryToken()
+
+                <div asp-validation-summary="ModelOnly"
+                     class="acceso-validation-summary" role="alert"></div>
+
+                <div class="acceso-field">
+                    <label asp-for="Nombre" class="acceso-label">Nombre</label>
+                    <input asp-for="Nombre" class="acceso-input"
+                           placeholder="Tu nombre" autocomplete="given-name" />
+                    <span asp-validation-for="Nombre" class="acceso-validation"></span>
+                </div>
+
+                <div class="acceso-field">
+                    <label asp-for="Apellido" class="acceso-label">Apellido</label>
+                    <input asp-for="Apellido" class="acceso-input"
+                           placeholder="Tu apellido" autocomplete="family-name" />
+                    <span asp-validation-for="Apellido" class="acceso-validation"></span>
+                </div>
+
+                
+                <div class="acceso-field">
+                    <label asp-for="NombreUsuario" class="acceso-label">
+                        Nombre de usuario
+                    </label>
+                    <input asp-for="NombreUsuario"
+                           class="acceso-input"
+                           placeholder="Ej. juanperez23"
+                           autocomplete="username"
+                           maxlength="30"
+                           autocapitalize="none"
+                           spellcheck="false" />
+                    <span asp-validation-for="NombreUsuario"
+                          class="acceso-validation"></span>
+                    <small style="color: #64748b;">
+                        Entre 3 y 30 caracteres. Podés usar letras, números, puntos,
+                        guiones y guiones bajos.
+                    </small>
+                </div>
+
+
+
+                <div class="acceso-field">
+                    <label asp-for="Email" class="acceso-label">
+                        Correo electrónico
+                    </label>
+                    <input asp-for="Email" class="acceso-input"
+                           type="email" placeholder="nombre@ejemplo.com"
+                           autocomplete="email" />
+                    <span asp-validation-for="Email" class="acceso-validation"></span>
+                </div>
+
+                <div class="acceso-field">
+                    <label asp-for="Password" class="acceso-label">Contraseña</label>
+                    <input asp-for="Password" class="acceso-input"
+                           type="password" placeholder="Mínimo 8 caracteres"
+                           autocomplete="new-password" />
+                    <span asp-validation-for="Password" class="acceso-validation"></span>
+                </div>
+
+                <div class="acceso-field">
+                    <label asp-for="ConfirmarPassword" class="acceso-label">
+                        Confirmar contraseña
+                    </label>
+                    <input asp-for="ConfirmarPassword" class="acceso-input"
+                           type="password" placeholder="Repetí tu contraseña"
+                           autocomplete="new-password" />
+                    <span asp-validation-for="ConfirmarPassword"
+                          class="acceso-validation"></span>
+                </div>
+
+                <button type="submit" class="acceso-button">
+                    Crear mi cuenta
+                    <span aria-hidden="true">→</span>
+                </button>
+            </form>
+
+            <p class="acceso-footer">
+                ¿Ya tenés cuenta?
+                <a class="acceso-link" asp-controller="Acceso" asp-action="Login">
+                    Iniciar sesión
+                </a>
+            </p>
+        </section>
+
+        <aside class="acceso-panel acceso-panel-visual">
+            <div class="acceso-visual-content">
+                <span class="acceso-visual-tag">
+                    <span aria-hidden="true">✦</span>
+                    Tu aventura comienza acá
+                </span>
+
+                <h2 class="acceso-visual-title">
+                    Descubrí nuevas formas de llegar.
+                </h2>
+
+                <p class="acceso-visual-description">
+                    Creá tu cuenta y prepará el camino para tus próximos destinos.
+                    Todo empieza con un primer paso.
+                </p>
+
+                <div class="acceso-feature-list">
+                    <div class="acceso-feature">
+                        <span class="acceso-feature-icon" aria-hidden="true">⌖</span>
+                        <span>Prepará tus recorridos</span>
+                    </div>
+                    <div class="acceso-feature">
+                        <span class="acceso-feature-icon" aria-hidden="true">↗</span>
+                        <span>Organizá tus viajes</span>
+                    </div>
+                    <div class="acceso-feature">
+                        <span class="acceso-feature-icon" aria-hidden="true">✓</span>
+                        <span>Empezá tu próxima aventura</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="acceso-visual-bottom">
+                RuteaYa · Tu viaje empieza acá.
+            </div>
+        </aside>
+    </main>
+</body>
+</html>

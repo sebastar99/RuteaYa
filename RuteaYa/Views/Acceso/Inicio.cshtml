@@ -1,0 +1,12 @@
+﻿@{
+    ViewData["Title"] = "Inicio";
+}
+
+<h1>Bienvenido a RuteaYa, @User.Identity?.Name</h1>
+
+<p>Iniciaste sesión correctamente.</p>
+
+<form asp-controller="Acceso" asp-action="Logout" method="post">
+    @Html.AntiForgeryToken()
+    <button type="submit">Cerrar sesión</button>
+</form>

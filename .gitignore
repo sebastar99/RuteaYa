@@ -1,0 +1,16 @@
+﻿# Visual Studio
+.vs/
+*.suo
+*.user
+*.sln.docstates
+RuteaYa.slnLaunch.user
+
+# Compilación de .NET
+**/bin/
+**/obj/
+
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+**/appsettings.Development.json
