@@ -1,12 +1,255 @@
 ﻿@{
-    ViewData["Title"] = "Inicio";
+    ViewData["Title"] = "Dashboard";
+    Layout = null;
+
+    var nombre = User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value
+        ?? User.Identity?.Name
+        ?? "Usuario";
+
+    var apellido = User.FindFirst("Apellido")?.Value ?? "";
 }
 
-<h1>Bienvenido a RuteaYa, @User.Identity?.Name</h1>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RuteaYa | Dashboard</title>
+    <link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="dashboard">
 
-<p>Iniciaste sesión correctamente.</p>
+        <aside class="sidebar">
+            <a class="brand" asp-controller="Acceso" asp-action="Inicio">
+                <span class="brand-icon">R</span>
+                <span>RuteaYa</span>
+            </a>
 
-<form asp-controller="Acceso" asp-action="Logout" method="post">
-    @Html.AntiForgeryToken()
-    <button type="submit">Cerrar sesión</button>
-</form>
+            <nav class="sidebar-nav">
+                <a class="nav-link active" asp-controller="Acceso" asp-action="Inicio">
+                    <span class="nav-icon">⌂</span>
+                    Inicio
+                </a>
+
+                <a class="nav-link" asp-controller="Panel" asp-action="Viajes">
+                    <span class="nav-icon">↗</span>
+                    Mis viajes
+                </a>
+
+                <a class="nav-link" asp-controller="Panel" asp-action="Envios">
+                    <span class="nav-icon">▣</span>
+                    Mis envíos
+                </a>
+
+                <a class="nav-link" asp-controller="Panel" asp-action="Oportunidades">
+                    <span class="nav-icon">◇</span>
+                    Oportunidades
+                </a>
+
+                <a class="nav-link" asp-controller="Panel" asp-action="Optimizador">
+                    <span class="nav-icon">⌘</span>
+                    Optimizador
+                </a>
+
+                <a class="nav-link" asp-controller="Panel" asp-action="Transportes">
+                    <span class="nav-icon">⇄</span>
+                    Mis transportes
+                </a>
+
+                <a class="nav-link" asp-controller="Panel" asp-action="Historial">
+                    <span class="nav-icon">◷</span>
+                    Historial
+                </a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="user-card">
+                    <div class="user-avatar">
+                        @(nombre.Length > 0 ? nombre[..1].ToUpper() : "U")
+                    </div>
+                    <div class="user-info">
+                        <strong>@nombre @apellido</strong>
+                        <span>Sesión activa</span>
+                    </div>
+                </div>
+
+                <form asp-controller="Acceso" asp-action="Logout" method="post">
+                    <button class="logout-button" type="submit">
+                        <span>↪</span> Cerrar sesión
+                    </button>
+                </form>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div class="breadcrumb">
+                    <span>Panel de control</span>
+                    <span class="breadcrumb-separator">/</span>
+                    <strong>Inicio</strong>
+                </div>
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    Cuenta activa
+                </div>
+            </header>
+
+            <section class="welcome-section">
+                <div>
+                    <span class="eyebrow">TU ESPACIO DE GESTIÓN</span>
+                    <h1>Hola, @nombre <span class="wave">👋</span></h1>
+                    <p>Organizá tus viajes, administrá tus envíos y encontrá nuevas oportunidades.</p>
+                </div>
+
+                <div class="welcome-actions">
+                    <a class="button button-secondary"
+                       asp-controller="Panel" asp-action="NuevoEnvio">
+                        <span>＋</span> Nuevo envío
+                    </a>
+                    <a class="button button-primary"
+                       asp-controller="Panel" asp-action="NuevoViaje">
+                        <span>＋</span> Nuevo viaje
+                    </a>
+                </div>
+            </section>
+
+            <section class="metrics-grid">
+                <article class="metric-card">
+                    <div class="metric-top">
+                        <span class="metric-icon blue">↗</span>
+                        <span class="metric-label">Próximos viajes</span>
+                    </div>
+                    <div class="metric-value">2</div>
+                    <div class="metric-footer">
+                        <span class="metric-dot blue-dot"></span>
+                        <span>Viajes programados</span>
+                    </div>
+                </article>
+
+                <article class="metric-card">
+                    <div class="metric-top">
+                        <span class="metric-icon orange">▣</span>
+                        <span class="metric-label">Envíos pendientes</span>
+                    </div>
+                    <div class="metric-value">2</div>
+                    <div class="metric-footer">
+                        <span class="metric-dot orange-dot"></span>
+                        <span>Requieren seguimiento</span>
+                    </div>
+                </article>
+
+                <article class="metric-card">
+                    <div class="metric-top">
+                        <span class="metric-icon purple">◇</span>
+                        <span class="metric-label">Oportunidades</span>
+                    </div>
+                    <div class="metric-value">5</div>
+                    <div class="metric-footer">
+                        <span class="metric-dot purple-dot"></span>
+                        <span>Disponibles para vos</span>
+                    </div>
+                </article>
+
+                <article class="metric-card metric-highlight">
+                    <div class="metric-top">
+                        <span class="metric-icon green">↗</span>
+                        <span class="metric-label">Potencial del mes</span>
+                    </div>
+                    <div class="metric-value">$84.500</div>
+                    <div class="metric-footer">
+                        <span class="metric-dot green-dot"></span>
+                        <span>Estimación de ingresos</span>
+                    </div>
+                </article>
+            </section>
+
+            <section class="content-grid">
+                <article class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <span class="panel-eyebrow">PLANIFICACIÓN</span>
+                            <h2>Próximos viajes</h2>
+                        </div>
+                        <a class="text-link" asp-controller="Panel" asp-action="Viajes">
+                            Ver todos <span>→</span>
+                        </a>
+                    </div>
+
+                    <div class="list-item">
+                        <div class="route-marker"><span></span></div>
+                        <div class="list-content">
+                            <strong>Belgrano <span class="route-arrow">→</span> Lomas de Zamora</strong>
+                            <span class="list-description">Lun, Mié, Vie · 08:00 – 08:55</span>
+                        </div>
+                        <span class="badge badge-green">Activo</span>
+                    </div>
+
+                    <div class="list-item">
+                        <div class="route-marker"><span></span></div>
+                        <div class="list-content">
+                            <strong>Palermo <span class="route-arrow">→</span> San Isidro</strong>
+                            <span class="list-description">Vie · 18:30 – 19:20</span>
+                        </div>
+                        <span class="badge badge-green">Activo</span>
+                    </div>
+
+                    <a class="panel-action" asp-controller="Panel" asp-action="Viajes">
+                        Gestionar mis viajes <span>→</span>
+                    </a>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <span class="panel-eyebrow">SEGUIMIENTO</span>
+                            <h2>Envíos pendientes</h2>
+                        </div>
+                        <a class="text-link" asp-controller="Panel" asp-action="Envios">
+                            Ver todos <span>→</span>
+                        </a>
+                    </div>
+
+                    <div class="list-item">
+                        <div class="shipment-icon">▣</div>
+                        <div class="list-content">
+                            <strong>Plaza Italia <span class="route-arrow">→</span> Obelisco</strong>
+                            <span class="list-description">Zapatillas · $4.000</span>
+                        </div>
+                        <span class="badge badge-orange">Buscando conductor</span>
+                    </div>
+
+                    <div class="list-item">
+                        <div class="shipment-icon">▣</div>
+                        <div class="list-content">
+                            <strong>Recoleta <span class="route-arrow">→</span> Quilmes</strong>
+                            <span class="list-description">Documentos · $3.500</span>
+                        </div>
+                        <span class="badge badge-blue">Conductor asignado</span>
+                    </div>
+
+                    <a class="panel-action" asp-controller="Panel" asp-action="Oportunidades">
+                        Ver oportunidades <span>→</span>
+                    </a>
+                </article>
+            </section>
+
+            <section class="bottom-banner">
+                <div class="banner-icon">✦</div>
+                <div>
+                    <strong>Movete de forma más inteligente</strong>
+                    <p>Encontrá viajes compatibles y aprovechá mejor cada recorrido.</p>
+                </div>
+                <a asp-controller="Panel" asp-action="Optimizador" class="banner-link">
+                    Explorar optimizador <span>→</span>
+                </a>
+            </section>
+
+            <footer class="page-footer">
+                <span>© @DateTime.Now.Year RuteaYa</span>
+                <span>Tu ruta, tus oportunidades.</span>
+            </footer>
+        </main>
+    </div>
+</body>
+</html>

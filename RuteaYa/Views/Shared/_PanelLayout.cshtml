@@ -1,0 +1,77 @@
+@{
+    var title = ViewData["Title"] as string ?? "RuteaYa";
+    var active = ViewData["ActivePage"] as string ?? "";
+    var name = User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? User.Identity?.Name ?? "Usuario";
+    var last = User.FindFirst("Apellido")?.Value ?? "";
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@title | RuteaYa</title>
+    <link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/panel.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="dashboard">
+        <aside class="sidebar">
+            <a class="brand" asp-controller="Acceso" asp-action="Inicio">
+                <span class="brand-icon">R</span><span>RuteaYa</span>
+            </a>
+            <nav class="sidebar-nav" aria-label="Principal">
+                <a class="nav-link" asp-controller="Acceso" asp-action="Inicio">⌂ Inicio</a>
+                <a class="nav-link @(active == "Viajes" ? "active" : "")" asp-controller="Panel" asp-action="Viajes">↗ Mis viajes</a>
+                <a class="nav-link @(active == "Envios" ? "active" : "")" asp-controller="Panel" asp-action="Envios">▣ Mis envíos</a>
+                <a class="nav-link @(active == "Oportunidades" ? "active" : "")" asp-controller="Panel" asp-action="Oportunidades">◇ Oportunidades</a>
+                <a class="nav-link @(active == "Optimizador" ? "active" : "")" asp-controller="Panel" asp-action="Optimizador">⌘ Optimizador</a>
+                <a class="nav-link @(active == "Transportes" ? "active" : "")" asp-controller="Panel" asp-action="Transportes">⇄ Mis transportes</a>
+                <a class="nav-link @(active == "Historial" ? "active" : "")" asp-controller="Panel" asp-action="Historial">◷ Historial</a>
+            </nav>
+            <div class="sidebar-bottom">
+                <div class="user-card">
+                    <div class="user-avatar">@(name.Length > 0 ? name[..1].ToUpper() : "U")</div>
+                    <div class="user-info">
+                        <strong>@name @last</strong>
+                        <span>Sesión activa</span>
+                    </div>
+                </div>
+                <form asp-controller="Acceso" asp-action="Logout" method="post">
+                    <button class="logout-button" type="submit">↪ Cerrar sesión</button>
+                </form>
+            </div>
+        </aside>
+
+        <main class="main-content panel-main">
+            <header class="topbar">
+                <div class="breadcrumb">
+                    <span>Panel de control</span>
+                    <span>/</span>
+                    <strong>@title</strong>
+                </div>
+                <div class="status-indicator">
+                    <span class="status-dot"></span>Cuenta activa
+                </div>
+            </header>
+
+            <div class="panel-page-content">
+                @RenderBody()
+            </div>
+
+            <footer class="page-footer">
+                <span>© @DateTime.Now.Year RuteaYa</span>
+                <span>Tu ruta, tus oportunidades.</span>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+            document.querySelectorAll('[data-filter]').forEach(i => i.addEventListener('input', () => {
+                let t = document.querySelector(i.dataset.filter),
+                    q = i.value.toLocaleLowerCase('es');
+                if (t) t.querySelectorAll('[data-search]').forEach(r => r.hidden = !r.dataset.search.toLocaleLowerCase('es').includes(q));
+            }));
+    </script>
+</body>
+</html>
