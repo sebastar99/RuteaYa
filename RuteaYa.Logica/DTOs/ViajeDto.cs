@@ -1,6 +1,6 @@
 namespace RuteaYa.Logica.DTOs;
 
-public class ViajeDtos
+public class ViajeDto
 {
     public int Id { get; set; }
     public int UsuarioId { get; set; }
