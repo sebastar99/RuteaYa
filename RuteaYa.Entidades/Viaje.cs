@@ -8,18 +8,17 @@ public class Viaje {
 
     [Required]
     [MaxLength(150)]
-    public string Destino { get; set; }
+    public string Destino { get; set; } = null!;
 
     [Required]
     [MaxLength(150)]
-    public string Origen { get; set; }
-
+    public string Origen { get; set; } = null!;
     // Horario del viaje
     public TimeSpan HoraSalida { get; set; }
     public TimeSpan HoraLlegada { get; set; }
 
     // capacidades
-    [Range(1, 1000)]
+    [Range(1, 100)]
     public int CantMaxPaquetes { get; set; }
 
     [Range(typeof(decimal), "0.01", "100000")]
