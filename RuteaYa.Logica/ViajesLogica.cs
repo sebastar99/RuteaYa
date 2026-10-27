@@ -14,7 +14,7 @@ public class ViajesLogica
         _db = db;
     }
 
-    // Lista viajes de un usuario (filtra: activos/inactivos)
+    // ============== Lista viajes por usuario (filtra: activos/inactivos) ==============
     public async Task<List<ViajeDto>> ListarAsync(int usuarioId, string estado = "todos")
     {
         var consulta = _db.Viajes
@@ -35,7 +35,7 @@ public class ViajesLogica
         return viajes.Select(Convertir).ToList();
     }
 
-    // Busca viaje
+    // ================================ Busca viaje ==========================
     public async Task<ViajeDto?> ObtenerAsync(int usuarioId, int id)
     {
         var viaje = await _db.Viajes
@@ -46,7 +46,7 @@ public class ViajesLogica
         return viaje == null ? null : Convertir(viaje);
     }
 
-    // Valida y guarda nuevo viaje
+    // =========================== Valida y guarda nuevo viaje =======================
     public async Task<ViajeDto> CrearAsync(int usuarioId, CrearViajeDto dto)
     {
         Validar(dto);
@@ -90,7 +90,7 @@ public class ViajesLogica
     // Agrega parada (en x posicion)
     // Elimina parada (reorganiza posicion)
 
-    // =================== METODOS ===============
+    // ================================== METODOS ============================
     private static ViajeDto Convertir(Viaje v) => new()
     {
         Id = v.Id,
