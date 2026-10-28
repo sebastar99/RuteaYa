@@ -13,13 +13,6 @@ namespace RuteaYa.Web.Models
         [StringLength(100)]
         public string Apellido { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Elegí un nombre de usuario.")]
-        [StringLength(30, MinimumLength = 3,
-            ErrorMessage = "Debe tener entre 3 y 30 caracteres.")]
-        [RegularExpression(@"^[a-zA-Z0-9_.-]+$",
-            ErrorMessage = "Usá solo letras, números, puntos, guiones y guiones bajos.")]
-        public string NombreUsuario { get; set; } = string.Empty;
-
         [Required(ErrorMessage = "Ingresá tu correo.")]
         [EmailAddress(ErrorMessage = "El correo no es válido.")]
         public string Email { get; set; } = string.Empty;

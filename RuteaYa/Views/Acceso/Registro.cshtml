@@ -54,29 +54,7 @@
                            placeholder="Tu apellido" autocomplete="family-name" />
                     <span asp-validation-for="Apellido" class="acceso-validation"></span>
                 </div>
-
-                
-                <div class="acceso-field">
-                    <label asp-for="NombreUsuario" class="acceso-label">
-                        Nombre de usuario
-                    </label>
-                    <input asp-for="NombreUsuario"
-                           class="acceso-input"
-                           placeholder="Ej. juanperez23"
-                           autocomplete="username"
-                           maxlength="30"
-                           autocapitalize="none"
-                           spellcheck="false" />
-                    <span asp-validation-for="NombreUsuario"
-                          class="acceso-validation"></span>
-                    <small style="color: #64748b;">
-                        Entre 3 y 30 caracteres. Podés usar letras, números, puntos,
-                        guiones y guiones bajos.
-                    </small>
-                </div>
-
-
-
+       
                 <div class="acceso-field">
                     <label asp-for="Email" class="acceso-label">
                         Correo electrónico

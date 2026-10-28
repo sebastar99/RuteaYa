@@ -41,13 +41,15 @@ namespace RuteaYa.Web.Controllers
             {
                 var resultado = await _usuariosApi.LoginAsync(modelo);
 
-                if (!resultado.Exito || resultado.Usuario == null)
-                {
-                    ModelState.AddModelError(string.Empty, resultado.Mensaje);
-                    return View(modelo);
-                }
+            if (!resultado.Exito ||
+                resultado.Usuario == null ||
+                string.IsNullOrWhiteSpace(resultado.Token))
+            {
+                ModelState.AddModelError(string.Empty, resultado.Mensaje);
+                return View(modelo);
+            }
 
-                var usuario = resultado.Usuario;
+            var usuario = resultado.Usuario;
 
 
                 var claims = new List<Claim>
@@ -75,15 +77,43 @@ namespace RuteaYa.Web.Controllers
                 };
 
 
+
                 var identidad = new ClaimsIdentity(
                     claims,
                     CookieAuthenticationDefaults.AuthenticationScheme);
+
                 var principal = new ClaimsPrincipal(identidad);
+
+                var propiedades = new AuthenticationProperties
+                {
+                    IsPersistent = false,
+                    AllowRefresh = true,
+                    ExpiresUtc = resultado.Usuario != null
+                        ? DateTimeOffset.UtcNow.AddMinutes(30)
+                        : null
+                };
+
+                    propiedades.StoreTokens(new[]
+                    {
+                    new AuthenticationToken
+                    {
+                        Name = "access_token",
+                        Value = resultado.Token
+                    },
+                    new AuthenticationToken
+                    {
+                        Name = "token_type",
+                        Value = "Bearer"
+                    }
+                });
+
                 await HttpContext.SignInAsync(
                     CookieAuthenticationDefaults.AuthenticationScheme,
-                    new ClaimsPrincipal(identidad));
+                    principal,
+                    propiedades);
 
                 return RedirectToAction(nameof(Inicio));
+
             }
             catch (HttpRequestException)
             {
