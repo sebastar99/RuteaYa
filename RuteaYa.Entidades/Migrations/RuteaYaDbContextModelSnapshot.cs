@@ -22,6 +22,55 @@ namespace RuteaYa.Entidades.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("RuteaYa.Entidades.DiaViaje", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DiaSemana")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ViajeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ViajeId", "DiaSemana")
+                        .IsUnique();
+
+                    b.ToTable("DiasViaje", (string)null);
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.Parada", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Ubicacion")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("ViajeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ViajeId", "Orden")
+                        .IsUnique();
+
+                    b.ToTable("Paradas", (string)null);
+                });
+
             modelBuilder.Entity("RuteaYa.Entidades.Usuario", b =>
                 {
                     b.Property<int>("Id")
@@ -58,6 +107,84 @@ namespace RuteaYa.Entidades.Migrations
                         .IsUnique();
 
                     b.ToTable("Usuarios", (string)null);
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.Viaje", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CantMaxPaquetes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreadoEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Destino")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<decimal>("DesvioMaxKm")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<TimeSpan>("HoraLlegada")
+                        .HasColumnType("time");
+
+                    b.Property<TimeSpan>("HoraSalida")
+                        .HasColumnType("time");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<decimal>("PesoMax")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Viajes", (string)null);
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.DiaViaje", b =>
+                {
+                    b.HasOne("RuteaYa.Entidades.Viaje", "Viaje")
+                        .WithMany("Dias")
+                        .HasForeignKey("ViajeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.Parada", b =>
+                {
+                    b.HasOne("RuteaYa.Entidades.Viaje", "Viaje")
+                        .WithMany("Paradas")
+                        .HasForeignKey("ViajeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.Viaje", b =>
+                {
+                    b.Navigation("Dias");
+
+                    b.Navigation("Paradas");
                 });
 #pragma warning restore 612, 618
         }
