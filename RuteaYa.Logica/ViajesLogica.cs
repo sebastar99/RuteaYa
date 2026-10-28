@@ -6,7 +6,7 @@ using RuteaYa.Logica.DTOs;
 
 namespace RuteaYa.Logica;
 
-public class ViajesLogica
+public class ViajesLogica : IViajesLogica
 {
     private readonly RuteaYaDbContext _db;
     public ViajesLogica(RuteaYaDbContext db)
