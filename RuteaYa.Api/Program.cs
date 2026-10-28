@@ -19,6 +19,7 @@ builder.Services.AddDbContext<RuteaYaDbContext>(options =>
 builder.Services.AddScoped<IPasswordHasher<Usuario>, PasswordHasher<Usuario>>();
 
 builder.Services.AddScoped<IUsuariosLogica, UsuariosLogica>();
+builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
