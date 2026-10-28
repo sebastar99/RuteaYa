@@ -22,6 +22,7 @@ builder.Services.AddScoped<IPasswordHasher<Usuario>,
     PasswordHasher<Usuario>>();
 
 builder.Services.AddScoped<IUsuariosLogica, UsuariosLogica>();
+builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
 
 var issuer = builder.Configuration["Jwt:Issuer"]
     ?? throw new InvalidOperationException(

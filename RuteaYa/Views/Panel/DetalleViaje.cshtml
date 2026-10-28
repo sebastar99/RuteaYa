@@ -1,4 +1,153 @@
-@{ ViewData["Title"]="Detalle del viaje"; ViewData["ActivePage"]="Viajes"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">DETALLE</span><h1>Belgrano → Lomas de Zamora</h1><p>Consultá horarios, capacidad y paquetes asignados.</p></div><a class="panel-button outline" href="/Panel/Viajes">← Volver</a></div>
-<div class="panel-card"><div class="panel-route-line"><span class="panel-point"></span><strong>Belgrano</strong><div class="panel-line"></div><span class="panel-point end"></span><strong>Lomas de Zamora</strong></div></div>
-<div class="panel-card"><h2>Información</h2><div class="panel-table-wrap"><table class="panel-table"><tbody><tr><td>Estado</td><td><strong>Activo</strong></td></tr><tr><td>Días</td><td><strong>Lun, Mié, Vie</strong></td></tr><tr><td>Horario</td><td><strong>08:00 – 08:55</strong></td></tr><tr><td>Capacidad</td><td><strong>3 paquetes</strong></td></tr><tr><td>Peso máximo</td><td><strong>10 kg</strong></td></tr><tr><td>Desvío máximo</td><td><strong>5 km</strong></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Datos de demostración. El detalle real se obtendrá desde la API cuando se conecte la lógica correspondiente.</p><div class="panel-form-actions"><a class="panel-button outline" href="/Panel/Viajes">Volver al listado</a><button class="panel-button" onclick="alert('Esta acción se conectará a la API en una etapa posterior.')">Continuar</button></div></div>
+@model RuteaYa.Web.Models.ViajeViewModel
+
+@{
+    ViewData["Title"] = "Detalle del viaje";
+    ViewData["ActivePage"] = "Viajes";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+
+    var dias = Model.DiasSemana ?? new List<int>();
+    var paradas = Model.Paradas ?? new List<RuteaYa.Web.Models.ParadaViewModel>();
+
+    string NombreDia(int dia) => dia switch
+    {
+        1 => "Lun",
+        2 => "Mar",
+        3 => "Mie",
+        4 => "Jue",
+        5 => "Vie",
+        6 => "Sab",
+        7 => "Dom",
+        _ => dia.ToString()
+    };
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / GESTION</span>
+        <h1>Detalle del viaje</h1>
+        <p>Revisa el recorrido, los horarios y la capacidad configurada.</p>
+    </div>
+
+    <a class="panel-button outline" asp-controller="Panel" asp-action="Viajes">
+        ← Volver a mis viajes
+    </a>
+</div>
+
+@if (ViewBag.Error is string error && !string.IsNullOrWhiteSpace(error))
+{
+    <div class="panel-card" role="alert">
+        <strong>No se pudo cargar el viaje.</strong>
+        <p>@error</p>
+    </div>
+}
+else
+{
+    <div class="panel-card">
+
+        <div>
+            <span class="eyebrow">RECORRIDO</span>
+            <h2>@Model.Origen → @Model.Destino</h2>
+
+            @if (Model.Activo)
+            {
+                <span class="panel-pill green">Activo</span>
+            }
+            else
+            {
+                <span class="panel-pill blue">Inactivo</span>
+            }
+        </div>
+
+        <div class="panel-stats">
+
+            <div class="panel-stat">
+                <span>Hora de salida</span>
+                <strong>
+                    @Model.HoraSalida.ToString(@"hh\:mm")
+                </strong>
+            </div>
+
+            <div class="panel-stat">
+                <span>Hora de llegada</span>
+                <strong>
+                    @Model.HoraLlegada.ToString(@"hh\:mm")
+                </strong>
+            </div>
+
+            <div class="panel-stat">
+                <span>Máximo de paquetes</span>
+                <strong>@Model.CantMaxPaquetes</strong>
+            </div>
+
+        </div>
+
+        <div class="panel-form-grid">
+
+            <div class="panel-field">
+                <label>Dias de circulacion</label>
+                <p>
+                    @if (dias.Count > 0)
+                    {
+                        @string.Join(", ", dias.Select(NombreDia))
+                    }
+                    else
+                    {
+                        <span>No hay dias registrados.</span>
+                    }
+                </p>
+            </div>
+
+            <div class="panel-field">
+                <label>Peso maximo</label>
+                <p>@Model.PesoMax kg</p>
+            </div>
+
+            <div class="panel-field">
+                <label>Desvio maximo</label>
+                <p>@Model.DesvioMaxKm km</p>
+            </div>
+
+            <div class="panel-field">
+                <label>Estado</label>
+                <p>@(Model.Activo ? "Activo" : "Inactivo")</p>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="panel-card">
+        <h2>Paradas intermedias</h2>
+        <p>Paradas registradas para este recorrido.</p>
+
+        @if (paradas.Count == 0)
+        {
+            <p>Este viaje no tiene paradas intermedias registradas.</p>
+        }
+        else
+        {
+            <div class="panel-table-wrap">
+                <table class="panel-table">
+                    
+                    <thead>
+                        <tr>
+                            <th>Orden</th>
+                            <th>Ubicacion</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var parada in paradas.OrderBy(p => p.Orden))
+                        {
+                            <tr>
+                                <td>@parada.Orden</td>
+                                <td>@parada.Ubicacion</td>
+                            </tr>
+                        }
+                    </tbody>
+
+                </table>
+            </div>
+        }
+    </div>
+}
