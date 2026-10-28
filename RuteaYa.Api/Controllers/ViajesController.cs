@@ -24,16 +24,16 @@ public class ViajesController : ControllerBase
         {
             return BadRequest(new {mensaje = "El usuario no es valido."});
         }
-        if(estado is not ("todos" or "activos" or "inactivos"))
+        if(estado is not ("todos" or "activo" or "inactivo"))
         {
-            return BadRequest(new {mensaje = "El filto no es valido."});
+            return BadRequest(new {mensaje = "El estado debe ser todos, actiovo o inactivo"});
         }
 
         var viajes = await _viajesLogica.ListarViajesAsync(usuarioId, estado);
         return Ok(viajes);
     }
 
-    [HttpGet]
+    [HttpGet("{id:int}")]
     public async Task<IActionResult> ObtenerPorId(int id, [FromQuery] int usuarioId)
     {
         if(usuarioId <= 0)
@@ -43,7 +43,12 @@ public class ViajesController : ControllerBase
 
         var viaje = await _viajesLogica.ObtenerPorIdAsync(usuarioId, id);
 
-        return viaje is null ? NotFound() : Ok(viaje);
+        if(viaje is null)
+        {
+            return NotFound(new {mensaje = "No se encontro el viaje"});
+        }
+
+        return Ok(viaje);
     }
 
     [HttpPost]
@@ -198,9 +203,41 @@ public class ViajesController : ControllerBase
         }
     }
 
+    [HttpPut("{id:int}/paradas/orden")]
+    public async Task<IActionResult> ReordenarParadas(
+        int id,
+        [FromQuery] int usuarioId,
+        [FromBody] ReordenarParadasRequest dto)
+    {
+        if (usuarioId <= 0 || id <= 0)
+        {
+            return BadRequest(new {mensaje = "El usuario o el viaje no son validos."});
+        }
+
+        var resultado = await _viajesLogica.ReordenarParadasAsync(
+            usuarioId,
+            id,
+            dto.ParadasIds
+        );
+
+        if (!resultado.exito)
+        {
+            return BadRequest(new {mensaje = resultado.mensaje});
+        }
+
+        return Ok(new {mensaje = resultado.mensaje});
+    }
+
+
+
     public class AgregarParadaRequest
     {
         public string Ubicacion { get; set; } = string.Empty;
         public int Orden { get; set; }
+    }
+
+    public class ReordenarParadasRequest
+    {
+        public List<int> ParadasIds { get; set; } = new();
     }
 }

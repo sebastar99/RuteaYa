@@ -222,9 +222,10 @@ public class ViajesLogica : IViajesLogica
         var ordenOriginal = existente.ToDictionary(p => p.Id, p => p.Orden);
 
         // Se mueven las paradas para evitar conflicto
+        var desplazamiento = existente.Count + 1;
         foreach(var parada in existente)
         {
-            parada.Orden +=10000;
+            parada.Orden += desplazamiento;
         }
         await _db.SaveChangesAsync();
 
@@ -247,13 +248,13 @@ public class ViajesLogica : IViajesLogica
         await _db.SaveChangesAsync();
         await tx.CommitAsync();
 
-        var ParadaDto = new ParadaDto
+        var paradaDto = new ParadaDto
         {
             Id = nuevaParada.Id,
             Ubicacion = nuevaParada.Ubicacion,
             Orden = nuevaParada.Orden
         };
-        return (true, "Parada agregada correctamente.", ParadaDto);
+        return (true, "Parada agregada correctamente.", paradaDto);
     }
 
     // ======================== Elimina parada (reorganiza posicion) ============================
@@ -293,7 +294,7 @@ public class ViajesLogica : IViajesLogica
         // orden temporal
         for (var i = 0; i < restantes.Count; i++)
         {
-            restantes[i].Orden = 10000 + i;
+            restantes[i].Orden = restantes.Count + i + 1;
         }
         await _db.SaveChangesAsync();
 
@@ -308,6 +309,64 @@ public class ViajesLogica : IViajesLogica
         return (true, "Parada eliminada.");
     }
 
+    public async Task<(bool exito, string mensaje)> ReordenarParadasAsync(
+        int usuarioId,
+        int viajeId,
+        List<int> paradasId
+    ) {
+        if (paradasId == null)
+        {
+            return (false, "La lista de paradas es obligatoria.");
+        }
+
+        var viaje = await _db.Viajes
+            .Include(v => v.Paradas)
+            .FirstOrDefaultAsync(v => v.Id == viajeId && v.UsuarioId == usuarioId);
+
+        if (viaje == null)
+        {
+            return (false, "No se encontro el viaje.");
+        }
+
+        if (!viaje.Activo)
+        {
+            return (false, "No se pueden modificar las paradas de un viaje inactivo.");
+        }
+
+        var existentes = viaje.Paradas.OrderBy(p => p.Orden).ToList();
+
+        if (paradasId.Count != existentes.Count ||
+            paradasId.Distinct().Count() != paradasId.Count ||
+            !paradasId.OrderBy(id => id).SequenceEqual(existentes.Select(p => p.Id).OrderBy(id => id)))
+        {
+            return (false, "La lista debe contener todas las paradas del viaje, sin repetir parada.");
+        }
+
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
+        // Primero asignamos un orden temporal para evitar conflictos
+        var desplazamiento = existentes.Count + 1;
+
+        foreach (var parada in existentes)
+        {
+            parada.Orden += desplazamiento;
+        }
+
+        await _db.SaveChangesAsync();
+
+        // asignamos el nuevo orden
+        var porId = existentes.ToDictionary(p => p.Id);
+
+        for (int i = 0; i < paradasId.Count; i++)
+        {
+            porId[paradasId[i]].Orden = i + 1;
+        }
+
+        await _db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return (true, "Paradas reordenadas correctamente.");
+    }
 
 
     // ================================== METODOS ============================

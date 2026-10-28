@@ -42,4 +42,10 @@ public interface IViajesLogica
         int viajeId, 
         int paradaId
     );
+
+    Task<(bool exito, string mensaje)> ReordenarParadasAsync(
+        int usuarioId,
+        int viajeId,
+        List<int> paradasId
+    );
 }
