@@ -48,6 +48,40 @@ else
             <span class="eyebrow">RECORRIDO</span>
             <h2>@Model.Origen → @Model.Destino</h2>
 
+            @if (TempData["MensajeExito"] is string mensajeExito)
+            {
+                <div class="panel-card" role="status">
+                    @mensajeExito
+                </div>
+            }
+
+            @if (TempData["MensajeError"] is string mensajeError)
+            {
+                <div class="panel-card" role="alert">
+                    @mensajeError
+                </div>
+            }
+
+            <div class="panel-actions">
+                @if (Model.Activo)
+                {
+                    <a asp-controller="Panel" asp-action="EditarViaje"
+                    asp-route-id="@Model.Id" class="btn btn-primary">
+                        Editar viaje
+                    </a>
+
+                    <form asp-controller="Panel" asp-action="DesactivarViaje" asp-route-id="@Model.Id"
+                    method="post" onsubmit="return confirm('¿Querés desactivar este viaje?');">
+
+                        @Html.AntiForgeryToken()
+
+                        <button type="submit" class="btn btn-danger">
+                            Desactivar viaje
+                        </button>
+                    </form>
+                }
+            </div>
+
             @if (Model.Activo)
             {
                 <span class="panel-pill green">Activo</span>
@@ -118,21 +152,60 @@ else
 
     <div class="panel-card">
         <h2>Paradas intermedias</h2>
-        <p>Paradas registradas para este recorrido.</p>
+
+        @if (Model.Activo)
+        {
+            <form asp-controller="Panel" asp-action="AgregarParada" method="post">
+                @Html.AntiForgeryToken()
+
+                <input type="hidden" name="viajeId" value="@Model.Id" />
+
+                <div class="panel-form-grid">
+
+                    <div>
+                        <label for="ubicacion">Ubicacion de la parada</label>
+
+                        <input type="text" id="ubicacion" name="ubicacion"  maxlength="150"
+                            required class="panel-input" placeholder="Ej. Chivilcoy, Buenos Aires" 
+                        />
+                    </div>
+
+                    <div>
+                        <label for="orden">Orden de la parada</label>
+
+                        <input type="number" id="orden" name="orden" min="1" max="100"
+                            value="@(paradas.Count + 1)" required class="panel-input" 
+                        />
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    Agregar parada
+                </button>
+            </form>
+
+            <hr />
+        }
 
         @if (paradas.Count == 0)
         {
-            <p>Este viaje no tiene paradas intermedias registradas.</p>
+            <p>Este viaje todavia no tiene paradas intermedias.</p>
         }
         else
         {
-            <div class="panel-table-wrap">
-                <table class="panel-table">
-                    
+            <div class="table-responsive">
+                <table class="table">
+
                     <thead>
                         <tr>
                             <th>Orden</th>
-                            <th>Ubicacion</th>
+                            <th>Ubicación</th>
+
+                            @if (Model.Activo)
+                            {
+                                <th>Acciones</th>
+                            }
+                            
                         </tr>
                     </thead>
 
@@ -142,10 +215,28 @@ else
                             <tr>
                                 <td>@parada.Orden</td>
                                 <td>@parada.Ubicacion</td>
+
+                                @if (Model.Activo)
+                                {
+                                    <td>
+                                        <form asp-controller="Panel" asp-action="EliminarParada" method="post"
+                                        onsubmit="return confirm('¿Querés eliminar esta parada?');">
+
+                                            @Html.AntiForgeryToken()
+
+                                            <input type="hidden" name="viajeId" value="@Model.Id" />
+                                            <input type="hidden" name="paradaId" value="@parada.Id" />
+
+                                            <button type="submit" class="btn btn-danger">
+                                                Eliminar
+                                            </button>
+                                        </form>
+                                    </td>
+                                }
                             </tr>
                         }
                     </tbody>
-
+                    
                 </table>
             </div>
         }

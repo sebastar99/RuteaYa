@@ -17,6 +17,17 @@ builder.Services.AddHttpClient<IUsuariosApiServicio, UsuariosApiServicio>(
         client.Timeout = TimeSpan.FromSeconds(15);
     });
 
+builder.Services.AddHttpClient<IViajesApiServicio, ViajesApiServicio>(
+    client =>
+    {
+        var url = builder.Configuration["Servicios:UsuariosApi"]
+            ?? throw new InvalidOperationException(
+                "No se configuró la URL de la API.");
+
+        client.BaseAddress = new Uri(url);
+        client.Timeout = TimeSpan.FromSeconds(15);
+    });
+
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
