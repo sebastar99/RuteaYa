@@ -1,11 +1,19 @@
 
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
+using RuteaYa.Entidades;
 using RuteaYa.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
 
+var connectionString = builder.Configuration.GetConnectionString("RuteaYa")
+    ?? throw new InvalidOperationException(
+        "No se configuró la conexión RuteaYa para MVC.");
+
+builder.Services.AddDbContext<RuteaYaDbContext>(options =>
+    options.UseSqlServer(connectionString));
 
 builder.Services.AddHttpContextAccessor();
 
@@ -60,4 +68,3 @@ app.MapControllerRoute(
     .WithStaticAssets();
 
 app.Run();
-

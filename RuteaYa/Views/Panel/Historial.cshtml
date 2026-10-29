@@ -1,4 +1,194 @@
-@{ ViewData["Title"]="Historial"; ViewData["ActivePage"]="Historial"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">RUTEAYA / GESTIÓN</span><h1>Historial</h1><p>Consultá operaciones anteriores, entregas completadas y montos asociados.</p></div><button class="panel-button outline" onclick="window.print()">Imprimir historial</button></div>
-<div class="panel-stats"><div class="panel-stat "><span>Viajes realizados</span><strong>18</strong></div><div class="panel-stat "><span>Envíos transportados</span><strong>41</strong></div><div class="panel-stat "><span>Operaciones completadas</span><strong>36</strong></div><div class="panel-stat highlight"><span>Ganancia efectiva</span><strong>$126.500</strong></div></div>
-<div class="panel-card"><div class="panel-toolbar"><div><h2>Historial registrados</h2><p>Contenido ilustrativo para validar la interfaz.</p></div><input class="panel-search" placeholder="Buscar..." data-filter="#listTable"/></div><div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Detalle</th><th>Información</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="listTable"><tr data-search="18/10/2026 · Belgrano → Lomas de Zamora 3 paquetes entregados · $18.000 Completado"><td><strong>18/10/2026 · Belgrano → Lomas de Zamora</strong></td><td>3 paquetes entregados · $18.000</td><td><span class="panel-pill green">Completado</span></td><td><a class="panel-button outline small" href="/Panel/Historial">Ver detalle</a></td></tr><tr data-search="12/10/2026 · Palermo → San Isidro 2 paquetes entregados · $9.500 Completado"><td><strong>12/10/2026 · Palermo → San Isidro</strong></td><td>2 paquetes entregados · $9.500</td><td><span class="panel-pill green">Completado</span></td><td><a class="panel-button outline small" href="/Panel/Historial">Ver detalle</a></td></tr><tr data-search="04/10/2026 · Avellaneda → Palermo Repuesto · $2.500 Entregado"><td><strong>04/10/2026 · Avellaneda → Palermo</strong></td><td>Repuesto · $2.500</td><td><span class="panel-pill green">Entregado</span></td><td><a class="panel-button outline small" href="/Panel/Historial">Ver detalle</a></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Los datos son de demostración. Esta pantalla aún no consulta ni modifica la base de datos.</p></div>
+@model RuteaYa.Web.Models.HistorialViewModel
+
+@{
+    ViewData["Title"] = "Historial";
+    ViewData["ActivePage"] = "Historial";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / GESTIÓN</span>
+        <h1>Historial</h1>
+        <p>Consultá tus viajes publicados y el estado de tus envíos.</p>
+    </div>
+    <button class="panel-button outline" type="button"
+            onclick="window.print()">
+        Imprimir historial
+    </button>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="panel-note" role="alert">
+        @Html.ValidationSummary()
+    </div>
+}
+
+<section class="panel-stats" aria-label="Resumen del historial">
+    <div class="panel-stat">
+        <span>Viajes publicados</span>
+        <strong>@Model.TotalViajes</strong>
+    </div>
+
+    <div class="panel-stat">
+        <span>Envíos registrados</span>
+        <strong>@Model.TotalEnvios</strong>
+    </div>
+
+    <div class="panel-stat">
+        <span>Envíos entregados</span>
+        <strong>@Model.EnviosEntregados</strong>
+    </div>
+
+    <div class="panel-stat highlight">
+        <span>Monto de envíos entregados</span>
+        <strong>$ @Model.MontoEnviosEntregados.ToString("N2")</strong>
+    </div>
+</section>
+
+<section class="panel-card">
+    <div class="panel-toolbar">
+        <div>
+            <h2>Operaciones registradas</h2>
+            <p>Los resultados corresponden a tu cuenta y se consultan directamente en la base de datos.</p>
+        </div>
+    </div>
+
+    <form asp-controller="Panel"
+          asp-action="Historial"
+          method="get"
+          class="panel-form"
+          style="margin: 18px 0 22px;">
+
+        <div class="panel-form-grid">
+            <div class="panel-field">
+                <label for="buscar">Buscar</label>
+                <input id="buscar"
+                       name="buscar"
+                       value="@Model.Buscar"
+                       class="panel-input"
+                       placeholder="Origen, destino o descripción" />
+            </div>
+
+            <div class="panel-field">
+                <label for="tipo">Tipo de operación</label>
+                <select id="tipo" name="tipo" class="panel-select">
+                    <option value="Todos" selected="@(Model.Tipo == "Todos")">Todos</option>
+                    <option value="Viaje" selected="@(Model.Tipo == "Viaje")">Viajes</option>
+                    <option value="Envio" selected="@(Model.Tipo == "Envio")">Envíos</option>
+                </select>
+            </div>
+
+            <div class="panel-field">
+                <label for="estado">Estado</label>
+                <select id="estado" name="estado" class="panel-select">
+                    <option value="Todos" selected="@(Model.Estado == "Todos")">Todos los estados</option>
+                    <option value="Activo" selected="@(Model.Estado == "Activo")">Viaje activo</option>
+                    <option value="Inactivo" selected="@(Model.Estado == "Inactivo")">Viaje inactivo</option>
+                    <option value="BuscandoConductor" selected="@(Model.Estado == "BuscandoConductor")">Buscando conductor</option>
+                    <option value="ConductorAsignado" selected="@(Model.Estado == "ConductorAsignado")">Conductor asignado</option>
+                    <option value="Retirado" selected="@(Model.Estado == "Retirado")">Retirado</option>
+                    <option value="EnCamino" selected="@(Model.Estado == "EnCamino")">En camino</option>
+                    <option value="Entregado" selected="@(Model.Estado == "Entregado")">Entregado</option>
+                    <option value="Cancelado" selected="@(Model.Estado == "Cancelado")">Cancelado</option>
+                </select>
+            </div>
+
+            <div class="panel-field">
+                <label for="desde">Desde</label>
+                <input id="desde"
+                       name="desde"
+                       type="date"
+                       class="panel-input"
+                       value="@(Model.Desde?.ToString("yyyy-MM-dd"))" />
+            </div>
+
+            <div class="panel-field">
+                <label for="hasta">Hasta</label>
+                <input id="hasta"
+                       name="hasta"
+                       type="date"
+                       class="panel-input"
+                       value="@(Model.Hasta?.ToString("yyyy-MM-dd"))" />
+            </div>
+        </div>
+
+        <div class="panel-form-actions">
+            <a asp-controller="Panel"
+               asp-action="Historial"
+               class="panel-button outline">
+                Limpiar filtros
+            </a>
+
+            <button type="submit" class="panel-button">
+                Aplicar filtros
+            </button>
+        </div>
+    </form>
+
+    <div class="panel-toolbar" style="margin-bottom: 12px;">
+        <div>
+            <h2>Resultados</h2>
+            <p>@Model.Operaciones.Count operación(es) encontradas.</p>
+        </div>
+    </div>
+
+    <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Detalle</th>
+                    <th>Información</th>
+                    <th>Estado</th>
+                    <th class="text-end">Importe</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @if (Model.Operaciones.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6"
+                            style="text-align:center; padding:32px 16px;">
+                            <strong>No se encontraron operaciones</strong>
+                            <span class="panel-muted">
+                                Probá cambiar los filtros o volvé más tarde
+                                si todavía no registraste viajes o envíos.
+                            </span>
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var operacion in Model.Operaciones)
+                    {
+                        <tr>
+                            <td>@operacion.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>
+                                <span class="panel-pill">@operacion.Tipo</span>
+                            </td>
+                            <td>
+                                <strong>@operacion.Detalle</strong>
+                                <span class="panel-muted">ID: @operacion.Id</span>
+                            </td>
+                            <td>@operacion.Informacion</td>
+                            <td>
+                                <span class="panel-pill @operacion.EstadoCss">
+                                    @operacion.Estado
+                                </span>
+                            </td>
+                            <td style="text-align:right; white-space:nowrap;">
+                                @(operacion.Monto.HasValue
+                                    ? "$ " + operacion.Monto.Value.ToString("N2")
+                                    : "—")
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
