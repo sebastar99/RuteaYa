@@ -32,6 +32,8 @@ var connectionString = builder.Configuration.GetConnectionString("RuteaYa")
 builder.Services.AddDbContext<RuteaYaDbContext>(options =>
     options.UseSqlServer(connectionString));
 
+builder.Services.AddScoped<IOportunidadesLogica, OportunidadesLogica>();
+
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddTransient<JwtTokenHandler>();

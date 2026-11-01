@@ -1,4 +1,119 @@
-@{ ViewData["Title"]="Oportunidades"; ViewData["ActivePage"]="Oportunidades"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">RUTEAYA / GESTIÓN</span><h1>Oportunidades</h1><p>Encontrá envíos que podrían encajar con tus recorridos habituales.</p></div><a class="panel-button" href="/Panel/Optimizador">＋ Optimizar combinación</a></div>
-<div class="panel-stats"><div class="panel-stat "><span>Oportunidades disponibles</span><strong>5</strong></div><div class="panel-stat "><span>Compatibles</span><strong>3</strong></div><div class="panel-stat "><span>Desvío promedio</span><strong>1,8 km</strong></div><div class="panel-stat highlight"><span>Pago potencial</span><strong>$22.500</strong></div></div>
-<div class="panel-card"><div class="panel-toolbar"><div><h2>Oportunidades registrados</h2><p>Contenido ilustrativo para validar la interfaz.</p></div><input class="panel-search" placeholder="Buscar..." data-filter="#listTable"/></div><div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Detalle</th><th>Información</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="listTable"><tr data-search="Caballito → Lomas de Zamora 2 kg · desvío 1 km · $4.000 Muy compatible"><td><strong>Caballito → Lomas de Zamora</strong></td><td>2 kg · desvío 1 km · $4.000</td><td><span class="panel-pill green">Muy compatible</span></td><td><a class="panel-button outline small" href="/Panel/DetalleOportunidad">Ver detalle</a></td></tr><tr data-search="Recoleta → Quilmes 6 kg · desvío 2 km · $5.500 Compatible"><td><strong>Recoleta → Quilmes</strong></td><td>6 kg · desvío 2 km · $5.500</td><td><span class="panel-pill blue">Compatible</span></td><td><a class="panel-button outline small" href="/Panel/DetalleOportunidad">Ver detalle</a></td></tr><tr data-search="Morón → Lomas de Zamora 4 kg · desvío 1 km · $3.500 Muy compatible"><td><strong>Morón → Lomas de Zamora</strong></td><td>4 kg · desvío 1 km · $3.500</td><td><span class="panel-pill green">Muy compatible</span></td><td><a class="panel-button outline small" href="/Panel/DetalleOportunidad">Ver detalle</a></td></tr><tr data-search="Palermo → Avellaneda 8 kg · desvío 3 km · $7.000 Revisar desvío"><td><strong>Palermo → Avellaneda</strong></td><td>8 kg · desvío 3 km · $7.000</td><td><span class="panel-pill orange">Revisar desvío</span></td><td><a class="panel-button outline small" href="/Panel/DetalleOportunidad">Ver detalle</a></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Los datos son de demostración. Esta pantalla aún no consulta ni modifica la base de datos.</p></div>
+@model RuteaYa.Web.Models.OportunidadesViewModel
+@{
+    ViewData["Title"] = "Oportunidades";
+    ViewData["ActivePage"] = "Oportunidades";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+    var listado = Model.Listado;
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / GESTIÓN</span>
+        <h1>Candidatos para tu viaje</h1>
+        <p>Envíos publicados que aún están pendientes de evaluación.</p>
+    </div>
+    <a class="panel-button outline" asp-controller="Panel" asp-action="Viajes">Mis viajes</a>
+</div>
+
+<div class="panel-alert" role="note">
+    Estos envíos no son oportunidades compatibles confirmadas. Todavía no se verificaron
+    coordenadas, salida concreta, capacidad disponible, desvíos ni restricciones temporales.
+    Esta pantalla no permite aceptar paquetes.
+</div>
+
+@if (Model.Error != null)
+{
+    <div class="panel-card" role="alert">
+        <p>@Model.Error</p>
+        <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index">Volver a intentar</a>
+    </div>
+}
+else if (listado.Viajes.Count == 0)
+{
+    <div class="panel-card"><h2>No tenés viajes registrados</h2><p>Consultá tus viajes para comenzar.</p></div>
+}
+else
+{
+    <div class="panel-card">
+        <form method="get" asp-controller="Oportunidades" asp-action="Index" class="panel-form">
+            <div class="panel-form-grid">
+                <div class="panel-field">
+                    <label for="viajeId">Seleccioná uno de tus viajes</label>
+                    <select id="viajeId" name="viajeId" class="panel-select" required>
+                        <option value="">Elegí un viaje</option>
+                        @foreach (var viaje in listado.Viajes)
+                        {
+                            <option value="@viaje.Id" selected="@(viaje.Id == listado.ViajeSeleccionado?.Id)">
+                                @viaje.Origen → @viaje.Destino @(viaje.Activo ? "" : "(inactivo)")
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="panel-field">
+                    <label for="tamanoPagina">Envíos por página (1 a 50)</label>
+                    <input id="tamanoPagina" name="tamanoPagina" class="panel-input" type="number"
+                           min="1" max="50" value="@listado.TamanoPagina" required />
+                </div>
+            </div>
+            <div class="panel-form-actions"><button type="submit" class="panel-button">Consultar candidatos</button></div>
+        </form>
+    </div>
+
+    @if (listado.ViajeSeleccionado == null)
+    {
+        <div class="panel-card"><p>Elegí un viaje para consultar envíos publicados. Aún no se consultaron candidatos.</p></div>
+    }
+    else
+    {
+        <div class="panel-card">
+            <h2>@listado.ViajeSeleccionado.Origen → @listado.ViajeSeleccionado.Destino</h2>
+            <p>Estado del viaje: @(listado.ViajeSeleccionado.Activo ? "Activo" : "Inactivo").
+                Este estado no confirma la disponibilidad de una salida concreta.</p>
+            <p>Envíos en búsqueda de conductor: <strong>@listado.TotalCandidatos</strong>.</p>
+        </div>
+
+        @if (listado.Candidatos.Count == 0)
+        {
+            <div class="panel-card"><h2>No hay envíos candidatos</h2><p>No se encontraron envíos publicados en búsqueda de conductor para mostrar.</p></div>
+        }
+        else
+        {
+            <div class="panel-card">
+                <div class="panel-table-wrap">
+                    <table class="panel-table">
+                        <thead><tr><th>Envío</th><th>Paquete</th><th>Fecha límite publicada</th><th>Monto ofrecido</th><th>Evaluación</th></tr></thead>
+                        <tbody>
+                        @foreach (var envio in listado.Candidatos)
+                        {
+                            <tr>
+                                <td><strong>@envio.OrigenDir → @envio.DestinoDir</strong><p>@envio.Descripcion</p><small>Envío #@envio.Id</small></td>
+                                <td>@envio.PesoKg.ToString("0.##") kg · @envio.TamanoTexto</td>
+                                <td>@(envio.FechaLimite == default ? "No informada" : envio.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</td>
+                                <td>@envio.Monto.ToString("C")</td>
+                                <td><span class="panel-pill orange">Pendiente de evaluación</span></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="panel-note">La fecha se muestra tal como fue publicada, sin interpretar su zona horaria ni evaluar el vencimiento.
+                    Se incluyen publicaciones propias y de otros usuarios; la selección de candidatos no confirma compatibilidad.</p>
+                <nav class="panel-form-actions" aria-label="Páginas de candidatos">
+                    @if (listado.Pagina > 1)
+                    {
+                        <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
+                           asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-pagina="@(listado.Pagina - 1)"
+                           asp-route-tamanoPagina="@listado.TamanoPagina">Anterior</a>
+                    }
+                    <span>Página @listado.Pagina de @listado.TotalPaginas</span>
+                    @if (listado.Pagina < listado.TotalPaginas)
+                    {
+                        <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
+                           asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-pagina="@(listado.Pagina + 1)"
+                           asp-route-tamanoPagina="@listado.TamanoPagina">Siguiente</a>
+                    }
+                </nav>
+            </div>
+        }
+    }
+}

@@ -24,7 +24,8 @@ namespace RuteaYa.Web.Controllers
         public IActionResult Envios() => View();
         public IActionResult NuevoEnvio() => View();
         public IActionResult DetalleEnvio() => View();
-        public IActionResult Oportunidades() => View();
+        public IActionResult Oportunidades(int? viajeId = null, int pagina = 1, int tamanoPagina = 10) =>
+            RedirectToAction("Index", "Oportunidades", new { viajeId, pagina, tamanoPagina });
         public IActionResult DetalleOportunidad() => View();
         public IActionResult Optimizador() => View();
         public IActionResult ConfirmarCombinacion() => View();
