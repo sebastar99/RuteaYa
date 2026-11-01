@@ -1,4 +1,167 @@
-@{ ViewData["Title"]="Mis viajes"; ViewData["ActivePage"]="Viajes"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">RUTEAYA / GESTIÓN</span><h1>Mis viajes</h1><p>Administrá tus recorridos habituales, horarios y capacidad disponible.</p></div><a class="panel-button" href="/Panel/NuevoViaje">＋ Nuevo viaje</a></div>
-<div class="panel-stats"><div class="panel-stat "><span>Viajes registrados</span><strong>3</strong></div><div class="panel-stat "><span>Viajes activos</span><strong>2</strong></div><div class="panel-stat "><span>Días programados</span><strong>5</strong></div><div class="panel-stat highlight"><span>Capacidad disponible</span><strong>6 paquetes</strong></div></div>
-<div class="panel-card"><div class="panel-toolbar"><div><h2>Mis viajes registrados</h2><p>Contenido ilustrativo para validar la interfaz.</p></div><input class="panel-search" placeholder="Buscar..." data-filter="#listTable"/></div><div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Detalle</th><th>Información</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="listTable"><tr data-search="Belgrano → Lomas de Zamora Lun, Mié, Vie · 08:00–08:55 Activo"><td><strong>Belgrano → Lomas de Zamora</strong></td><td>Lun, Mié, Vie · 08:00–08:55</td><td><span class="panel-pill green">Activo</span></td><td><a class="panel-button outline small" href="/Panel/DetalleViaje">Ver detalle</a></td></tr><tr data-search="Palermo → San Isidro Vie · 18:30–19:20 Activo"><td><strong>Palermo → San Isidro</strong></td><td>Vie · 18:30–19:20</td><td><span class="panel-pill green">Activo</span></td><td><a class="panel-button outline small" href="/Panel/DetalleViaje">Ver detalle</a></td></tr><tr data-search="Caballito → Morón Sáb · 10:00–10:50 Inactivo"><td><strong>Caballito → Morón</strong></td><td>Sáb · 10:00–10:50</td><td><span class="panel-pill blue">Inactivo</span></td><td><a class="panel-button outline small" href="/Panel/DetalleViaje">Ver detalle</a></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Los datos son de demostración. Esta pantalla aún no consulta ni modifica la base de datos.</p></div>
+
+@model List<RuteaYa.Web.Models.ViajeViewModel>
+
+@{
+    ViewData["Title"] = "Mis viajes";
+    ViewData["ActivePage"] = "Viajes";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+
+    var viajes = Model ?? new List<RuteaYa.Web.Models.ViajeViewModel>();
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / GESTION</span>
+        <h1>Mis viajes</h1>
+        <p>Administra tus recorridos habituales, horarios y capacidad disponible.</p>
+    </div>
+
+    <a class="panel-button" asp-controller="Panel" asp-action="NuevoViaje">
+        ＋ Nuevo viaje
+    </a>
+</div>
+
+@if (TempData["MensajeExito"] is string mensajeExito)
+{
+    <div class="panel-card" role="status">
+        @mensajeExito
+    </div>
+}
+
+@if (ViewBag.Error is string error && !string.IsNullOrWhiteSpace(error))
+{
+    <div class="panel-card" role="alert">
+        <strong>No se pudieron cargar los viajes.</strong>
+        <p>@error</p>
+    </div>
+}
+
+@{
+    var activos = viajes.Count(v => v.Activo);
+    var diasProgramados = viajes
+        .Where(v => v.DiasSemana != null)
+        .SelectMany(v => v.DiasSemana)
+        .Distinct()
+        .Count();
+
+    var capacidadDisponible = viajes
+        .Where(v => v.Activo)
+        .Sum(v => v.CantMaxPaquetes);
+}
+
+<div class="panel-stats">
+    <div class="panel-stat">
+        <span>Viajes registrados</span>
+        <strong>@viajes.Count</strong>
+    </div>
+
+    <div class="panel-stat">
+        <span>Viajes activos</span>
+        <strong>@activos</strong>
+    </div>
+
+    <div class="panel-stat">
+        <span>Días programados</span>
+        <strong>@diasProgramados</strong>
+    </div>
+
+    <div class="panel-stat highlight">
+        <span>Capacidad máxima activa</span>
+        <strong>@capacidadDisponible paquetes</strong>
+    </div>
+</div>
+
+<div class="panel-card">
+    <div class="panel-toolbar">
+        <div>
+            <h2>Mis viajes registrados</h2>
+            <p>Informacion cargada desde la API.</p>
+        </div>
+
+        <input class="panel-search" placeholder="Buscar..." data-filter="#listTable" />
+    </div>
+
+    <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead>
+                <tr>
+                    <th>Detalle</th>
+                    <th>Informacion</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+
+            <tbody id="listTable">
+                @if (viajes.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4">
+                            No hay viajes para mostrar.
+                            Se puede crear uno con el boton "Nuevo viaje".
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var viaje in viajes)
+                    {
+                        <tr data-search="@($"{viaje.Origen} {viaje.Destino} {viaje.Activo} {string.Join(" ", viaje.DiasSemana ?? new List<int>())}")">
+                            <td>
+                                <strong>
+                                    @viaje.Origen → @viaje.Destino
+                                </strong>
+                            </td>
+
+                            <td>
+                                @viaje.HoraSalida.ToString(@"hh\:mm")
+                                –
+                                @viaje.HoraLlegada.ToString(@"hh\:mm")
+
+                                <br />
+
+                                <small>
+                                    @string.Join(", ", (viaje.DiasSemana ?? new List<int>()).Select(d => d switch
+                                    {
+                                        1 => "Lun",
+                                        2 => "Mar",
+                                        3 => "Mie",
+                                        4 => "Jue",
+                                        5 => "Vie",
+                                        6 => "Sab",
+                                        7 => "Dom",
+                                        _ => d.ToString()
+                                    }))
+                                </small>
+
+                                <br />
+
+                                <small>@viaje.CantMaxPaquetes paquetes maximos</small>
+                            </td>
+
+                            <td>
+                                @if (viaje.Activo)
+                                {
+                                    <span class="panel-pill green">Activo</span>
+                                }
+                                else
+                                {
+                                    <span class="panel-pill blue">Inactivo</span>
+                                }
+                            </td>
+
+                            <td>
+                                <a class="panel-button outline small" asp-controller="Panel"
+                                asp-action="DetalleViaje" asp-route-id="@viaje.Id">
+                                    Ver detalle
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+
+        </table>
+
+    </div>
+</div>

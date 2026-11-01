@@ -1,6 +1,8 @@
 
 using Microsoft.AspNetCore.Authentication.Cookies;
 using RuteaYa.Logica;
+using Microsoft.EntityFrameworkCore;
+using RuteaYa.Entidades;
 using RuteaYa.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,6 +25,12 @@ builder.Services.AddHttpClient<IGeocodificacionServicio, GeocodificacionHereServ
     .RemoveAllLoggers()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
+var connectionString = builder.Configuration.GetConnectionString("RuteaYa")
+    ?? throw new InvalidOperationException(
+        "No se configuró la conexión RuteaYa para MVC.");
+
+builder.Services.AddDbContext<RuteaYaDbContext>(options =>
+    options.UseSqlServer(connectionString));
 
 builder.Services.AddHttpContextAccessor();
 
@@ -38,6 +46,20 @@ builder.Services.AddHttpClient<IUsuariosApiServicio, UsuariosApiServicio>(
         client.BaseAddress = new Uri(url);
         client.Timeout = TimeSpan.FromSeconds(15);
     });
+
+
+builder.Services.AddHttpClient<IViajesApiServicio, ViajesApiServicio>(
+    client =>
+    {
+        var url = builder.Configuration["Servicios:UsuariosApi"]
+            ?? throw new InvalidOperationException(
+                "No se configuró la URL de la API.");
+
+        client.BaseAddress = new Uri(url);
+        client.Timeout = TimeSpan.FromSeconds(15);
+    })
+    .AddHttpMessageHandler<JwtTokenHandler>();
+
 
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -77,4 +99,3 @@ app.MapControllerRoute(
     .WithStaticAssets();
 
 app.Run();
-

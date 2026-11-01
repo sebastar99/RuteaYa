@@ -20,6 +20,7 @@ public class ViajeDto
     public bool Activo { get; set; }
 
     public List<ParadaDto> Paradas { get; set; } = new();
+    public DateTime CreadoEn { get; set; }
 }
 
 public class ParadaDto
