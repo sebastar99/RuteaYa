@@ -1,6 +1,8 @@
-﻿namespace RuteaYa.Api.Servicios
+﻿using RuteaYa.Entidades;
+
+namespace RuteaYa.Api.Services;
+
+public interface ITokenServicio
 {
-    public class ITokenServicio
-    {
-    }
+    string CrearToken(Usuario usuario);
 }
