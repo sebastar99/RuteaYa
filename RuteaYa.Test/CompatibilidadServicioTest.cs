@@ -1,3 +1,4 @@
+using Moq;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
@@ -32,10 +33,43 @@ public class CompatibilidadServicioTest
         Estado = EstadoEnvio.BuscandoConductor
     };
 
-    [Fact]
-    public async Task EvaluarAsync_ReglasPreviasCumplidas_IndeterminadoConEvaluacionesPendientes()
+    private static ResultadoDesvioDto Desvio(long metros = 0, long segundos = 0, decimal limiteKm = 2) => new()
     {
-        ICompatibilidadServicio servicio = new CompatibilidadServicio();
+        DistanciaOriginalMetros = 20000,
+        DuracionOriginalSegundos = 1200,
+        DistanciaConEnvioMetros = 20000 + metros,
+        DuracionConEnvioSegundos = 1200 + segundos,
+        DistanciaAdicionalMetros = metros,
+        TiempoAdicionalSegundos = segundos,
+        CumpleLimiteDesvio = metros <= limiteKm * 1000m
+    };
+
+    private static CompatibilidadServicio Servicio()
+    {
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+        desvios.Setup(d => d.CalcularAsync(
+                It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<PuntoRutaDto>(), It.IsAny<PuntoRutaDto>(),
+                It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => Desvio());
+        return new CompatibilidadServicio(desvios.Object);
+    }
+
+    private static ViajeCompatibilidadDto ViajeConParadas(int cantidad)
+    {
+        var viaje = Viaje();
+        var extremos = viaje.RecorridoBase;
+        var puntos = new List<PuntoRutaDto> { extremos[0] };
+        for (var i = 0; i < cantidad; i++)
+            puntos.Add(Punto(-34.64m + i * 0.01m, -58.70m - i * 0.01m));
+        puntos.Add(extremos[1]);
+        viaje.RecorridoBase = puntos;
+        return viaje;
+    }
+
+    [Fact]
+    public async Task EvaluarAsync_ReglasPreviasYDesvioCumplidos_IndeterminadoConHorarioPendiente()
+    {
+        ICompatibilidadServicio servicio = Servicio();
 
         var resultado = await servicio.EvaluarAsync(Viaje(), Envio());
 
@@ -44,9 +78,10 @@ public class CompatibilidadServicioTest
         Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
         Assert.Equal(new[]
         {
-            MotivoCompatibilidad.DesvioNoEvaluado,
+            MotivoCompatibilidad.DesvioAprobado,
             MotivoCompatibilidad.HorarioNoEvaluado
         }, resultado.Motivos);
+        Assert.NotNull(resultado.InsercionSeleccionada);
     }
 
     [Theory]
@@ -59,7 +94,7 @@ public class CompatibilidadServicioTest
         var envio = Envio();
         envio.PesoKg = pesoKg;
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(Viaje(), envio);
+        var resultado = await Servicio().EvaluarAsync(Viaje(), envio);
 
         Assert.Equal(esperado, resultado.Estado);
         Assert.Equal(pesoKg > 10, resultado.Motivos.Contains(MotivoCompatibilidad.PesoExcedido));
@@ -74,7 +109,7 @@ public class CompatibilidadServicioTest
         viaje.PesoDisponibleKg = 2.75m;
         envio.PesoKg = 2.75m;
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(viaje, envio);
+        var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
         Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
         Assert.DoesNotContain(MotivoCompatibilidad.PesoExcedido, resultado.Motivos);
@@ -91,10 +126,13 @@ public class CompatibilidadServicioTest
         var envio = Envio();
         envio.Estado = estado;
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(Viaje(), envio);
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+        var resultado = await new CompatibilidadServicio(desvios.Object).EvaluarAsync(Viaje(), envio);
 
         Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
         Assert.Contains(MotivoCompatibilidad.EnvioNoDisponible, resultado.Motivos);
+        Assert.Null(resultado.InsercionSeleccionada);
+        desvios.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -113,10 +151,13 @@ public class CompatibilidadServicioTest
             case "sinCupos": viaje.CuposDisponibles = 0; break;
         }
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(viaje, Envio());
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+        var resultado = await new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, Envio());
 
         Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
         Assert.Contains(motivo, resultado.Motivos);
+        Assert.Null(resultado.InsercionSeleccionada);
+        desvios.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -130,7 +171,8 @@ public class CompatibilidadServicioTest
         if (pesoDesconocido) viaje.PesoDisponibleKg = null;
         if (cuposDesconocidos) viaje.CuposDisponibles = null;
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(viaje, Envio());
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+        var resultado = await new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, Envio());
 
         Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
         Assert.Equal(pesoDesconocido,
@@ -139,6 +181,8 @@ public class CompatibilidadServicioTest
             resultado.Motivos.Contains(MotivoCompatibilidad.CuposDisponiblesDesconocidos));
         Assert.DoesNotContain(MotivoCompatibilidad.SinCupo, resultado.Motivos);
         Assert.DoesNotContain(MotivoCompatibilidad.PesoExcedido, resultado.Motivos);
+        Assert.Null(resultado.InsercionSeleccionada);
+        desvios.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -163,13 +207,16 @@ public class CompatibilidadServicioTest
             case "sinCupos": viaje.CuposDisponibles = 0; break;
         }
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(viaje, envio);
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+        var resultado = await new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio);
 
         Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
         Assert.Contains(motivo, resultado.Motivos);
         Assert.True(resultado.Motivos.Contains(MotivoCompatibilidad.PesoDisponibleDesconocido) ||
             resultado.Motivos.Contains(MotivoCompatibilidad.CuposDisponiblesDesconocidos));
         Assert.Contains(MotivoCompatibilidad.DesvioNoEvaluado, resultado.Motivos);
+        Assert.Null(resultado.InsercionSeleccionada);
+        desvios.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -183,7 +230,7 @@ public class CompatibilidadServicioTest
         viaje.CuposDisponibles = 0;
         envio.Estado = EstadoEnvio.Cancelado;
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(viaje, envio);
+        var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
         Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
         Assert.Equal(new[]
@@ -216,7 +263,7 @@ public class CompatibilidadServicioTest
         envio.DisponibleDesde = desde ? fecha : null;
         envio.FechaLimiteEntrega = limite ? fecha.AddHours(1) : null;
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(viaje, envio);
+        var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
         Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
         Assert.Contains(MotivoCompatibilidad.HorarioNoEvaluado, resultado.Motivos);
@@ -233,7 +280,7 @@ public class CompatibilidadServicioTest
         envio.DisponibleDesde = fecha;
         envio.FechaLimiteEntrega = fecha.ToUniversalTime();
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(viaje, envio);
+        var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
         Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
     }
@@ -258,7 +305,7 @@ public class CompatibilidadServicioTest
         }
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => new CompatibilidadServicio().EvaluarAsync(viaje, envio));
+            () => Servicio().EvaluarAsync(viaje, envio));
     }
 
     [Theory]
@@ -301,7 +348,7 @@ public class CompatibilidadServicioTest
         }
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => new CompatibilidadServicio().EvaluarAsync(viaje, envio));
+            () => Servicio().EvaluarAsync(viaje, envio));
     }
 
     public static IEnumerable<object[]> CoordenadasInvalidas()
@@ -328,7 +375,7 @@ public class CompatibilidadServicioTest
         if (lugar == "entrega") envio.Entrega = punto;
 
         await Assert.ThrowsAsync<ArgumentException>(
-            () => new CompatibilidadServicio().EvaluarAsync(viaje, envio));
+            () => Servicio().EvaluarAsync(viaje, envio));
     }
 
     [Fact]
@@ -341,7 +388,7 @@ public class CompatibilidadServicioTest
         envio.Retiro = Punto(0, 0);
         envio.Entrega = Punto(90, -180);
 
-        var resultado = await new CompatibilidadServicio().EvaluarAsync(viaje, envio);
+        var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
         Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
     }
@@ -349,7 +396,7 @@ public class CompatibilidadServicioTest
     [Fact]
     public async Task EvaluarAsync_ObjetosNulos_SeRechazan()
     {
-        var servicio = new CompatibilidadServicio();
+        var servicio = Servicio();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => servicio.EvaluarAsync(null!, Envio()));
         await Assert.ThrowsAsync<ArgumentNullException>(() => servicio.EvaluarAsync(Viaje(), null!));
@@ -361,10 +408,293 @@ public class CompatibilidadServicioTest
         using var cancelacion = new CancellationTokenSource();
         cancelacion.Cancel();
 
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
         var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => new CompatibilidadServicio().EvaluarAsync(Viaje(), Envio(), cancelacion.Token));
+            () => new CompatibilidadServicio(desvios.Object).EvaluarAsync(Viaje(), Envio(), cancelacion.Token));
 
         Assert.Equal(cancelacion.Token, error.CancellationToken);
+        desvios.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void Constructor_DesviosNulo_SeRechaza()
+    {
+        Assert.Throws<ArgumentNullException>(() => new CompatibilidadServicio(null!));
+    }
+
+    private static Mock<IDesviosServicio> DesviosConfigurados(
+        ViajeCompatibilidadDto viaje,
+        EnvioCompatibilidadDto envio,
+        Func<int, int, ResultadoDesvioDto> calcular,
+        CancellationToken cancellationToken = default)
+    {
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+        desvios.Setup(d => d.CalcularAsync(
+                viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm,
+                It.IsAny<int>(), It.IsAny<int>(), cancellationToken))
+            .Returns((IReadOnlyList<PuntoRutaDto> _, PuntoRutaDto _, PuntoRutaDto _,
+                decimal _, int retiro, int entrega, CancellationToken _) =>
+                Task.FromResult(calcular(retiro, entrega)));
+        return desvios;
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task EvaluarAsync_Enumeracion_ConsultaTodasLasParejasValidasUnaVez(int paradas)
+    {
+        var viaje = ViajeConParadas(paradas);
+        var envio = Envio();
+        var llamadas = new List<(int Retiro, int Entrega)>();
+        using var cancelacion = new CancellationTokenSource();
+        var desvios = DesviosConfigurados(viaje, envio, (retiro, entrega) =>
+        {
+            llamadas.Add((retiro, entrega));
+            return Desvio();
+        }, cancelacion.Token);
+
+        var resultado = await new CompatibilidadServicio(desvios.Object)
+            .EvaluarAsync(viaje, envio, cancelacion.Token);
+
+        var esperadas = paradas switch
+        {
+            0 => new[] { (0, 0) },
+            1 => new[] { (0, 0), (0, 1), (1, 1) },
+            _ => new[] { (0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2) }
+        };
+        Assert.Equal(esperadas, llamadas);
+        Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
+        Assert.Equal(0, resultado.InsercionSeleccionada!.SegmentoRetiro);
+        Assert.Equal(0, resultado.InsercionSeleccionada.SegmentoEntrega);
+    }
+
+    public static IEnumerable<object[]> Selecciones()
+    {
+        // Parejas: (0,0), (0,1), (0,2), (1,1), (1,2), (2,2).
+        yield return new object[] { new long[] { 1800, 1500, 1000, 200, 1700, 500 },
+            new long[] { 60, 60, 60, 60, 60, 60 }, 1, 1 }; // Medio mejor que final.
+        yield return new object[] { new long[] { 1500, 200, 1800, 1400, 1600, 1700 },
+            new long[] { 60, 60, 60, 60, 60, 60 }, 0, 1 }; // Segmentos diferentes.
+        yield return new object[] { new long[] { 1800, 1700, 1600, 1400, 1300, 100 },
+            new long[] { 60, 60, 60, 60, 60, 60 }, 2, 2 }; // También puede ganar el final.
+        yield return new object[] { new long[] { 500, 500, 500, 500, 500, 500 },
+            new long[] { 90, 80, 70, 60, 50, 40 }, 2, 2 }; // Desempate por tiempo.
+        yield return new object[] { new long[] { 3000, 500, 3000, 500, 3000, 3000 },
+            new long[] { 60, 60, 60, 60, 60, 60 }, 0, 1 }; // Menor índice de retiro.
+        yield return new object[] { new long[] { 3000, 500, 500, 3000, 3000, 3000 },
+            new long[] { 60, 60, 60, 60, 60, 60 }, 0, 1 }; // Menor índice de entrega.
+        yield return new object[] { new long[] { -100, -500, -300, 0, 200, 400 },
+            new long[] { 60, 60, 60, 60, 60, 60 }, 0, 1 }; // Diferencias negativas reales.
+        yield return new object[] { new long[] { 500, 400, 600, 700, 800, 900 },
+            new long[] { -100, 200, 60, 60, 60, 60 }, 0, 1 }; // Distancia antes que tiempo.
+        yield return new object[] { new long[] { 500, 500, 500, 500, 500, 500 },
+            new long[] { 60, -100, -50, 60, 60, 60 }, 0, 1 }; // Tiempo negativo sin normalizar.
+    }
+
+    [Theory]
+    [MemberData(nameof(Selecciones))]
+    public async Task EvaluarAsync_Seleccion_OrdenaPorDistanciaTiempoEIndices(
+        long[] metros, long[] segundos, int retiroEsperado, int entregaEsperada)
+    {
+        var viaje = ViajeConParadas(2);
+        var envio = Envio();
+        var parejas = new[] { (0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2) };
+        var respuestas = parejas.Select((p, i) => (p, desvio: Desvio(metros[i], segundos[i])))
+            .ToDictionary(x => x.p, x => x.desvio);
+        var llamadas = 0;
+        var desvios = DesviosConfigurados(viaje, envio, (retiro, entrega) =>
+        {
+            llamadas++;
+            return respuestas[(retiro, entrega)];
+        });
+
+        var resultado = await new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio);
+
+        Assert.Equal(6, llamadas);
+        var elegida = Assert.IsType<InsercionCompatibilidadDto>(resultado.InsercionSeleccionada);
+        Assert.Equal(retiroEsperado, elegida.SegmentoRetiro);
+        Assert.Equal(entregaEsperada, elegida.SegmentoEntrega);
+        Assert.Same(respuestas[(retiroEsperado, entregaEsperada)], elegida.Desvio);
+        Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
+        Assert.Contains(MotivoCompatibilidad.DesvioAprobado, resultado.Motivos);
+        Assert.Contains(MotivoCompatibilidad.HorarioNoEvaluado, resultado.Motivos);
+        Assert.DoesNotContain(MotivoCompatibilidad.DesvioNoEvaluado, resultado.Motivos);
+        Assert.DoesNotContain(MotivoCompatibilidad.DesvioExcedido, resultado.Motivos);
+    }
+
+    [Theory]
+    [InlineData(1499, true)]
+    [InlineData(1500, true)]
+    [InlineData(1501, false)]
+    public async Task EvaluarAsync_LimiteEnKm_EvaluaDistanciaAdicionalConIgualdadInclusiva(
+        long metros, bool aprobado)
+    {
+        var viaje = Viaje();
+        var envio = Envio();
+        viaje.DesvioMaxKm = 1.5m;
+        var desvio = Desvio(metros, 60, viaje.DesvioMaxKm);
+        var desvios = DesviosConfigurados(viaje, envio, (_, _) => desvio);
+
+        var resultado = await new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio);
+
+        Assert.Equal(aprobado ? EstadoCompatibilidad.Indeterminado : EstadoCompatibilidad.Incompatible,
+            resultado.Estado);
+        Assert.Equal(aprobado, resultado.InsercionSeleccionada != null);
+        Assert.Contains(aprobado ? MotivoCompatibilidad.DesvioAprobado : MotivoCompatibilidad.DesvioExcedido,
+            resultado.Motivos);
+        if (aprobado)
+            Assert.Same(desvio, resultado.InsercionSeleccionada!.Desvio);
+    }
+
+    [Fact]
+    public async Task EvaluarAsync_TodasLasAlternativasExceden_RechazaSinSeleccion()
+    {
+        var viaje = ViajeConParadas(2);
+        var envio = Envio();
+        var llamadas = 0;
+        var desvios = DesviosConfigurados(viaje, envio, (_, _) =>
+        {
+            llamadas++;
+            return Desvio(2001, 60);
+        });
+
+        var resultado = await new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio);
+
+        Assert.Equal(6, llamadas);
+        Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
+        Assert.Null(resultado.InsercionSeleccionada);
+        Assert.Equal(new[] { MotivoCompatibilidad.DesvioExcedido, MotivoCompatibilidad.HorarioNoEvaluado },
+            resultado.Motivos);
+    }
+
+    [Theory]
+    [InlineData("http", 1)]
+    [InlineData("http", 2)]
+    [InlineData("timeout", 1)]
+    [InlineData("timeout", 2)]
+    [InlineData("proveedor", 1)]
+    [InlineData("proveedor", 2)]
+    public async Task EvaluarAsync_ErrorDuranteBusqueda_PropagaSinDevolverResultadoParcial(
+        string tipoError, int llamadaFallida)
+    {
+        var viaje = ViajeConParadas(1);
+        var envio = Envio();
+        Exception error = tipoError switch
+        {
+            "http" => new HttpRequestException("Fallo HTTP simulado."),
+            "timeout" => new TimeoutException("Timeout simulado."),
+            _ => new InvalidOperationException("Fallo de desvíos simulado.")
+        };
+        var llamadas = 0;
+        var desvios = DesviosConfigurados(viaje, envio, (_, _) =>
+        {
+            llamadas++;
+            if (llamadas == llamadaFallida) throw error;
+            return Desvio(); // Una inserción anterior válida no justifica devolver un mínimo parcial.
+        });
+
+        var recibido = await Record.ExceptionAsync(
+            () => new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio));
+
+        Assert.Same(error, recibido);
+        Assert.Equal(llamadaFallida, llamadas);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task EvaluarAsync_CancelacionDuranteProveedor_InterrumpeSinResultadoParcial(int llamadaCancelada)
+    {
+        var viaje = ViajeConParadas(1);
+        var envio = Envio();
+        using var cancelacion = new CancellationTokenSource();
+        var llamadas = 0;
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+        desvios.Setup(d => d.CalcularAsync(
+                viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm,
+                It.IsAny<int>(), It.IsAny<int>(), cancelacion.Token))
+            .Returns((IReadOnlyList<PuntoRutaDto> _, PuntoRutaDto _, PuntoRutaDto _,
+                decimal _, int _, int _, CancellationToken token) =>
+            {
+                llamadas++;
+                if (llamadas == llamadaCancelada)
+                {
+                    cancelacion.Cancel();
+                    return Task.FromCanceled<ResultadoDesvioDto>(token);
+                }
+                return Task.FromResult(Desvio());
+            });
+
+        var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio, cancelacion.Token));
+
+        Assert.Equal(cancelacion.Token, error.CancellationToken);
+        Assert.Equal(llamadaCancelada, llamadas);
+    }
+
+    [Fact]
+    public async Task EvaluarAsync_CancelacionAlRecibirUltimaAlternativa_NoPublicaResultado()
+    {
+        var viaje = Viaje();
+        var envio = Envio();
+        using var cancelacion = new CancellationTokenSource();
+        var llamadas = 0;
+        var desvios = DesviosConfigurados(viaje, envio, (_, _) =>
+        {
+            llamadas++;
+            cancelacion.Cancel();
+            return Desvio();
+        }, cancelacion.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio, cancelacion.Token));
+
+        Assert.Equal(1, llamadas);
+    }
+
+    [Fact]
+    public async Task EvaluarAsync_ProveedorDevuelveNulo_PropagaErrorTecnico()
+    {
+        var viaje = Viaje();
+        var envio = Envio();
+        var desvios = DesviosConfigurados(viaje, envio, (_, _) => null!);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio));
+    }
+
+    [Fact]
+    public async Task EvaluarAsync_IntegracionEnMemoria_SeleccionaRetiroYEntregaEnSegmentosDiferentes()
+    {
+        var viaje = ViajeConParadas(1);
+        var envio = Envio();
+        var origen = viaje.RecorridoBase[0];
+        var parada = viaje.RecorridoBase[1];
+        var destino = viaje.RecorridoBase[2];
+        var rutas = new RutasMockServicio();
+        rutas.ConfigurarRecorrido(viaje.RecorridoBase,
+            new ResultadoRutaDto { DistanciaMetros = 20000, DuracionSegundos = 1200 });
+        rutas.ConfigurarRecorrido(new[] { origen, envio.Retiro, envio.Entrega, parada, destino },
+            new ResultadoRutaDto { DistanciaMetros = 23500, DuracionSegundos = 1500 });
+        rutas.ConfigurarRecorrido(new[] { origen, envio.Retiro, parada, envio.Entrega, destino },
+            new ResultadoRutaDto { DistanciaMetros = 20500, DuracionSegundos = 1300 });
+        rutas.ConfigurarRecorrido(new[] { origen, parada, envio.Retiro, envio.Entrega, destino },
+            new ResultadoRutaDto { DistanciaMetros = 21500, DuracionSegundos = 1400 });
+        var servicio = new CompatibilidadServicio(new DesviosServicio(rutas));
+
+        var resultado = await servicio.EvaluarAsync(viaje, envio);
+
+        var elegida = Assert.IsType<InsercionCompatibilidadDto>(resultado.InsercionSeleccionada);
+        Assert.Equal(0, elegida.SegmentoRetiro);
+        Assert.Equal(1, elegida.SegmentoEntrega);
+        Assert.Equal(500L, elegida.Desvio.DistanciaAdicionalMetros);
+        Assert.Equal(100L, elegida.Desvio.TiempoAdicionalSegundos);
+        Assert.Equal(20500L, elegida.Desvio.DistanciaConEnvioMetros);
+        Assert.True(elegida.Desvio.CumpleLimiteDesvio);
+        Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
+        Assert.Contains(MotivoCompatibilidad.DesvioAprobado, resultado.Motivos);
+        Assert.Contains(MotivoCompatibilidad.HorarioNoEvaluado, resultado.Motivos);
     }
 
     [Fact]
@@ -376,7 +706,7 @@ public class CompatibilidadServicioTest
         var coordenadas = puntosOriginales.Select(p => (p.Latitud, p.Longitud)).ToArray();
         var retiro = (envio.Retiro.Latitud, envio.Retiro.Longitud);
         var entrega = (envio.Entrega.Latitud, envio.Entrega.Longitud);
-        var servicio = new CompatibilidadServicio();
+        var servicio = Servicio();
 
         var primero = await servicio.EvaluarAsync(viaje, envio);
         var segundo = await servicio.EvaluarAsync(viaje, envio);

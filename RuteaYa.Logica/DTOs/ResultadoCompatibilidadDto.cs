@@ -11,4 +11,11 @@ public class ResultadoCompatibilidadDto
     /// Un rechazo comprobado tiene prioridad sobre los motivos de indeterminación.
     /// </summary>
     public IReadOnlyList<MotivoCompatibilidad> Motivos { get; set; } = Array.Empty<MotivoCompatibilidad>();
+
+    /// <summary>
+    /// Mejor inserción geográficamente válida. Null si no se evaluó el desvío
+    /// o si todas las alternativas exceden el límite; los motivos distinguen esos casos.
+    /// Su presencia no certifica compatibilidad temporal ni reserva capacidad.
+    /// </summary>
+    public InsercionCompatibilidadDto? InsercionSeleccionada { get; set; }
 }

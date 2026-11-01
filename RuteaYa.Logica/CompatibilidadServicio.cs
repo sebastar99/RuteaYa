@@ -4,12 +4,21 @@ using RuteaYa.Logica.DTOs;
 namespace RuteaYa.Logica;
 
 /// <summary>
-/// Reglas previas sobre datos en memoria. Un envío ocupa un cupo y su peso durante
-/// toda la salida. No consulta rutas, calcula inserciones ni valida tiempos de viaje.
+/// Reglas previas y búsqueda de inserción para un solo envío sobre datos en memoria.
+/// Un envío ocupa un cupo y su peso durante toda la salida. Delega cada alternativa
+/// a IDesviosServicio, sin construir rutas ni evaluar horarios. No combina envíos.
 /// </summary>
 public class CompatibilidadServicio : ICompatibilidadServicio
 {
-    public Task<ResultadoCompatibilidadDto> EvaluarAsync(
+    private readonly IDesviosServicio _desviosServicio;
+
+    public CompatibilidadServicio(IDesviosServicio desviosServicio)
+    {
+        ArgumentNullException.ThrowIfNull(desviosServicio);
+        _desviosServicio = desviosServicio;
+    }
+
+    public async Task<ResultadoCompatibilidadDto> EvaluarAsync(
         ViajeCompatibilidadDto viaje,
         EnvioCompatibilidadDto envio,
         CancellationToken cancellationToken = default)
@@ -36,16 +45,75 @@ public class CompatibilidadServicio : ICompatibilidadServicio
         if (!viaje.CuposDisponibles.HasValue)
             motivos.Add(MotivoCompatibilidad.CuposDisponiblesDesconocidos);
 
-        motivos.Add(MotivoCompatibilidad.DesvioNoEvaluado);
-        motivos.Add(MotivoCompatibilidad.HorarioNoEvaluado);
-
-        return Task.FromResult(new ResultadoCompatibilidadDto
+        var resultado = new ResultadoCompatibilidadDto
         {
             ViajeId = viaje.ViajeId,
             EnvioId = envio.EnvioId,
             Estado = incompatible ? EstadoCompatibilidad.Incompatible : EstadoCompatibilidad.Indeterminado,
             Motivos = motivos.AsReadOnly()
-        });
+        };
+
+        if (incompatible || !viaje.PesoDisponibleKg.HasValue || !viaje.CuposDisponibles.HasValue)
+        {
+            motivos.Add(MotivoCompatibilidad.DesvioNoEvaluado);
+            motivos.Add(MotivoCompatibilidad.HorarioNoEvaluado);
+            return resultado;
+        }
+
+        var cantidadSegmentos = viaje.RecorridoBase.Count - 1;
+        decimal limiteMetros = viaje.DesvioMaxKm * 1000m;
+        InsercionCompatibilidadDto? mejor = null;
+
+        // Todas las parejas i <= j; el orden ascendente también hace determinista el recorrido.
+        // No se corta al hallar una válida: otra puede tener menor distancia o tiempo adicional.
+        for (var retiro = 0; retiro < cantidadSegmentos; retiro++)
+        {
+            for (var entrega = retiro; entrega < cantidadSegmentos; entrega++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var desvio = await _desviosServicio.CalcularAsync(
+                    viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm,
+                    retiro, entrega, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (desvio == null)
+                    throw new InvalidOperationException("El servicio de desvíos no devolvió un resultado.");
+
+                if (desvio.DistanciaAdicionalMetros > limiteMetros)
+                    continue;
+
+                var candidata = new InsercionCompatibilidadDto
+                {
+                    SegmentoRetiro = retiro,
+                    SegmentoEntrega = entrega,
+                    Desvio = desvio
+                };
+                if (mejor == null || EsMejor(candidata, mejor))
+                    mejor = candidata;
+            }
+        }
+
+        resultado.InsercionSeleccionada = mejor;
+        if (mejor == null)
+        {
+            resultado.Estado = EstadoCompatibilidad.Incompatible;
+            motivos.Add(MotivoCompatibilidad.DesvioExcedido);
+        }
+        else
+        {
+            motivos.Add(MotivoCompatibilidad.DesvioAprobado);
+        }
+        motivos.Add(MotivoCompatibilidad.HorarioNoEvaluado);
+        return resultado;
+    }
+
+    private static bool EsMejor(InsercionCompatibilidadDto candidata, InsercionCompatibilidadDto actual)
+    {
+        // Comparar, en vez de restar, evita desbordamientos con diferencias negativas.
+        return (candidata.Desvio.DistanciaAdicionalMetros, candidata.Desvio.TiempoAdicionalSegundos,
+                candidata.SegmentoRetiro, candidata.SegmentoEntrega)
+            .CompareTo((actual.Desvio.DistanciaAdicionalMetros, actual.Desvio.TiempoAdicionalSegundos,
+                actual.SegmentoRetiro, actual.SegmentoEntrega)) < 0;
     }
 
     private static void Validar(ViajeCompatibilidadDto viaje, EnvioCompatibilidadDto envio)

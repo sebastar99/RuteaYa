@@ -11,5 +11,7 @@ public enum MotivoCompatibilidad
     PesoDisponibleDesconocido,
     CuposDisponiblesDesconocidos,
     DesvioNoEvaluado,
-    HorarioNoEvaluado
+    HorarioNoEvaluado,
+    DesvioExcedido,
+    DesvioAprobado
 }
