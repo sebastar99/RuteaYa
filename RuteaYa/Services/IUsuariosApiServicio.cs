@@ -8,8 +8,10 @@ namespace RuteaYa.Web.Services
         Task<(bool Exito, string Mensaje)> RegistrarAsync(
             RegistroUsuarioViewModel modelo);
 
-        Task<(bool Exito, string Mensaje, UsuarioApiRespuesta? Usuario)>
+        Task<(bool Exito, string Mensaje, UsuarioApiRespuesta? Usuario, string? Token)>
             LoginAsync(LoginUsuarioViewModel modelo);
+
+
     }
 
     public class UsuarioApiRespuesta

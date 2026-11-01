@@ -6,6 +6,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
 
+
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddTransient<JwtTokenHandler>();
+
 builder.Services.AddHttpClient<IUsuariosApiServicio, UsuariosApiServicio>(
     client =>
     {

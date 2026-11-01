@@ -49,10 +49,12 @@ namespace RuteaYa.Web.Services
             }
         }
 
+
         public async Task<(
             bool Exito,
             string Mensaje,
-            UsuarioApiRespuesta? Usuario)> LoginAsync(
+            UsuarioApiRespuesta? Usuario,
+            string? Token)> LoginAsync(
                 LoginUsuarioViewModel modelo)
         {
             var datos = new
@@ -69,27 +71,35 @@ namespace RuteaYa.Web.Services
                 if (!response.IsSuccessStatusCode)
                 {
                     var mensaje = await ObtenerMensajeError(response);
-                    return (false, mensaje, null);
+                    return (false, mensaje, null, null);
                 }
 
-                var usuario = await response.Content
-                    .ReadFromJsonAsync<UsuarioApiRespuesta>();
+                var resultado = await response.Content
+                    .ReadFromJsonAsync<LoginApiRespuesta>();
 
-                if (usuario == null)
+                if (resultado == null ||
+                    string.IsNullOrWhiteSpace(resultado.Token) ||
+                    resultado.Usuario == null)
                 {
                     return (
                         false,
-                        "La API devolvió una respuesta inválida.",
+                        "La API devolvió una respuesta de login inválida.",
+                        null,
                         null);
                 }
 
-                return (true, "Inicio de sesión correcto.", usuario);
+                return (
+                    true,
+                    "Inicio de sesión correcto.",
+                    resultado.Usuario,
+                    resultado.Token);
             }
             catch (HttpRequestException)
             {
                 return (
                     false,
                     "No se pudo conectar con el servidor.",
+                    null,
                     null);
             }
             catch (TaskCanceledException)
@@ -97,9 +107,11 @@ namespace RuteaYa.Web.Services
                 return (
                     false,
                     "La solicitud tardó demasiado tiempo.",
+                    null,
                     null);
             }
         }
+
 
         private static async Task<string> ObtenerMensajeError(
             HttpResponseMessage response)

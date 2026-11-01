@@ -17,6 +17,8 @@ namespace RuteaYa.Entidades
         public DbSet<Parada> Paradas => Set<Parada>();
         public DbSet<DiaViaje> DiasViaje => Set<DiaViaje>();
 
+        public DbSet<Envio> Envios => Set<Envio>();
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -51,7 +53,7 @@ namespace RuteaYa.Entidades
                     .IsRequired();
             });
 
-            modelBuilder.Entity<Viaje>(entity => 
+            modelBuilder.Entity<Viaje>(entity =>
             {
                 entity.ToTable("Viajes");
 
@@ -74,7 +76,7 @@ namespace RuteaYa.Entidades
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            modelBuilder.Entity<Parada>(entity => 
+            modelBuilder.Entity<Parada>(entity =>
             {
                 entity.ToTable("Paradas");
 
@@ -84,7 +86,7 @@ namespace RuteaYa.Entidades
                 entity.HasIndex(p => new { p.ViajeId, p.Orden }).IsUnique();
             });
 
-            modelBuilder.Entity<DiaViaje>(entity => 
+            modelBuilder.Entity<DiaViaje>(entity =>
             {
                 entity.ToTable("DiasViaje");
 
@@ -92,6 +94,34 @@ namespace RuteaYa.Entidades
 
                 entity.HasIndex(d => new { d.ViajeId, d.DiaSemana }).IsUnique();
             });
-        }
+
+            modelBuilder.Entity<Envio>(entity =>
+            {
+                entity.ToTable("Envios");
+
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.OrigenDir).HasMaxLength(200).IsRequired();
+                entity.Property(e => e.DestinoDir).HasMaxLength(200).IsRequired();
+                entity.Property(e => e.Descripcion).HasMaxLength(500).IsRequired();
+
+                entity.Property(e => e.PesoKg).HasPrecision(10, 2);
+                entity.Property(e => e.Monto).HasPrecision(10, 2);
+                entity.Property(e => e.OrigenLat).HasPrecision(18, 6);
+                entity.Property(e => e.OrigenLng).HasPrecision(18, 6);
+                entity.Property(e => e.DestinoLat).HasPrecision(18, 6);
+                entity.Property(e => e.DestinoLng).HasPrecision(18, 6);
+
+                entity.Property(e => e.RowVersion)
+                    .IsRowVersion();
+
+                entity.HasOne(e => e.Usuario)
+                    .WithMany()
+                    .HasForeignKey(e => e.UsuarioId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            
+    }
     }
 }
