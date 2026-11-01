@@ -13,9 +13,9 @@ public class ResultadoCompatibilidadDto
     public IReadOnlyList<MotivoCompatibilidad> Motivos { get; set; } = Array.Empty<MotivoCompatibilidad>();
 
     /// <summary>
-    /// Mejor inserción geográficamente válida. Null si no se evaluó el desvío
-    /// o si todas las alternativas exceden el límite; los motivos distinguen esos casos.
-    /// Su presencia no certifica compatibilidad temporal ni reserva capacidad.
+    /// Mejor inserción compatible; en su ausencia, mejor provisional indeterminada.
+    /// Null si hubo rechazo previo o ninguna alternativa quedó compatible o indeterminada.
+    /// Su presencia no reserva capacidad. EstadoTemporal distingue definitiva de provisional.
     /// </summary>
     public InsercionCompatibilidadDto? InsercionSeleccionada { get; set; }
 }

@@ -13,5 +13,12 @@ public enum MotivoCompatibilidad
     DesvioNoEvaluado,
     HorarioNoEvaluado,
     DesvioExcedido,
-    DesvioAprobado
+    DesvioAprobado,
+    SalidaNoInformada,
+    SalidaPosteriorAlVencimiento,
+    LlegadaMaximaExcedida,
+    EntregaAntesDelVencimientoNoVerificable,
+    DisponibilidadPosteriorAlRecorrido,
+    HorarioRetiroNoVerificable,
+    HorarioAprobado
 }

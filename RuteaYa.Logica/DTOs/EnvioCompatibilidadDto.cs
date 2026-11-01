@@ -17,8 +17,8 @@ public class EnvioCompatibilidadDto
     public DateTimeOffset? DisponibleDesde { get; set; }
 
     /// <summary>
-    /// Null: no se informó una fecha límite de entrega. No equivale a vencido
-    /// ni certifica disponibilidad ilimitada. Si hay inicio, no puede ser anterior a él.
+    /// Null: no se informó una restricción de vencimiento y no se inventa una.
+    /// Si hay inicio, no puede ser anterior a él. No describe el estado actual del envío.
     /// </summary>
     public DateTimeOffset? FechaLimiteEntrega { get; set; }
 }

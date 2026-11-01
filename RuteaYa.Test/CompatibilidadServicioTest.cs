@@ -82,6 +82,7 @@ public class CompatibilidadServicioTest
         Assert.Equal(new[]
         {
             MotivoCompatibilidad.DesvioAprobado,
+            MotivoCompatibilidad.SalidaNoInformada,
             MotivoCompatibilidad.HorarioNoEvaluado
         }, resultado.Motivos);
         Assert.NotNull(resultado.InsercionSeleccionada);
@@ -255,7 +256,7 @@ public class CompatibilidadServicioTest
     [InlineData(false, false, true, false)]
     [InlineData(false, false, false, true)]
     [InlineData(true, true, true, true)]
-    public async Task EvaluarAsync_FechasOpcionales_NulosSonValidosYSiguePendienteElHorario(
+    public async Task EvaluarAsync_FechasOpcionales_NulosSonValidosYSalidaPermiteVerificarHorario(
         bool salida, bool llegada, bool desde, bool limite)
     {
         var viaje = Viaje();
@@ -268,8 +269,10 @@ public class CompatibilidadServicioTest
 
         var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
-        Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
-        Assert.Contains(MotivoCompatibilidad.HorarioNoEvaluado, resultado.Motivos);
+        Assert.Equal(salida ? EstadoCompatibilidad.Compatible : EstadoCompatibilidad.Indeterminado,
+            resultado.Estado);
+        Assert.Contains(salida ? MotivoCompatibilidad.HorarioAprobado : MotivoCompatibilidad.SalidaNoInformada,
+            resultado.Motivos);
     }
 
     [Fact]
@@ -285,7 +288,9 @@ public class CompatibilidadServicioTest
 
         var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
-        Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
+        // Las ventanas son estructuralmente válidas, pero el recorrido dura más de cero.
+        Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
+        Assert.Contains(MotivoCompatibilidad.LlegadaMaximaExcedida, resultado.Motivos);
     }
 
     [Theory]
