@@ -47,10 +47,13 @@ public class CompatibilidadServicioTest
     private static CompatibilidadServicio Servicio()
     {
         var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
-        desvios.Setup(d => d.CalcularAsync(
-                It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<PuntoRutaDto>(), It.IsAny<PuntoRutaDto>(),
-                It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+        var evaluacion = new Mock<IEvaluacionDesvios>(MockBehavior.Strict);
+        evaluacion.Setup(e => e.CalcularAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => Desvio());
+        desvios.Setup(d => d.PrepararAsync(
+                It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<PuntoRutaDto>(), It.IsAny<PuntoRutaDto>(),
+                It.IsAny<decimal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evaluacion.Object);
         return new CompatibilidadServicio(desvios.Object);
     }
 
@@ -429,12 +432,13 @@ public class CompatibilidadServicioTest
         CancellationToken cancellationToken = default)
     {
         var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
-        desvios.Setup(d => d.CalcularAsync(
-                viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm,
-                It.IsAny<int>(), It.IsAny<int>(), cancellationToken))
-            .Returns((IReadOnlyList<PuntoRutaDto> _, PuntoRutaDto _, PuntoRutaDto _,
-                decimal _, int retiro, int entrega, CancellationToken _) =>
+        var evaluacion = new Mock<IEvaluacionDesvios>(MockBehavior.Strict);
+        evaluacion.Setup(e => e.CalcularAsync(It.IsAny<int>(), It.IsAny<int>(), cancellationToken))
+            .Returns((int retiro, int entrega, CancellationToken _) =>
                 Task.FromResult(calcular(retiro, entrega)));
+        desvios.Setup(d => d.PrepararAsync(
+                viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm, cancellationToken))
+            .ReturnsAsync(evaluacion.Object);
         return desvios;
     }
 
@@ -611,11 +615,9 @@ public class CompatibilidadServicioTest
         using var cancelacion = new CancellationTokenSource();
         var llamadas = 0;
         var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
-        desvios.Setup(d => d.CalcularAsync(
-                viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm,
-                It.IsAny<int>(), It.IsAny<int>(), cancelacion.Token))
-            .Returns((IReadOnlyList<PuntoRutaDto> _, PuntoRutaDto _, PuntoRutaDto _,
-                decimal _, int _, int _, CancellationToken token) =>
+        var evaluacion = new Mock<IEvaluacionDesvios>(MockBehavior.Strict);
+        evaluacion.Setup(e => e.CalcularAsync(It.IsAny<int>(), It.IsAny<int>(), cancelacion.Token))
+            .Returns((int _, int _, CancellationToken token) =>
             {
                 llamadas++;
                 if (llamadas == llamadaCancelada)
@@ -625,6 +627,9 @@ public class CompatibilidadServicioTest
                 }
                 return Task.FromResult(Desvio());
             });
+        desvios.Setup(d => d.PrepararAsync(
+                viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm, cancelacion.Token))
+            .ReturnsAsync(evaluacion.Object);
 
         var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio, cancelacion.Token));

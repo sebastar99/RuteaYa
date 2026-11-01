@@ -31,22 +31,25 @@ public class DesviosServicio : IDesviosServicio
     {
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(rutaBase);
+        ValidarSegmentos(rutaBase.Count, segmentoRetiro, segmentoEntrega);
+
+        var evaluacion = await PrepararAsync(rutaBase, retiro, entrega, desvioMaxKm, cancellationToken);
+        return await evaluacion.CalcularAsync(segmentoRetiro, segmentoEntrega, cancellationToken);
+    }
+
+    public async Task<IEvaluacionDesvios> PrepararAsync(
+        IReadOnlyList<PuntoRutaDto> rutaBase,
+        PuntoRutaDto retiro,
+        PuntoRutaDto entrega,
+        decimal desvioMaxKm,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(rutaBase);
 
         if (rutaBase.Count < 2)
             throw new ArgumentException(
                 "La ruta base debe contener al menos origen y destino.", nameof(rutaBase));
-
-        if (segmentoRetiro < 0 || segmentoRetiro >= rutaBase.Count - 1)
-            throw new ArgumentOutOfRangeException(
-                nameof(segmentoRetiro), "El segmento de retiro debe existir en la ruta base.");
-
-        if (segmentoEntrega < 0 || segmentoEntrega >= rutaBase.Count - 1)
-            throw new ArgumentOutOfRangeException(
-                nameof(segmentoEntrega), "El segmento de entrega debe existir en la ruta base.");
-
-        if (segmentoRetiro > segmentoEntrega)
-            throw new ArgumentException(
-                "El segmento de entrega no puede ser anterior al de retiro.", nameof(segmentoEntrega));
 
         if (desvioMaxKm < 0 || desvioMaxKm > decimal.MaxValue / 1000m)
             throw new ArgumentOutOfRangeException(
@@ -57,38 +60,27 @@ public class DesviosServicio : IDesviosServicio
         var retiroValidado = ValidarYCopiar(retiro, nameof(retiro));
         var entregaValidada = ValidarYCopiar(entrega, nameof(entrega));
 
-        var alternativa = new List<PuntoRutaDto>();
-        for (var i = 0; i < original.Length - 1; i++)
-        {
-            alternativa.Add(original[i]);
-            if (i == segmentoRetiro)
-                alternativa.Add(retiroValidado);
-            if (i == segmentoEntrega)
-                alternativa.Add(entregaValidada);
-        }
-        alternativa.Add(original[^1]);
-
         var resultadoBase = await _rutasServicio.CalcularAsync(original, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         ValidarResultado(resultadoBase);
 
-        var resultadoConEnvio = await _rutasServicio.CalcularAsync(alternativa, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        ValidarResultado(resultadoConEnvio);
+        return new EvaluacionDesvios(_rutasServicio, original, retiroValidado, entregaValidada,
+            desvioMaxMetros, resultadoBase.DistanciaMetros, resultadoBase.DuracionSegundos);
+    }
 
-        long distanciaAdicional = resultadoConEnvio.DistanciaMetros - resultadoBase.DistanciaMetros;
-        long tiempoAdicional = resultadoConEnvio.DuracionSegundos - resultadoBase.DuracionSegundos;
-
-        return new ResultadoDesvioDto
-        {
-            DistanciaOriginalMetros = resultadoBase.DistanciaMetros,
-            DuracionOriginalSegundos = resultadoBase.DuracionSegundos,
-            DistanciaConEnvioMetros = resultadoConEnvio.DistanciaMetros,
-            DuracionConEnvioSegundos = resultadoConEnvio.DuracionSegundos,
-            DistanciaAdicionalMetros = distanciaAdicional,
-            TiempoAdicionalSegundos = tiempoAdicional,
-            CumpleLimiteDesvio = distanciaAdicional <= desvioMaxMetros
-        };
+    private static void ValidarSegmentos(int cantidadPuntos, int segmentoRetiro, int segmentoEntrega)
+    {
+        if (cantidadPuntos < 2)
+            throw new ArgumentException("La ruta base debe contener al menos origen y destino.", "rutaBase");
+        if (segmentoRetiro < 0 || segmentoRetiro >= cantidadPuntos - 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(segmentoRetiro), "El segmento de retiro debe existir en la ruta base.");
+        if (segmentoEntrega < 0 || segmentoEntrega >= cantidadPuntos - 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(segmentoEntrega), "El segmento de entrega debe existir en la ruta base.");
+        if (segmentoRetiro > segmentoEntrega)
+            throw new ArgumentException(
+                "El segmento de entrega no puede ser anterior al de retiro.", nameof(segmentoEntrega));
     }
 
     private static PuntoRutaDto ValidarYCopiar(PuntoRutaDto punto, string parametro)
@@ -108,5 +100,65 @@ public class DesviosServicio : IDesviosServicio
         if (resultado == null || resultado.DistanciaMetros < 0 || resultado.DuracionSegundos < 0)
             throw new InvalidOperationException(
                 "El servicio de rutas debe devolver distancia y duración totales no negativas.");
+    }
+
+    private sealed class EvaluacionDesvios : IEvaluacionDesvios
+    {
+        private readonly IRutasServicio _rutasServicio;
+        private readonly PuntoRutaDto[] _original;
+        private readonly PuntoRutaDto _retiro;
+        private readonly PuntoRutaDto _entrega;
+        private readonly decimal _limiteMetros;
+        private readonly long _distanciaBaseMetros;
+        private readonly long _duracionBaseSegundos;
+
+        public EvaluacionDesvios(IRutasServicio rutasServicio, PuntoRutaDto[] original,
+            PuntoRutaDto retiro, PuntoRutaDto entrega, decimal limiteMetros,
+            long distanciaBaseMetros, long duracionBaseSegundos)
+        {
+            _rutasServicio = rutasServicio;
+            _original = original;
+            _retiro = retiro;
+            _entrega = entrega;
+            _limiteMetros = limiteMetros;
+            _distanciaBaseMetros = distanciaBaseMetros;
+            _duracionBaseSegundos = duracionBaseSegundos;
+        }
+
+        public async Task<ResultadoDesvioDto> CalcularAsync(
+            int segmentoRetiro, int segmentoEntrega, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidarSegmentos(_original.Length, segmentoRetiro, segmentoEntrega);
+
+            // Único algoritmo de inserción, compartido por cálculo individual y evaluación preparada.
+            var alternativa = new List<PuntoRutaDto>();
+            for (var i = 0; i < _original.Length - 1; i++)
+            {
+                alternativa.Add(_original[i]);
+                if (i == segmentoRetiro)
+                    alternativa.Add(_retiro);
+                if (i == segmentoEntrega)
+                    alternativa.Add(_entrega);
+            }
+            alternativa.Add(_original[^1]);
+
+            var conEnvio = await _rutasServicio.CalcularAsync(alternativa, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidarResultado(conEnvio);
+            long distanciaAdicional = conEnvio.DistanciaMetros - _distanciaBaseMetros;
+            long tiempoAdicional = conEnvio.DuracionSegundos - _duracionBaseSegundos;
+
+            return new ResultadoDesvioDto
+            {
+                DistanciaOriginalMetros = _distanciaBaseMetros,
+                DuracionOriginalSegundos = _duracionBaseSegundos,
+                DistanciaConEnvioMetros = conEnvio.DistanciaMetros,
+                DuracionConEnvioSegundos = conEnvio.DuracionSegundos,
+                DistanciaAdicionalMetros = distanciaAdicional,
+                TiempoAdicionalSegundos = tiempoAdicional,
+                CumpleLimiteDesvio = distanciaAdicional <= _limiteMetros
+            };
+        }
     }
 }

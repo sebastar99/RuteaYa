@@ -63,6 +63,11 @@ public class CompatibilidadServicio : ICompatibilidadServicio
         var cantidadSegmentos = viaje.RecorridoBase.Count - 1;
         decimal limiteMetros = viaje.DesvioMaxKm * 1000m;
         InsercionCompatibilidadDto? mejor = null;
+        var evaluacion = await _desviosServicio.PrepararAsync(
+            viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (evaluacion == null)
+            throw new InvalidOperationException("El servicio de desvíos no preparó la evaluación.");
 
         // Todas las parejas i <= j; el orden ascendente también hace determinista el recorrido.
         // No se corta al hallar una válida: otra puede tener menor distancia o tiempo adicional.
@@ -71,9 +76,7 @@ public class CompatibilidadServicio : ICompatibilidadServicio
             for (var entrega = retiro; entrega < cantidadSegmentos; entrega++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var desvio = await _desviosServicio.CalcularAsync(
-                    viaje.RecorridoBase, envio.Retiro, envio.Entrega, viaje.DesvioMaxKm,
-                    retiro, entrega, cancellationToken);
+                var desvio = await evaluacion.CalcularAsync(retiro, entrega, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (desvio == null)
