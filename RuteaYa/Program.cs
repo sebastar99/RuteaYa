@@ -1,10 +1,20 @@
 
 using Microsoft.AspNetCore.Authentication.Cookies;
+using RuteaYa.Logica;
 using RuteaYa.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+
+builder.Services.Configure<HereRoutingOpciones>(builder.Configuration.GetSection("HereRouting"));
+builder.Services.AddHttpClient<IRutasServicio, RutasHereServicio>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    })
+    // La API Key viaja en la query según el contrato de HERE; no registrar la URL.
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
 
 builder.Services.AddHttpContextAccessor();
