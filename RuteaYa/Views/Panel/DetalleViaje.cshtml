@@ -239,6 +239,50 @@ else
                     
                 </table>
             </div>
+
+            @* FORMULARIO PARA REORDENAR PARADAS *@
+
+            @if (Model.Activo && paradas.Count > 1)
+            {
+                <hr />
+                <h3>Reordenar paradas</h3>
+
+                <p>
+                    Modificar los numeros para establecer un nuevo orden
+                    para el recorrido. Cada parada debe tener un numero diferente.
+                </p>
+
+                <form asp-controller="Panel" asp-action="ReordenarParadas" method="post">
+
+                    @Html.AntiForgeryToken()
+
+                    <input type="hidden" name="viajeId" value="@Model.Id" />
+
+                    @foreach (var parada in paradas.OrderBy(p => p.Orden))
+                    {
+                        <div class="panel-form-grid">
+
+                            <div>
+                                <label>@parada.Ubicacion</label>
+                                <input type="hidden" name="paradasIds"  value="@parada.Id" />
+                            </div>
+
+                            <div>
+                                <label>Nuevo orden</label>
+                                <input type="number" class="panel-input" name="ordenes" value="@parada.Orden"
+                                    min="1" max="@paradas.Count" required />
+                            </div>
+
+                        </div>
+                    }
+
+                    <button type="submit" class="btn btn-primary">
+                        Guardar nuevo orden
+                    </button>
+
+                </form>
+            }
         }
+
     </div>
 }

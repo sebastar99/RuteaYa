@@ -308,7 +308,7 @@ namespace RuteaYa.Web.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ReordenarParadas(int viajeId, List<int> paradasIds)
+        public async Task<IActionResult> ReordenarParadas(int viajeId, List<int> paradasIds, List<int> ordenes)
         {
             if (viajeId <= 0)
             {
@@ -321,16 +321,30 @@ namespace RuteaYa.Web.Controllers
                 return Forbid();
             }
                 
-            if (paradasIds == null || paradasIds.Count == 0)
-            {
-                TempData["MensajeError"] = "No hay paradas para reordenar.";
+            if (paradasIds == null || ordenes == null ||
+                paradasIds.Count == 0 || paradasIds.Count != ordenes.Count ||
+                paradasIds.Distinct().Count() != paradasIds.Count ||
+                ordenes.Distinct().Count() != ordenes.Count ||
+                ordenes.Any(o => o < 1 || o > paradasIds.Count)
+            ) {
+                TempData["MensajeError"] = "La lista de paradas o su orden, no es valido.";
                 return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
             }
+
+            var IdOrdenadas = paradasIds
+                .Select((id, indice) => new 
+                {
+                    Id = id, 
+                    Orden = ordenes[indice] 
+                })
+                .OrderBy(p => p.Orden)
+                .Select(p => p.Id)
+                .ToList();
 
             var resultado = await _viajesApiServicio.ReordenarParadasAsync(
                 usuarioId,
                 viajeId,
-                paradasIds
+                IdOrdenadas
             );
 
             if (!resultado.Exito)
