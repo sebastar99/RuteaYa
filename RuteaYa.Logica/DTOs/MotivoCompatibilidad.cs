@@ -20,5 +20,8 @@ public enum MotivoCompatibilidad
     EntregaAntesDelVencimientoNoVerificable,
     DisponibilidadPosteriorAlRecorrido,
     HorarioRetiroNoVerificable,
-    HorarioAprobado
+    HorarioAprobado,
+    LlegadaMaximaDesconocida,
+    DisponibilidadRetiroDesconocida,
+    VencimientoEntregaDesconocido
 }

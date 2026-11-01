@@ -13,12 +13,12 @@ public class EnvioCompatibilidadDto
     public decimal PesoKg { get; set; }
     public EstadoEnvio Estado { get; set; }
 
-    /// <summary>Null: no se informó una restricción de inicio de disponibilidad para retirar.</summary>
-    public DateTimeOffset? DisponibleDesde { get; set; }
+    /// <summary>Inicio de retiro; desconocido por defecto, sin inventar disponibilidad inmediata.</summary>
+    public RestriccionTemporalDto DisponibleDesde { get; set; } = RestriccionTemporalDto.Desconocida();
 
     /// <summary>
-    /// Null: no se informó una restricción de vencimiento y no se inventa una.
-    /// Si hay inicio, no puede ser anterior a él. No describe el estado actual del envío.
+    /// Vencimiento desconocido por defecto. SinRestriccion solo si sabemos que no aplica.
+    /// Si este límite y el inicio están informados, no puede ser anterior al inicio.
     /// </summary>
-    public DateTimeOffset? FechaLimiteEntrega { get; set; }
+    public RestriccionTemporalDto FechaLimiteEntrega { get; set; } = RestriccionTemporalDto.Desconocida();
 }

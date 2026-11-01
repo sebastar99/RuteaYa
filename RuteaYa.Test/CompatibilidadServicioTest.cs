@@ -2,6 +2,7 @@ using Moq;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
+using static RuteaYa.Logica.DTOs.RestriccionTemporalDto;
 
 namespace RuteaYa.Test;
 
@@ -21,7 +22,8 @@ public class CompatibilidadServicioTest
         Disponible = true,
         DesvioMaxKm = 2,
         PesoDisponibleKg = 10,
-        CuposDisponibles = 1
+        CuposDisponibles = 1,
+        LlegadaMaxima = SinRestriccion()
     };
 
     private static EnvioCompatibilidadDto Envio() => new()
@@ -30,7 +32,9 @@ public class CompatibilidadServicioTest
         Retiro = Punto(-34.66m, -58.63m),
         Entrega = Punto(-34.57m, -59.12m),
         PesoKg = 2,
-        Estado = EstadoEnvio.BuscandoConductor
+        Estado = EstadoEnvio.BuscandoConductor,
+        DisponibleDesde = SinRestriccion(),
+        FechaLimiteEntrega = SinRestriccion()
     };
 
     private static ResultadoDesvioDto Desvio(long metros = 0, long segundos = 0, decimal limiteKm = 2) => new()
@@ -256,16 +260,16 @@ public class CompatibilidadServicioTest
     [InlineData(false, false, true, false)]
     [InlineData(false, false, false, true)]
     [InlineData(true, true, true, true)]
-    public async Task EvaluarAsync_FechasOpcionales_NulosSonValidosYSalidaPermiteVerificarHorario(
+    public async Task EvaluarAsync_RestriccionesExplicitas_InformadasOSinLimiteSegunCorresponda(
         bool salida, bool llegada, bool desde, bool limite)
     {
         var viaje = Viaje();
         var envio = Envio();
         var fecha = new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(-3));
         viaje.SalidaProgramada = salida ? fecha : null;
-        viaje.LlegadaMaxima = llegada ? fecha.AddHours(2) : null;
-        envio.DisponibleDesde = desde ? fecha : null;
-        envio.FechaLimiteEntrega = limite ? fecha.AddHours(1) : null;
+        viaje.LlegadaMaxima = llegada ? Informada(fecha.AddHours(2)) : SinRestriccion();
+        envio.DisponibleDesde = desde ? Informada(fecha) : SinRestriccion();
+        envio.FechaLimiteEntrega = limite ? Informada(fecha.AddHours(1)) : SinRestriccion();
 
         var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
@@ -282,9 +286,9 @@ public class CompatibilidadServicioTest
         var envio = Envio();
         var fecha = new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(-3));
         viaje.SalidaProgramada = fecha;
-        viaje.LlegadaMaxima = fecha.ToUniversalTime();
-        envio.DisponibleDesde = fecha;
-        envio.FechaLimiteEntrega = fecha.ToUniversalTime();
+        viaje.LlegadaMaxima = Informada(fecha.ToUniversalTime());
+        envio.DisponibleDesde = Informada(fecha);
+        envio.FechaLimiteEntrega = Informada(fecha.ToUniversalTime());
 
         var resultado = await Servicio().EvaluarAsync(viaje, envio);
 
@@ -304,12 +308,12 @@ public class CompatibilidadServicioTest
         if (ventanaViaje)
         {
             viaje.SalidaProgramada = fecha;
-            viaje.LlegadaMaxima = fecha.AddSeconds(-1);
+            viaje.LlegadaMaxima = Informada(fecha.AddSeconds(-1));
         }
         else
         {
-            envio.DisponibleDesde = fecha;
-            envio.FechaLimiteEntrega = fecha.AddSeconds(-1);
+            envio.DisponibleDesde = Informada(fecha);
+            envio.FechaLimiteEntrega = Informada(fecha.AddSeconds(-1));
         }
 
         await Assert.ThrowsAsync<ArgumentException>(

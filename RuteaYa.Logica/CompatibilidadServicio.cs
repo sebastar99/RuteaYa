@@ -38,8 +38,8 @@ public class CompatibilidadServicio : ICompatibilidadServicio
             motivos.Add(MotivoCompatibilidad.PesoExcedido);
         if (viaje.CuposDisponibles == 0)
             motivos.Add(MotivoCompatibilidad.SinCupo);
-        if (viaje.SalidaProgramada.HasValue && envio.FechaLimiteEntrega.HasValue &&
-            viaje.SalidaProgramada.Value > envio.FechaLimiteEntrega.Value)
+        if (viaje.SalidaProgramada.HasValue && envio.FechaLimiteEntrega.Estado == EstadoRestriccionTemporal.Informada &&
+            viaje.SalidaProgramada.Value > envio.FechaLimiteEntrega.Valor!.Value)
             motivos.Add(MotivoCompatibilidad.SalidaPosteriorAlVencimiento);
 
         // Se resuelve el rechazo antes de agregar datos desconocidos o reglas pendientes.
@@ -59,6 +59,7 @@ public class CompatibilidadServicio : ICompatibilidadServicio
 
         if (incompatible || !viaje.PesoDisponibleKg.HasValue || !viaje.CuposDisponibles.HasValue)
         {
+            AgregarRestriccionesDesconocidas(viaje, envio, motivos);
             motivos.Add(MotivoCompatibilidad.DesvioNoEvaluado);
             motivos.Add(MotivoCompatibilidad.HorarioNoEvaluado);
             return resultado;
@@ -145,6 +146,7 @@ public class CompatibilidadServicio : ICompatibilidadServicio
 
         var motivos = new List<MotivoCompatibilidad>();
         insercion.MotivosTemporales = motivos.AsReadOnly();
+        AgregarRestriccionesDesconocidas(viaje, envio, motivos);
         if (!viaje.SalidaProgramada.HasValue)
         {
             motivos.Add(MotivoCompatibilidad.SalidaNoInformada);
@@ -166,22 +168,24 @@ public class CompatibilidadServicio : ICompatibilidadServicio
         insercion.FinalizacionEstimada = fin;
 
         var incompatible = false;
-        if (viaje.LlegadaMaxima.HasValue && fin > viaje.LlegadaMaxima.Value)
+        if (viaje.LlegadaMaxima.Estado == EstadoRestriccionTemporal.Informada &&
+            fin > viaje.LlegadaMaxima.Valor!.Value)
         {
             motivos.Add(MotivoCompatibilidad.LlegadaMaximaExcedida);
             incompatible = true;
         }
-        if (envio.FechaLimiteEntrega.HasValue && fin > envio.FechaLimiteEntrega.Value)
+        if (envio.FechaLimiteEntrega.Estado == EstadoRestriccionTemporal.Informada &&
+            fin > envio.FechaLimiteEntrega.Valor!.Value)
             motivos.Add(MotivoCompatibilidad.EntregaAntesDelVencimientoNoVerificable);
 
-        if (envio.DisponibleDesde.HasValue)
+        if (envio.DisponibleDesde.Estado == EstadoRestriccionTemporal.Informada)
         {
-            if (envio.DisponibleDesde.Value > fin)
+            if (envio.DisponibleDesde.Valor!.Value > fin)
             {
                 motivos.Add(MotivoCompatibilidad.DisponibilidadPosteriorAlRecorrido);
                 incompatible = true;
             }
-            else if (envio.DisponibleDesde.Value > salida)
+            else if (envio.DisponibleDesde.Valor!.Value > salida)
             {
                 // Incluye disponibilidad exactamente al finalizar: no se conoce el instante del retiro.
                 motivos.Add(MotivoCompatibilidad.HorarioRetiroNoVerificable);
@@ -199,6 +203,17 @@ public class CompatibilidadServicio : ICompatibilidadServicio
         }
     }
 
+    private static void AgregarRestriccionesDesconocidas(
+        ViajeCompatibilidadDto viaje, EnvioCompatibilidadDto envio, List<MotivoCompatibilidad> motivos)
+    {
+        if (viaje.LlegadaMaxima.Estado == EstadoRestriccionTemporal.Desconocida)
+            motivos.Add(MotivoCompatibilidad.LlegadaMaximaDesconocida);
+        if (envio.DisponibleDesde.Estado == EstadoRestriccionTemporal.Desconocida)
+            motivos.Add(MotivoCompatibilidad.DisponibilidadRetiroDesconocida);
+        if (envio.FechaLimiteEntrega.Estado == EstadoRestriccionTemporal.Desconocida)
+            motivos.Add(MotivoCompatibilidad.VencimientoEntregaDesconocido);
+    }
+
     private static bool EsMejor(InsercionCompatibilidadDto candidata, InsercionCompatibilidadDto actual)
     {
         // Comparar, en vez de restar, evita desbordamientos con diferencias negativas.
@@ -212,6 +227,12 @@ public class CompatibilidadServicio : ICompatibilidadServicio
     {
         ArgumentNullException.ThrowIfNull(viaje);
         ArgumentNullException.ThrowIfNull(envio);
+        ArgumentNullException.ThrowIfNull(viaje.LlegadaMaxima);
+        ArgumentNullException.ThrowIfNull(envio.DisponibleDesde);
+        ArgumentNullException.ThrowIfNull(envio.FechaLimiteEntrega);
+
+        if (viaje.SalidaProgramada.HasValue && viaje.SalidaProgramada.Value == default)
+            throw new ArgumentException("La salida no puede usar la fecha por defecto; usá null si es desconocida.", nameof(viaje));
 
         if (viaje.ViajeId <= 0 || envio.EnvioId <= 0)
             throw new ArgumentException("Los identificadores del viaje y del envío deben ser positivos.");
@@ -234,11 +255,12 @@ public class CompatibilidadServicio : ICompatibilidadServicio
 
         // Solo coherencia interna de ventanas, usando instantes con offset.
         // Las reglas cruzadas se evalúan fuera de esta validación; no se consulta la hora actual.
-        if (viaje.SalidaProgramada.HasValue && viaje.LlegadaMaxima.HasValue &&
-            viaje.LlegadaMaxima.Value < viaje.SalidaProgramada.Value)
+        if (viaje.SalidaProgramada.HasValue && viaje.LlegadaMaxima.Estado == EstadoRestriccionTemporal.Informada &&
+            viaje.LlegadaMaxima.Valor!.Value < viaje.SalidaProgramada.Value)
             throw new ArgumentException("La llegada máxima no puede ser anterior a la salida.", nameof(viaje));
-        if (envio.DisponibleDesde.HasValue && envio.FechaLimiteEntrega.HasValue &&
-            envio.FechaLimiteEntrega.Value < envio.DisponibleDesde.Value)
+        if (envio.DisponibleDesde.Estado == EstadoRestriccionTemporal.Informada &&
+            envio.FechaLimiteEntrega.Estado == EstadoRestriccionTemporal.Informada &&
+            envio.FechaLimiteEntrega.Valor!.Value < envio.DisponibleDesde.Valor!.Value)
             throw new ArgumentException("La fecha límite no puede ser anterior a la disponibilidad del envío.", nameof(envio));
     }
 

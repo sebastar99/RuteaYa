@@ -2,6 +2,7 @@ using Moq;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
+using static RuteaYa.Logica.DTOs.RestriccionTemporalDto;
 
 namespace RuteaYa.Test;
 
@@ -15,13 +16,15 @@ public class CompatibilidadTemporalTest
         ViajeId = 1, Activo = true, Disponible = true,
         RecorridoBase = Enumerable.Range(1, paradas + 2).Select(Punto).ToArray(),
         PesoDisponibleKg = 10, CuposDisponibles = 2, DesvioMaxKm = 2,
-        SalidaProgramada = Salida()
+        SalidaProgramada = Salida(),
+        LlegadaMaxima = SinRestriccion()
     };
 
     private static EnvioCompatibilidadDto Envio() => new()
     {
         EnvioId = 2, Estado = EstadoEnvio.BuscandoConductor,
-        Retiro = Punto(10), Entrega = Punto(11), PesoKg = 1
+        Retiro = Punto(10), Entrega = Punto(11), PesoKg = 1,
+        DisponibleDesde = SinRestriccion(), FechaLimiteEntrega = SinRestriccion()
     };
 
     private static ResultadoDesvioDto Desvio(long metros = 500, long duracionTotal = 1800) => new()
@@ -56,8 +59,8 @@ public class CompatibilidadTemporalTest
         var viaje = Viaje();
         var envio = Envio();
         viaje.SalidaProgramada = null;
-        envio.DisponibleDesde = Salida();
-        envio.FechaLimiteEntrega = Salida().AddHours(1);
+        envio.DisponibleDesde = Informada(Salida());
+        envio.FechaLimiteEntrega = Informada(Salida().AddHours(1));
         var (servicio, _, _) = Motor(viaje, envio);
 
         var resultado = await servicio.EvaluarAsync(viaje, envio);
@@ -70,7 +73,7 @@ public class CompatibilidadTemporalTest
     }
 
     [Fact]
-    public async Task EvaluarAsync_SalidaConRestriccionesOpcionalesAusentes_Compatible()
+    public async Task EvaluarAsync_SalidaConRestriccionesExplicitamenteInexistentes_Compatible()
     {
         var viaje = Viaje();
         var envio = Envio();
@@ -92,7 +95,7 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje();
         var envio = Envio();
-        envio.FechaLimiteEntrega = Salida().AddSeconds(-1);
+        envio.FechaLimiteEntrega = Informada(Salida().AddSeconds(-1));
         if (capacidadDesconocida)
         {
             viaje.PesoDisponibleKg = null;
@@ -116,7 +119,7 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje();
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida().AddMinutes(minutos);
+        viaje.LlegadaMaxima = Informada(Salida().AddMinutes(minutos));
         var (servicio, _, _) = Motor(viaje, envio);
 
         var resultado = await servicio.EvaluarAsync(viaje, envio);
@@ -136,7 +139,7 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje();
         var envio = Envio();
-        envio.FechaLimiteEntrega = Salida().AddMinutes(minutos);
+        envio.FechaLimiteEntrega = Informada(Salida().AddMinutes(minutos));
         var (servicio, _, _) = Motor(viaje, envio);
 
         var resultado = await servicio.EvaluarAsync(viaje, envio);
@@ -158,7 +161,7 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje();
         var envio = Envio();
-        envio.DisponibleDesde = Salida().AddMinutes(minutos);
+        envio.DisponibleDesde = Informada(Salida().AddMinutes(minutos));
         var (servicio, _, _) = Motor(viaje, envio);
 
         var resultado = await servicio.EvaluarAsync(viaje, envio);
@@ -178,9 +181,9 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje();
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida().AddMinutes(25);
-        envio.DisponibleDesde = Salida().AddMinutes(10);
-        envio.FechaLimiteEntrega = Salida().AddMinutes(20);
+        viaje.LlegadaMaxima = Informada(Salida().AddMinutes(25));
+        envio.DisponibleDesde = Informada(Salida().AddMinutes(10));
+        envio.FechaLimiteEntrega = Informada(Salida().AddMinutes(20));
         var (servicio, _, _) = Motor(viaje, envio);
 
         var resultado = await servicio.EvaluarAsync(viaje, envio);
@@ -196,15 +199,15 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje();
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida().AddMinutes(30).ToOffset(TimeSpan.FromHours(2));
-        envio.DisponibleDesde = Salida().ToOffset(TimeSpan.FromHours(4));
-        envio.FechaLimiteEntrega = Salida().AddMinutes(30).ToUniversalTime();
+        viaje.LlegadaMaxima = Informada(Salida().AddMinutes(30).ToOffset(TimeSpan.FromHours(2)));
+        envio.DisponibleDesde = Informada(Salida().ToOffset(TimeSpan.FromHours(4)));
+        envio.FechaLimiteEntrega = Informada(Salida().AddMinutes(30).ToUniversalTime());
         var (servicio, _, _) = Motor(viaje, envio);
 
         var resultado = await servicio.EvaluarAsync(viaje, envio);
 
         Assert.Equal(EstadoCompatibilidad.Compatible, resultado.Estado);
-        Assert.Equal(envio.FechaLimiteEntrega, resultado.InsercionSeleccionada!.FinalizacionEstimada);
+        Assert.Equal(envio.FechaLimiteEntrega.Valor, resultado.InsercionSeleccionada!.FinalizacionEstimada);
         Assert.Equal(Salida().Offset,
             resultado.InsercionSeleccionada.FinalizacionEstimada!.Value.Offset);
     }
@@ -218,7 +221,7 @@ public class CompatibilidadTemporalTest
         var viaje = Viaje();
         var envio = Envio();
         viaje.SalidaProgramada = new DateTimeOffset(2026, 11, 2, horaSalida, 0, 0, TimeSpan.FromHours(offsetSalida));
-        envio.FechaLimiteEntrega = new DateTimeOffset(2026, 11, 2, horaLimiteUtc, 0, 0, TimeSpan.Zero);
+        envio.FechaLimiteEntrega = Informada(new DateTimeOffset(2026, 11, 2, horaLimiteUtc, 0, 0, TimeSpan.Zero));
         var (servicio, _, evaluacion) = Motor(viaje, envio);
 
         var resultado = await servicio.EvaluarAsync(viaje, envio);
@@ -233,7 +236,7 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje();
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida().AddMinutes(25);
+        viaje.LlegadaMaxima = Informada(Salida().AddMinutes(25));
         // Duración total 30 minutos, tiempo adicional solo 20 minutos.
         var (servicio, _, _) = Motor(viaje, envio, (_, _) => Desvio(duracionTotal: 1800));
 
@@ -248,9 +251,9 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje();
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida();
-        envio.DisponibleDesde = Salida();
-        envio.FechaLimiteEntrega = Salida();
+        viaje.LlegadaMaxima = Informada(Salida());
+        envio.DisponibleDesde = Informada(Salida());
+        envio.FechaLimiteEntrega = Informada(Salida());
         var (servicio, _, _) = Motor(viaje, envio, (_, _) => Desvio(duracionTotal: 0));
 
         var resultado = await servicio.EvaluarAsync(viaje, envio);
@@ -264,7 +267,7 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje(1);
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida().AddMinutes(30);
+        viaje.LlegadaMaxima = Informada(Salida().AddMinutes(30));
         var (servicio, desvios, evaluacion) = Motor(viaje, envio, (retiro, entrega) => (retiro, entrega) switch
         {
             (0, 0) => Desvio(100, 3600),
@@ -288,7 +291,7 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje(1);
         var envio = Envio();
-        envio.FechaLimiteEntrega = Salida().AddMinutes(30);
+        envio.FechaLimiteEntrega = Informada(Salida().AddMinutes(30));
         var (servicio, _, _) = Motor(viaje, envio, (retiro, entrega) => (retiro, entrega) switch
         {
             (0, 0) => Desvio(100, 2400),
@@ -308,8 +311,8 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje(1);
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida().AddMinutes(45);
-        envio.FechaLimiteEntrega = Salida().AddMinutes(15);
+        viaje.LlegadaMaxima = Informada(Salida().AddMinutes(45));
+        envio.FechaLimiteEntrega = Informada(Salida().AddMinutes(15));
         var (servicio, _, _) = Motor(viaje, envio, (retiro, entrega) => (retiro, entrega) switch
         {
             (0, 0) => Desvio(100, 3600),
@@ -332,8 +335,8 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje(1);
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida().AddMinutes(40);
-        envio.DisponibleDesde = Salida().AddMinutes(30);
+        viaje.LlegadaMaxima = Informada(Salida().AddMinutes(40));
+        envio.DisponibleDesde = Informada(Salida().AddMinutes(30));
         var (servicio, _, _) = Motor(viaje, envio, (retiro, entrega) => (retiro, entrega) switch
         {
             (0, 0) => Desvio(100, 1200),
@@ -356,7 +359,7 @@ public class CompatibilidadTemporalTest
     {
         var viaje = Viaje(1);
         var envio = Envio();
-        viaje.LlegadaMaxima = Salida().AddMinutes(30);
+        viaje.LlegadaMaxima = Informada(Salida().AddMinutes(30));
         var (servicio, _, _) = Motor(viaje, envio, (retiro, entrega) => (retiro, entrega) switch
         {
             (0, 0) => Desvio(3000, 60),
@@ -442,6 +445,174 @@ public class CompatibilidadTemporalTest
         var (servicio, _, _) = Motor(viaje, envio, (_, _) => Desvio(duracionTotal: segundos));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => servicio.EvaluarAsync(viaje, envio));
+    }
+
+    private static void CambiarRestriccion(ViajeCompatibilidadDto viaje, EnvioCompatibilidadDto envio,
+        string campo, RestriccionTemporalDto restriccion)
+    {
+        switch (campo)
+        {
+            case "llegada": viaje.LlegadaMaxima = restriccion; break;
+            case "retiro": envio.DisponibleDesde = restriccion; break;
+            case "entrega": envio.FechaLimiteEntrega = restriccion; break;
+            default: throw new ArgumentException("Campo de prueba inválido.", nameof(campo));
+        }
+    }
+
+    [Theory]
+    [InlineData("llegada", MotivoCompatibilidad.LlegadaMaximaDesconocida)]
+    [InlineData("retiro", MotivoCompatibilidad.DisponibilidadRetiroDesconocida)]
+    [InlineData("entrega", MotivoCompatibilidad.VencimientoEntregaDesconocido)]
+    public async Task EvaluarAsync_TresEstados_NoConfundeDesconocidaConAusenciaDeRestriccion(
+        string campo, MotivoCompatibilidad motivo)
+    {
+        var viaje = Viaje();
+        var envio = Envio();
+        var (servicio, _, _) = Motor(viaje, envio);
+        CambiarRestriccion(viaje, envio, campo, Desconocida());
+
+        var desconocido = await servicio.EvaluarAsync(viaje, envio);
+
+        Assert.Equal(EstadoCompatibilidad.Indeterminado, desconocido.Estado);
+        Assert.Contains(motivo, desconocido.Motivos);
+        Assert.DoesNotContain(MotivoCompatibilidad.HorarioAprobado, desconocido.Motivos);
+        Assert.Equal(EstadoCompatibilidad.Indeterminado, desconocido.InsercionSeleccionada!.EstadoTemporal);
+        Assert.Equal(Salida().AddMinutes(30), desconocido.InsercionSeleccionada.FinalizacionEstimada);
+
+        CambiarRestriccion(viaje, envio, campo, SinRestriccion());
+        var sinRestriccion = await servicio.EvaluarAsync(viaje, envio);
+        Assert.Equal(EstadoCompatibilidad.Compatible, sinRestriccion.Estado);
+        Assert.DoesNotContain(motivo, sinRestriccion.Motivos);
+
+        var fecha = campo == "retiro" ? Salida() : Salida().AddHours(1);
+        CambiarRestriccion(viaje, envio, campo, Informada(fecha));
+        var informado = await servicio.EvaluarAsync(viaje, envio);
+        Assert.Equal(EstadoCompatibilidad.Compatible, informado.Estado);
+        Assert.Contains(MotivoCompatibilidad.HorarioAprobado, informado.Motivos);
+    }
+
+    [Fact]
+    public async Task EvaluarAsync_MapeoOmiteRestricciones_DefaultSeguroNoDeclaraCompatible()
+    {
+        // Simula una proyección que olvidó cargar las restricciones. No usar las fábricas
+        // Viaje/Envio del fixture: estas declaran SinRestriccion de forma explícita.
+        var viaje = new ViajeCompatibilidadDto
+        {
+            ViajeId = 1, RecorridoBase = new[] { Punto(1), Punto(2) },
+            Activo = true, Disponible = true, PesoDisponibleKg = 10, CuposDisponibles = 1,
+            DesvioMaxKm = 2, SalidaProgramada = Salida()
+        };
+        var envio = new EnvioCompatibilidadDto
+        {
+            EnvioId = 2, Retiro = Punto(3), Entrega = Punto(4),
+            PesoKg = 1, Estado = EstadoEnvio.BuscandoConductor
+        };
+        var (servicio, _, _) = Motor(viaje, envio);
+
+        var resultado = await servicio.EvaluarAsync(viaje, envio);
+
+        Assert.Equal(EstadoRestriccionTemporal.Desconocida, viaje.LlegadaMaxima.Estado);
+        Assert.Equal(EstadoRestriccionTemporal.Desconocida, envio.DisponibleDesde.Estado);
+        Assert.Equal(EstadoRestriccionTemporal.Desconocida, envio.FechaLimiteEntrega.Estado);
+        Assert.Equal(EstadoCompatibilidad.Indeterminado, resultado.Estado);
+        Assert.Contains(MotivoCompatibilidad.LlegadaMaximaDesconocida, resultado.Motivos);
+        Assert.Contains(MotivoCompatibilidad.DisponibilidadRetiroDesconocida, resultado.Motivos);
+        Assert.Contains(MotivoCompatibilidad.VencimientoEntregaDesconocido, resultado.Motivos);
+        Assert.DoesNotContain(MotivoCompatibilidad.HorarioAprobado, resultado.Motivos);
+    }
+
+    [Theory]
+    [InlineData("llegada", MotivoCompatibilidad.LlegadaMaximaDesconocida)]
+    [InlineData("retiro", MotivoCompatibilidad.DisponibilidadRetiroDesconocida)]
+    [InlineData("entrega", MotivoCompatibilidad.VencimientoEntregaDesconocido)]
+    public async Task EvaluarAsync_RestriccionDesconocidaYRechazoTemporal_PriorizaIncompatible(
+        string campo, MotivoCompatibilidad motivo)
+    {
+        var viaje = Viaje();
+        var envio = Envio();
+        CambiarRestriccion(viaje, envio, campo, Desconocida());
+        if (campo == "llegada")
+            envio.DisponibleDesde = Informada(Salida().AddMinutes(31));
+        else
+            viaje.LlegadaMaxima = Informada(Salida().AddMinutes(29));
+        var (servicio, _, _) = Motor(viaje, envio);
+
+        var resultado = await servicio.EvaluarAsync(viaje, envio);
+
+        Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
+        Assert.Contains(motivo, resultado.Motivos);
+        Assert.Contains(campo == "llegada" ? MotivoCompatibilidad.DisponibilidadPosteriorAlRecorrido :
+            MotivoCompatibilidad.LlegadaMaximaExcedida, resultado.Motivos);
+        Assert.Null(resultado.InsercionSeleccionada);
+    }
+
+    [Theory]
+    [InlineData("estado")]
+    [InlineData("vencimiento")]
+    public async Task EvaluarAsync_DesconocidasConRechazoPrevio_NoCalculaRutas(string caso)
+    {
+        var viaje = Viaje();
+        var envio = Envio();
+        viaje.LlegadaMaxima = Desconocida();
+        envio.DisponibleDesde = Desconocida();
+        envio.FechaLimiteEntrega = Desconocida();
+        if (caso == "estado") envio.Estado = EstadoEnvio.Cancelado;
+        else envio.FechaLimiteEntrega = Informada(Salida().AddSeconds(-1));
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+
+        var resultado = await new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio);
+
+        Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
+        Assert.Contains(MotivoCompatibilidad.LlegadaMaximaDesconocida, resultado.Motivos);
+        Assert.Contains(MotivoCompatibilidad.DisponibilidadRetiroDesconocida, resultado.Motivos);
+        Assert.Contains(caso == "estado" ? MotivoCompatibilidad.EnvioNoDisponible :
+            MotivoCompatibilidad.SalidaPosteriorAlVencimiento, resultado.Motivos);
+        desvios.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task EvaluarAsync_DesconocidasConDesvioExcedido_ConservaRechazoGeografico()
+    {
+        var viaje = Viaje();
+        var envio = Envio();
+        envio.FechaLimiteEntrega = Desconocida();
+        var (servicio, _, _) = Motor(viaje, envio, (_, _) => Desvio(3000));
+
+        var resultado = await servicio.EvaluarAsync(viaje, envio);
+
+        Assert.Equal(EstadoCompatibilidad.Incompatible, resultado.Estado);
+        Assert.Contains(MotivoCompatibilidad.DesvioExcedido, resultado.Motivos);
+        Assert.Null(resultado.InsercionSeleccionada);
+    }
+
+    [Theory]
+    [InlineData("llegada")]
+    [InlineData("retiro")]
+    [InlineData("entrega")]
+    public async Task EvaluarAsync_RestriccionNulaEsContratoInvalido_NoLaInterpretaSinRestriccion(string campo)
+    {
+        var viaje = Viaje();
+        var envio = Envio();
+        CambiarRestriccion(viaje, envio, campo, null!);
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, envio));
+
+        desvios.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task EvaluarAsync_FechaPorDefectoNoEsSalidaConocida_RechazaContrato()
+    {
+        var viaje = Viaje();
+        viaje.SalidaProgramada = default(DateTimeOffset);
+        var desvios = new Mock<IDesviosServicio>(MockBehavior.Strict);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => new CompatibilidadServicio(desvios.Object).EvaluarAsync(viaje, Envio()));
+
+        desvios.VerifyNoOtherCalls();
     }
 
     [Fact]

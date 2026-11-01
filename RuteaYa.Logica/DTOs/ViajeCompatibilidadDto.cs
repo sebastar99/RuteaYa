@@ -25,8 +25,8 @@ public class ViajeCompatibilidadDto
     public DateTimeOffset? SalidaProgramada { get; set; }
 
     /// <summary>
-    /// Null significa que no se informó un límite de llegada; no se presume un límite.
-    /// Si también existe salida, no puede ser anterior a ella.
+    /// Límite de llegada. Por defecto es desconocido; SinRestriccion debe elegirse
+    /// explícitamente. Si está informado y hay salida, no puede ser anterior a ella.
     /// </summary>
-    public DateTimeOffset? LlegadaMaxima { get; set; }
+    public RestriccionTemporalDto LlegadaMaxima { get; set; } = RestriccionTemporalDto.Desconocida();
 }

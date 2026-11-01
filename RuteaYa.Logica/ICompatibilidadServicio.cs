@@ -10,6 +10,8 @@ public interface ICompatibilidadServicio
     /// opcional desconocida se distingue de un rechazo de negocio.
     /// Evalúa reglas previas, desvíos y horarios conservadores de un solo envío.
     /// Prioriza inserciones compatibles sobre provisionales; no deduce horarios por parada.
+    /// Una restricción temporal Desconocida impide aprobar el horario; SinRestriccion
+    /// es una decisión explícita. Los rechazos comprobados conservan prioridad.
     /// Errores del proveedor y cancelación se propagan sin resultados parciales definitivos.
     /// </summary>
     Task<ResultadoCompatibilidadDto> EvaluarAsync(
