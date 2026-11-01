@@ -30,6 +30,7 @@ builder.Services.AddHttpClient<IUsuariosApiServicio, UsuariosApiServicio>(
         client.Timeout = TimeSpan.FromSeconds(15);
     });
 
+
 builder.Services.AddHttpClient<IViajesApiServicio, ViajesApiServicio>(
     client =>
     {
@@ -39,7 +40,9 @@ builder.Services.AddHttpClient<IViajesApiServicio, ViajesApiServicio>(
 
         client.BaseAddress = new Uri(url);
         client.Timeout = TimeSpan.FromSeconds(15);
-    });
+    })
+    .AddHttpMessageHandler<JwtTokenHandler>();
+
 
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

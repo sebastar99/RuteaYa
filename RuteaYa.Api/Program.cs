@@ -5,11 +5,13 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using RuteaYa.Api.Services;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// SQL Server
 var connectionString = builder.Configuration
     .GetConnectionString("RuteaYa")
     ?? throw new InvalidOperationException(
@@ -18,23 +20,24 @@ var connectionString = builder.Configuration
 builder.Services.AddDbContext<RuteaYaDbContext>(options =>
     options.UseSqlServer(connectionString));
 
+// Servicios
 builder.Services.AddScoped<IPasswordHasher<Usuario>,
     PasswordHasher<Usuario>>();
 
 builder.Services.AddScoped<IUsuariosLogica, UsuariosLogica>();
 builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
+builder.Services.AddScoped<ITokenServicio, TokenServicio>();
 
+// JWT
 var issuer = builder.Configuration["Jwt:Issuer"]
-    ?? throw new InvalidOperationException(
-        "No se configuró Jwt:Issuer.");
+    ?? throw new InvalidOperationException("Falta Jwt:Issuer.");
 
 var audience = builder.Configuration["Jwt:Audience"]
-    ?? throw new InvalidOperationException(
-        "No se configuró Jwt:Audience.");
+    ?? throw new InvalidOperationException("Falta Jwt:Audience.");
 
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException(
-        "No se configuró Jwt:Key.");
+        "Configurá Jwt:Key mediante User Secrets o una variable de entorno.");
 
 if (Encoding.UTF8.GetByteCount(jwtKey) < 32)
 {
@@ -46,6 +49,8 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.MapInboundClaims = true;
+
         options.TokenValidationParameters =
             new TokenValidationParameters
             {
@@ -67,32 +72,32 @@ builder.Services
 builder.Services.AddAuthorization();
 
 builder.Services.AddControllers();
+
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
-        document.Components ??= new Microsoft.OpenApi.OpenApiComponents();
+        document.Components ??= new OpenApiComponents();
 
         document.Components.SecuritySchemes ??=
-            new Dictionary<string, Microsoft.OpenApi.IOpenApiSecurityScheme>();
+            new Dictionary<string, IOpenApiSecurityScheme>();
 
         document.Components.SecuritySchemes["Bearer"] =
-            new Microsoft.OpenApi.OpenApiSecurityScheme
+            new OpenApiSecurityScheme
             {
-                Type = Microsoft.OpenApi.SecuritySchemeType.Http,
+                Type = SecuritySchemeType.Http,
                 Scheme = "bearer",
                 BearerFormat = "JWT",
-                Description = "Ingresá el token JWT para autenticar la solicitud."
+                Description = "Ingresá tu token JWT."
             };
 
         document.Security =
         [
-            new Microsoft.OpenApi.OpenApiSecurityRequirement
+            new OpenApiSecurityRequirement
             {
                 {
-                    new Microsoft.OpenApi.OpenApiSecuritySchemeReference(
-                        "Bearer",
-                        document),
+                    new OpenApiSecuritySchemeReference(
+                        "Bearer", document),
                     []
                 }
             }
@@ -115,7 +120,6 @@ if (app.Environment.IsDevelopment())
             "RuteaYa API v1");
 
         options.RoutePrefix = "swagger";
-
     });
 }
 

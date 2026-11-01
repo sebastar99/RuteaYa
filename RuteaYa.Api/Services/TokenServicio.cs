@@ -1,4 +1,5 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+﻿
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
@@ -17,32 +18,47 @@ public class TokenServicio : ITokenServicio
 
     public string CrearToken(Usuario usuario)
     {
-        var clave = _configuration["Jwt:Clave"] 
-            ?? throw new InvalidOperationException("No se configuro la clave JWT.");
+        var key = _configuration["Jwt:Key"]
+            ?? throw new InvalidOperationException("Falta Jwt:Key.");
 
-        var emisor = _configuration["Jwt:Emisor"] 
-            ?? throw new InvalidOperationException("No se configuro el emisor JWT.");
+        var issuer = _configuration["Jwt:Issuer"]
+            ?? throw new InvalidOperationException("Falta Jwt:Issuer.");
 
-        var audiencia = _configuration["Jwt:Audiencia"]
-            ?? throw new InvalidOperationException("No se configuro la audiencia JWT.");
+        var audience = _configuration["Jwt:Audience"]
+            ?? throw new InvalidOperationException("Falta Jwt:Audience.");
 
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(clave));
-        var credenciales = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+        var expirationMinutes = int.TryParse(
+            _configuration["Jwt:ExpirationMinutes"],
+            out var minutes) ? minutes : 120;
 
-        var claims = new[]
+        if (Encoding.UTF8.GetByteCount(key) < 32)
+            throw new InvalidOperationException(
+                "La clave JWT debe tener al menos 32 bytes.");
+
+        var claims = new List<Claim>
         {
-            new Claim (ClaimTypes.NameIdentifier, usuario.Id.ToString()),
-            new Claim (ClaimTypes.Name, usuario.Nombre),
-            new Claim (ClaimTypes.Email, usuario.Email)
+            new(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
+            new(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
+            new(ClaimTypes.Name, usuario.Nombre),
+            new(ClaimTypes.Email, usuario.Email),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
+        var signingKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(key));
+
+        var credentials = new SigningCredentials(
+            signingKey,
+            SecurityAlgorithms.HmacSha256);
+
+        var expiration = DateTime.UtcNow.AddMinutes(expirationMinutes);
+
         var token = new JwtSecurityToken(
-            issuer: emisor,
-            audience: audiencia,
-            claims: claims,
-            expires: DateTime.UtcNow.AddHours(2),
-            signingCredentials: credenciales
-        );
+            issuer,
+            audience,
+            claims,
+            expires: expiration,
+            signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }

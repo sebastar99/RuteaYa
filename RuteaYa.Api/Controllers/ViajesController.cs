@@ -1,3 +1,7 @@
+
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
@@ -5,6 +9,7 @@ using RuteaYa.Logica.DTOs;
 namespace RuteaYa.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/viajes")]
 public class ViajesController : ControllerBase
 {
@@ -15,37 +20,56 @@ public class ViajesController : ControllerBase
         _viajesLogica = viajesLogica;
     }
 
+    private int ObtenerUsuarioId()
+    {
+        var identificador =
+            User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+        return int.TryParse(identificador, out var id) && id > 0 ? id : 0;
+    }
+
     [HttpGet]
-    public async Task<IActionResult> ListarViajes(
-        [FromQuery] int usuarioId,
-        [FromQuery] string estado = "todos"
-    ) {
-        if(usuarioId <= 0)
+    public async Task<IActionResult> ListarViajes ([FromQuery] string estado = "todos")
+    {
+        var usuarioId = ObtenerUsuarioId();
+
+        if (usuarioId <= 0)
         {
-            return BadRequest(new {mensaje = "El usuario no es valido."});
+            return Unauthorized(new { mensaje = "El usuario no es valido." });
         }
-        if(estado is not ("todos" or "activo" or "inactivo"))
+
+        estado = estado.Trim().ToLowerInvariant();
+
+        if (estado is not ("todos" or "activo" or "inactivo"))
         {
-            return BadRequest(new {mensaje = "El estado debe ser todos, actiovo o inactivo"});
+            return BadRequest(new {mensaje = "El estado debe ser todos, activo o inactivo."});
         }
 
         var viajes = await _viajesLogica.ListarViajesAsync(usuarioId, estado);
+
         return Ok(viajes);
     }
 
     [HttpGet("{id:int}")]
-    public async Task<IActionResult> ObtenerPorId(int id, [FromQuery] int usuarioId)
+    public async Task<IActionResult> ObtenerPorId(int id)
     {
-        if(usuarioId <= 0)
+        var usuarioId = ObtenerUsuarioId();
+
+        if (usuarioId <= 0)
         {
-            return BadRequest(new {mensaje = "El usuario no es valido."});
+            return Unauthorized();
+        }
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje invalido." });
         }
 
         var viaje = await _viajesLogica.ObtenerPorIdAsync(usuarioId, id);
 
-        if(viaje is null)
+        if (viaje is null)
         {
-            return NotFound(new {mensaje = "No se encontro el viaje"});
+            return NotFound(new { mensaje = "No se encontrencontro el viaje." });
         }
 
         return Ok(viaje);
@@ -53,51 +77,49 @@ public class ViajesController : ControllerBase
 
     [HttpPost]
     public async Task<IActionResult> CrearViaje(
-        [FromQuery] int usuarioId,
-        [FromBody] CrearViajeDto dto
-    ) {
-        if(usuarioId <= 0)
-        {
-            return BadRequest(new {mensaje = "El usuario no es valido."});
-        }
+        [FromBody] CrearViajeDto dto)
+    {
+        var usuarioId = ObtenerUsuarioId();
 
+        if (usuarioId <= 0)
+        {
+            return Unauthorized();
+        }
+           
         try {
             var resultado = await _viajesLogica.CrearViajeAsync(usuarioId, dto);
-            
-            if (!resultado.Exito) {
+
+            if (!resultado.Exito)
+            {
                 return BadRequest(new { mensaje = resultado.mensaje });
             }
-            
-            var viaje = resultado.viaje;
 
-            if(viaje is null)
+            if (resultado.viaje is null)
             {
-                return BadRequest(new { mensaje = "No se pudo crear el viaje." });
+                return BadRequest(new {mensaje = "No se pudo crear el viaje."});
             }
 
             return CreatedAtAction(
-                nameof(ObtenerPorId),
-                new {id = viaje.Id, usuarioId},
-                viaje
+                nameof(ObtenerPorId), 
+                new { id = resultado.viaje.Id }, resultado.viaje
             );
         }
-        catch (ArgumentException exception)
+        catch (ArgumentException ex)
         {
-            return BadRequest(new {mensaje = exception.Message});
+            return BadRequest(new { mensaje = ex.Message });
         }
     }
 
     [HttpPut("{id:int}")]
-    public async Task<IActionResult> EditarViaje(
-        int id, 
-        [FromQuery] int usuarioId,
-        [FromBody] EditarViajeDto dto
-    ) {
-        if(usuarioId <= 0)
-        {
-            return BadRequest(new {mensaje = "El usuario no es valido."});
-        }
+    public async Task<IActionResult> EditarViaje(int id, [FromBody] EditarViajeDto dto)
+    {
+        var usuarioId = ObtenerUsuarioId();
 
+        if (usuarioId <= 0)
+        {
+            return Unauthorized();
+        }
+            
         try {
             var resultado = await _viajesLogica.EditarViajeAsync(usuarioId, id, dto);
 
@@ -107,51 +129,53 @@ public class ViajesController : ControllerBase
             }
             if (resultado.viaje is null)
             {
-                return NotFound();
+                return NotFound(new { mensaje = "No se encontro el viaje." });
             }
-
+                
             return Ok(resultado.viaje);
         }
-        catch (ArgumentException exception)
+        catch (ArgumentException ex)
         {
-            return BadRequest(new {mensaje = exception.Message});
+            return BadRequest(new { mensaje = ex.Message });
         }
     }
 
     [HttpPatch("{id:int}/desactivar")]
-    public async Task<IActionResult> DesactivarViaje(int id, [FromQuery] int usuarioId)
+    public async Task<IActionResult> DesactivarViaje(int id)
     {
-        if(usuarioId <= 0)
-        {
-            return BadRequest(new {mensaje = "El usuario no es valido."});
-        }
+        var usuarioId = ObtenerUsuarioId();
 
+        if (usuarioId <= 0)
+        {
+            return Unauthorized();
+        }
+            
         var resultado = await _viajesLogica.DesactivarViajeAsync(usuarioId, id);
 
         if (!resultado.exito)
         {
             return NotFound(new { mensaje = resultado.mensaje });
         }
-
+            
         return NoContent();
     }
 
     [HttpPost("{id:int}/paradas")]
-    public async Task<IActionResult> AgregarParada(
-        int id,
-        [FromQuery] int usuarioId,
-        [FromBody] AgregarParadaRequest dto
-    ) {
-        if(usuarioId <= 0)
-        {
-            return BadRequest(new {mensaje = "El usuario no es valido."});
-        }
+    public async Task<IActionResult> AgregarParada(int id, [FromBody] AgregarParadaRequest dto)
+    {
+        var usuarioId = ObtenerUsuarioId();
 
+        if (usuarioId <= 0)
+        {
+            return Unauthorized();
+
+        }
+            
         try {
             var resultado = await _viajesLogica.AgregarParadaAsync(
-                usuarioId, 
-                id, 
-                dto.Ubicacion, 
+                usuarioId,
+                id,
+                dto.Ubicacion,
                 dto.Orden
             );
 
@@ -159,61 +183,50 @@ public class ViajesController : ControllerBase
             {
                 return BadRequest(new { mensaje = resultado.mensaje });
             }
-
-            return Ok(new
-            {
-                mensaje = resultado.mensaje,
-                parada = resultado.parada
-            });
+                
+            return Ok(new {mensaje = resultado.mensaje, parada = resultado.parada});
         }
-        catch (ArgumentException exception)
+        catch (ArgumentException ex)
         {
-            return BadRequest(new {mensaje = exception.Message});
+            return BadRequest(new {mensaje = ex.Message });
         }
     }
 
     [HttpDelete("{id:int}/paradas/{paradaId:int}")]
-    public async Task<IActionResult> EliminarParada(
-        int id, 
-        int paradaId,
-        [FromQuery] int usuarioId
-    ) {
-        if(usuarioId <= 0)
+    public async Task<IActionResult> EliminarParada(int id, int paradaId)
+    {
+        var usuarioId = ObtenerUsuarioId();
+
+        if (usuarioId <= 0)
         {
-            return BadRequest(new {mensaje = "El usuario no es valido."});
+            return Unauthorized();
         }
+           
+        var resultado = await _viajesLogica.EliminarParadaAsync(usuarioId, id, paradaId);
 
-        try {
-            var resultado = await _viajesLogica.EliminarParadaAsync(
-                usuarioId, 
-                id, 
-                paradaId
-            );
-
-            if (!resultado.exito)
-            {
-                return NotFound(new { mensaje = resultado.mensaje });
-            }
-
-            return NoContent();
-        }
-        catch (ArgumentException exception)
+        if (!resultado.exito)
         {
-            return BadRequest(new {mensaje = exception.Message});
+            return NotFound(new { mensaje = resultado.mensaje });
         }
+            
+        return NoContent();
     }
 
     [HttpPut("{id:int}/paradas/orden")]
-    public async Task<IActionResult> ReordenarParadas(
-        int id,
-        [FromQuery] int usuarioId,
-        [FromBody] ReordenarParadasRequest dto)
+    public async Task<IActionResult> ReordenarParadas(int id, [FromBody] ReordenarParadasRequest dto)
     {
-        if (usuarioId <= 0 || id <= 0)
-        {
-            return BadRequest(new {mensaje = "El usuario o el viaje no son validos."});
-        }
+        var usuarioId = ObtenerUsuarioId();
 
+        if (usuarioId <= 0)
+        {
+            return Unauthorized();
+        }
+            
+        if (dto.ParadasIds is null)
+        {
+            return BadRequest(new {mensaje = "La lista de paradas es obligatoria."});
+        }
+            
         var resultado = await _viajesLogica.ReordenarParadasAsync(
             usuarioId,
             id,
@@ -222,13 +235,11 @@ public class ViajesController : ControllerBase
 
         if (!resultado.exito)
         {
-            return BadRequest(new {mensaje = resultado.mensaje});
+            return BadRequest(new { mensaje = resultado.mensaje });
         }
-
-        return Ok(new {mensaje = resultado.mensaje});
+            
+        return Ok(new {mensaje = resultado.mensaje });
     }
-
-
 
     public class AgregarParadaRequest
     {
