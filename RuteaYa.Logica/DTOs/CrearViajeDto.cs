@@ -22,7 +22,7 @@ public class CrearViajeDto
     [Range(1, 100)]
     public int CantMaxPaquetes { get; set; }
 
-    [Range(typeof(decimal), "0.01", "100000")]
+    [Range(0.01, 100000)]
     public decimal PesoMax { get; set; }
 
     [Range(typeof(decimal), "0", "100000")]

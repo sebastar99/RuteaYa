@@ -73,5 +73,9 @@
                 if (t) t.querySelectorAll('[data-search]').forEach(r => r.hidden = !r.dataset.search.toLocaleLowerCase('es').includes(q));
             }));
     </script>
+
+    <!-- renderizar la sección Scripts -->
+    @await RenderSectionAsync("Scripts", required: false)
+
 </body>
 </html>
