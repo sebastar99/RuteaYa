@@ -195,6 +195,142 @@ public class OportunidadesControllerTest
         viajesApi.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public async Task Detalle_UsaClaimsYConservaContextoDelListado()
+    {
+        var detalle = new DetalleCandidatoDto
+        {
+            Viaje = new ViajeOportunidadesDto { Id = 10 }, Envio = new EnvioDto { Id = 25 }
+        };
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        using var cancelacion = new CancellationTokenSource();
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, cancelacion.Token)).ReturnsAsync(detalle);
+        var controlador = Controlador(logica);
+        controlador.Request.QueryString = new QueryString("?conductorId=99");
+
+        var vista = Assert.IsType<ViewResult>(await controlador.Detalle(10, 25, 2, 20, cancelacion.Token));
+
+        Assert.Equal("~/Views/Panel/DetalleOportunidad.cshtml", vista.ViewName);
+        var modelo = Assert.IsType<DetalleOportunidadViewModel>(vista.Model);
+        Assert.Same(detalle, modelo.Detalle);
+        Assert.Equal(10, modelo.ViajeId);
+        Assert.Equal(2, modelo.Pagina);
+        Assert.Equal(20, modelo.TamanoPagina);
+        Assert.True(modelo.Detalle!.EvaluacionPendiente);
+        logica.Verify(l => l.ObtenerDetalleAsync(7, 10, 25, cancelacion.Token), Times.Once);
+        logica.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Detalle_NoAutenticado_DesafiaSinConsultar()
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+
+        Assert.IsType<ChallengeResult>(await Controlador(logica, autenticado: false).Detalle(10, 25));
+
+        logica.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("incorrecto")]
+    [InlineData("0")]
+    public async Task Detalle_IdDeSesionInvalido_ProhibeSinConsultar(string? id)
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+
+        Assert.IsType<ForbidResult>(await Controlador(logica, id).Detalle(10, 25));
+
+        logica.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(99, 25)]
+    [InlineData(999, 25)]
+    [InlineData(10, 999)]
+    [InlineData(10, 26)]
+    public async Task Detalle_ViajeAjenoOEnvioInexistenteONoDisponible_NoRevelaCausa(int viaje, int envio)
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ObtenerDetalleAsync(7, viaje, envio, default)).ReturnsAsync((DetalleCandidatoDto?)null);
+
+        Assert.IsType<NotFoundResult>(await Controlador(logica).Detalle(viaje, envio));
+    }
+
+    [Theory]
+    [InlineData(0, 25, 1, 10)]
+    [InlineData(10, 0, 1, 10)]
+    [InlineData(10, 25, 0, 10)]
+    [InlineData(10, 25, 1, 51)]
+    public async Task Detalle_ParametrosInvalidos_NoConsulta(int viaje, int envio, int pagina, int tamano)
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+
+        var resultado = await Controlador(logica).Detalle(viaje, envio, pagina, tamano);
+
+        if (viaje <= 0 || envio <= 0) Assert.IsType<NotFoundResult>(resultado);
+        else Assert.IsType<BadRequestObjectResult>(resultado);
+        logica.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Detalle_ErrorDeAlmacenamiento_NoMuestraDatosInternos(bool timeout)
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        Exception error = timeout ? new TimeoutException("sensible") : new ErrorBaseDatosSimulado();
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, default)).ThrowsAsync(error);
+        var controlador = Controlador(logica);
+
+        var vista = Assert.IsType<ViewResult>(await controlador.Detalle(10, 25, 2, 20));
+
+        var modelo = Assert.IsType<DetalleOportunidadViewModel>(vista.Model);
+        Assert.Equal(503, controlador.Response.StatusCode);
+        Assert.Null(modelo.Detalle);
+        Assert.NotNull(modelo.Error);
+        Assert.DoesNotContain("sensible", modelo.Error);
+        Assert.Equal(10, modelo.ViajeId);
+        Assert.Equal(2, modelo.Pagina);
+    }
+
+    [Fact]
+    public async Task Detalle_Cancelacion_SePropaga()
+    {
+        using var cancelacion = new CancellationTokenSource();
+        cancelacion.Cancel();
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, cancelacion.Token))
+            .Returns(Task.FromCanceled<DetalleCandidatoDto?>(cancelacion.Token));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Controlador(logica).Detalle(10, 25, cancellationToken: cancelacion.Token));
+    }
+
+    [Theory]
+    [InlineData(10, 25, "Detalle")]
+    [InlineData(10, null, "Index")]
+    [InlineData(null, null, "Index")]
+    public void PanelDetalle_RutaAnterior_NoDevuelveLaMaqueta(int? viajeId, int? envioId, string accion)
+    {
+        var consultas = new ConsultasEfSimuladas();
+        using var db = consultas.CrearContexto();
+        var viajesApi = new Mock<IViajesApiServicio>(MockBehavior.Strict);
+        var panel = new PanelController(db, viajesApi.Object);
+
+        var resultado = Assert.IsType<RedirectToActionResult>(panel.DetalleOportunidad(
+            viajeId: viajeId, envioId: envioId, pagina: 2, tamanoPagina: 20));
+
+        Assert.Equal("Oportunidades", resultado.ControllerName);
+        Assert.Equal(accion, resultado.ActionName);
+        Assert.Equal(viajeId, resultado.RouteValues!["viajeId"]);
+        Assert.Equal(2, resultado.RouteValues["pagina"]);
+        Assert.Equal(20, resultado.RouteValues["tamanoPagina"]);
+        if (accion == "Detalle") Assert.Equal(envioId, resultado.RouteValues["envioId"]);
+        Assert.Empty(consultas.Consultas);
+        viajesApi.VerifyNoOtherCalls();
+    }
+
     private sealed class ErrorBaseDatosSimulado : DbException
     {
         public ErrorBaseDatosSimulado() : base("dato interno sensible") { }

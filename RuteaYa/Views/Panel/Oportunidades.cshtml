@@ -81,7 +81,7 @@ else
             <div class="panel-card">
                 <div class="panel-table-wrap">
                     <table class="panel-table">
-                        <thead><tr><th>Envío</th><th>Paquete</th><th>Fecha límite publicada</th><th>Monto ofrecido</th><th>Evaluación</th></tr></thead>
+                        <thead><tr><th>Envío</th><th>Paquete</th><th>Fecha límite publicada</th><th>Monto ofrecido</th><th>Evaluación</th><th>Detalle</th></tr></thead>
                         <tbody>
                         @foreach (var envio in listado.Candidatos)
                         {
@@ -91,6 +91,11 @@ else
                                 <td>@(envio.FechaLimite == default ? "No informada" : envio.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</td>
                                 <td>@envio.Monto.ToString("C")</td>
                                 <td><span class="panel-pill orange">Pendiente de evaluación</span></td>
+                                <td>
+                                    <a class="panel-button outline small" asp-controller="Oportunidades" asp-action="Detalle"
+                                       asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-envioId="@envio.Id"
+                                       asp-route-pagina="@listado.Pagina" asp-route-tamanoPagina="@listado.TamanoPagina">Ver detalle</a>
+                                </td>
                             </tr>
                         }
                         </tbody>

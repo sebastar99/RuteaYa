@@ -182,6 +182,103 @@ public class OportunidadesLogicaTest
     }
 
     [Fact]
+    public async Task ObtenerDetalleAsync_ViajePropioYEnvioDisponible_LeeDatosSinTrackingNiEscrituras()
+    {
+        var consultas = new ConsultasEfSimuladas();
+        consultas.Responder(Viajes());
+        consultas.Responder(Envios((25, 99)));
+        await using var db = consultas.CrearContexto();
+
+        var resultado = await new OportunidadesLogica(db).ObtenerDetalleAsync(7, 10, 25);
+
+        Assert.NotNull(resultado);
+        Assert.Equal(10, resultado.Viaje.Id);
+        Assert.Equal(25, resultado.Envio.Id);
+        Assert.Equal("Retiro publicado", resultado.Envio.OrigenDir);
+        Assert.Equal("Entrega publicada", resultado.Envio.DestinoDir);
+        Assert.Equal("Paquete publicado", resultado.Envio.Descripcion);
+        Assert.Equal(2.5m, resultado.Envio.PesoKg);
+        Assert.Equal(TamanoEnvio.Mediano, resultado.Envio.Tamano);
+        Assert.Equal(4000m, resultado.Envio.Monto);
+        Assert.True(resultado.EvaluacionPendiente);
+        Assert.Equal(2, consultas.Consultas.Count);
+        Assert.Matches(@"\[Id\]\s*=\s*@", consultas.Consultas[0].Sql);
+        Assert.Matches(@"\[UsuarioId\]\s*=\s*@", consultas.Consultas[0].Sql);
+        Assert.Contains(consultas.Consultas[0].Parametros.Values, p => Equals(p, 7));
+        Assert.Contains(consultas.Consultas[0].Parametros.Values, p => Equals(p, 10));
+        Assert.Matches(@"\[Id\]\s*=\s*@", consultas.Consultas[1].Sql);
+        Assert.Matches(@"\[Estado\]\s*=\s*(?:CAST\(\s*)?0\b", consultas.Consultas[1].Sql);
+        Assert.Contains(consultas.Consultas[1].Parametros.Values, p => Equals(p, 25));
+        Assert.DoesNotContain("[Usuarios]", consultas.Consultas[1].Sql);
+        Assert.Empty(db.ChangeTracker.Entries());
+        Assert.False(db.ChangeTracker.HasChanges());
+        Assert.Equal(ConnectionState.Closed, db.Database.GetDbConnection().State);
+    }
+
+    [Theory]
+    [InlineData(99)]
+    [InlineData(999)]
+    public async Task ObtenerDetalleAsync_ViajeAjenoOInexistente_NoConsultaElEnvio(int viajeId)
+    {
+        var consultas = new ConsultasEfSimuladas();
+        consultas.Responder(Viajes(false));
+        await using var db = consultas.CrearContexto();
+
+        var resultado = await new OportunidadesLogica(db).ObtenerDetalleAsync(7, viajeId, 25);
+
+        Assert.Null(resultado);
+        Assert.Single(consultas.Consultas);
+        Assert.DoesNotContain("[Envios]", consultas.Consultas[0].Sql);
+    }
+
+    [Theory]
+    [InlineData(999)] // ID inexistente.
+    [InlineData(25)] // El envío del listado ya no cumple el estado de disponibilidad.
+    public async Task ObtenerDetalleAsync_EnvioInexistenteONoDisponible_MismoResultado(int envioId)
+    {
+        var consultas = new ConsultasEfSimuladas();
+        consultas.Responder(Viajes());
+        // El SELECT de ID + estado no tiene coincidencias en ambos casos.
+        consultas.Responder(Envios());
+        await using var db = consultas.CrearContexto();
+
+        Assert.Null(await new OportunidadesLogica(db).ObtenerDetalleAsync(7, 10, envioId));
+
+        Assert.Equal(2, consultas.Consultas.Count);
+        Assert.Matches(@"\[Estado\]\s*=\s*(?:CAST\(\s*)?0\b", consultas.Consultas[1].Sql);
+        Assert.Empty(db.ChangeTracker.Entries());
+    }
+
+    [Theory]
+    [InlineData(0, 10, 25)]
+    [InlineData(7, 0, 25)]
+    [InlineData(7, 10, 0)]
+    public async Task ObtenerDetalleAsync_IdsInvalidos_NoConsulta(int conductor, int viaje, int envio)
+    {
+        var consultas = new ConsultasEfSimuladas();
+        await using var db = consultas.CrearContexto();
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => new OportunidadesLogica(db).ObtenerDetalleAsync(conductor, viaje, envio));
+
+        Assert.Empty(consultas.Consultas);
+    }
+
+    [Fact]
+    public async Task ObtenerDetalleAsync_Cancelacion_NoConsulta()
+    {
+        var consultas = new ConsultasEfSimuladas();
+        await using var db = consultas.CrearContexto();
+        using var cancelacion = new CancellationTokenSource();
+        cancelacion.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new OportunidadesLogica(db).ObtenerDetalleAsync(7, 10, 25, cancelacion.Token));
+
+        Assert.Empty(consultas.Consultas);
+    }
+
+    [Fact]
     public async Task ConsultarAsync_Cancelacion_NoConectaNiConsulta()
     {
         var consultas = new ConsultasEfSimuladas();

@@ -5,10 +5,15 @@
 Con una sesión MVC autenticada:
 
 - `/Oportunidades`: selector de viajes propios.
+- `/Oportunidades/Index`: alias explícito del mismo listado, independiente de la acción Login predeterminada global.
 - `/Oportunidades?viajeId=10`: candidatos de ese viaje, si pertenece al usuario.
 - `/Oportunidades?viajeId=10&pagina=2&tamanoPagina=10`: página solicitada.
 - `/Panel/Oportunidades`: se conserva el enlace existente; redirige al controlador
   propio y conserva los parámetros de viaje y paginación.
+- `/Oportunidades/Detalle?viajeId=10&envioId=25&pagina=2&tamanoPagina=10`: detalle
+  del envío para el viaje propio, con contexto para volver al listado.
+- `/Panel/DetalleOportunidad`: ya no devuelve la maqueta. Con ambos IDs redirige
+  al detalle real; sin identificadores suficientes vuelve al listado/selector.
 
 El controlador obtiene el conductor desde `NameIdentifier` o `sub` de la identidad
 autenticada. No acepta un identificador de conductor desde la URL o el formulario.
@@ -59,6 +64,31 @@ devuelven una vista con un mensaje seguro y HTTP 503, sin conexiones ni detalles
 El total y la página son una lectura, no una reserva. Pueden cambiar si se publica
 o asigna un envío entre consultas o después de visualizar la pantalla.
 
+## Detalle del candidato
+
+`ObtenerDetalleAsync(conductorId, viajeId, envioId, cancellationToken)` realiza
+como máximo dos consultas `AsNoTracking`: primero verifica viaje propio y luego
+busca el envío por ID y estado `BuscandoConductor`. No usa el listado por dueño.
+Un viaje ajeno/inexistente no provoca ninguna consulta de envíos. Un envío
+inexistente o que dejó de estar disponible responde con el mismo 404, sin revelar su estado.
+
+`DetalleCandidatoDto` reutiliza `ViajeOportunidadesDto` y `EnvioDto`. Las proyecciones
+EF del listado y detalle son compartidas. No se consultan relaciones de Usuario,
+nombres, correos o teléfonos; el ID de publicador del DTO no se muestra en HTML.
+
+La acción GET `OportunidadesController.Detalle` toma la identidad de la sesión y
+reutiliza `Views/Panel/DetalleOportunidad.cshtml`, con `DetalleOportunidadViewModel`.
+Los enlaces incluyen viaje y envío y conservan la página y tamaño de origen. Se
+revalida disponibilidad al abrir el detalle: un candidato puede cambiar después
+de haber sido mostrado en el listado. El regreso al listado vuelve a ejecutar su
+paginación normal y puede ajustarla si cambió la cantidad de publicaciones.
+
+Se muestran direcciones, descripción, peso, tamaño, fecha límite publicada y monto
+del modelo. El estado continúa siendo **Pendiente de evaluación**, sin distancias,
+desvíos, horarios de entrega inventados ni botón de aceptación. La fecha publicada
+se muestra sin interpretar su zona horaria. Los errores de almacenamiento conocidos
+devuelven HTTP 503 y un mensaje seguro, sin exponer detalles del proveedor.
+
 ## Datos pendientes para evaluar compatibilidad
 
 No se llama a HERE, geocodificación, rutas, desvíos ni al motor de compatibilidad.
@@ -78,10 +108,39 @@ inserta datos de demostración ni modifica SQL Server.
   suprimida y lectores simulados. Verifica SQL generado, propiedad, estado,
   paginación, cancelación y ausencia de tracking/guardados sin consultar SQL Server.
 - `OportunidadesControllerTest`: identidad desde claims, manipulación del ID,
-  errores seguros, lista vacía y continuidad de la ruta anterior.
+  errores seguros, lista vacía, detalle y continuidad de las rutas anteriores.
 - `OportunidadesVistaTest`: host local exclusivo de pruebas con autenticación y
   lógica simuladas; renderiza la vista Razor real. No carga el Program de producción,
   User Secrets ni servicios de datos/HERE. Las claves de Data Protection son efímeras.
+  Usa el patrón de enrutamiento convencional de producción, además de las rutas
+  explícitas del controlador. Sigue los enlaces listado-detalle-regreso para
+  verificar el contexto y la codificación de contenido publicado.
+
+## Prueba manual con datos reales existentes
+
+1. Usar la conexión local ya configurada para el MVC. Las tablas/columnas deben
+   existir previamente; no ejecutar migraciones automáticamente ni crear datos de demostración.
+2. Ejecutar API y MVC como habitualmente (la API sigue siendo necesaria para el login).
+   Si ya están compilados, se pueden ejecutar en dos terminales:
+
+   ```powershell
+   dotnet run --project "RuteaYa.Api/RuteaYa.Api.csproj" --no-build --no-restore
+   dotnet run --project "RuteaYa/RuteaYa.Web.csproj" --no-build --no-restore
+   ```
+
+3. Iniciar sesión con un usuario existente que tenga viajes propios y abrir
+   `/Oportunidades` en el puerto del MVC.
+4. Seleccionar un viaje; abrir **Ver detalle** en un envío real publicado.
+   Si no hay envíos BuscandoConductor, la pantalla vacía es el resultado correcto.
+5. Verificar datos, etiqueta pendiente y enlace **Volver al listado**, incluida la
+   paginación. No hay aceptación ni cambios de estado en estas pantallas.
+6. Cambiar manualmente el viaje por uno ajeno o probar un envío inexistente/no
+   disponible debe producir 404 sin mostrar datos privados. No modificar registros
+   para preparar esos casos: usar IDs que ya existan o los tests automatizados.
+
+Las pruebas automatizadas usan datos simulados. Una conexión comprobada no
+equivale a una prueba manual autenticada con publicaciones reales; esa verificación
+se realiza siguiendo estos pasos, sin exponer credenciales en comandos ni informes.
 
 ```powershell
 dotnet test "RuteaYa.slnx" --no-restore

@@ -15,4 +15,12 @@ public interface IOportunidadesLogica
         int pagina = 1,
         int tamanoPagina = 10,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Obtiene un candidato disponible para un viaje propio. Devuelve null sin
+    /// distinguir viaje ajeno/inexistente o envío inexistente/no disponible.
+    /// No consulta el envío si no se pudo verificar la propiedad del viaje.
+    /// </summary>
+    Task<DetalleCandidatoDto?> ObtenerDetalleAsync(
+        int conductorId, int viajeId, int envioId, CancellationToken cancellationToken = default);
 }
