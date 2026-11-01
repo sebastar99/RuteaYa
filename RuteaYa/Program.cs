@@ -16,6 +16,13 @@ builder.Services.AddHttpClient<IRutasServicio, RutasHereServicio>(client =>
     .RemoveAllLoggers()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
+builder.Services.AddHttpClient<IGeocodificacionServicio, GeocodificacionHereServicio>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    })
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
 
 builder.Services.AddHttpContextAccessor();
 
