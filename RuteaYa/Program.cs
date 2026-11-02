@@ -33,6 +33,10 @@ builder.Services.AddDbContext<RuteaYaDbContext>(options =>
     options.UseSqlServer(connectionString));
 
 builder.Services.AddScoped<IOportunidadesLogica, OportunidadesLogica>();
+builder.Services.AddScoped<IDatosConfirmadosOportunidadServicio, DatosConfirmadosOportunidadActualesServicio>();
+builder.Services.AddScoped<IEvaluacionOportunidadServicio, EvaluacionOportunidadServicio>();
+builder.Services.AddScoped<IDesviosServicio, DesviosServicio>();
+builder.Services.AddScoped<ICompatibilidadServicio, CompatibilidadServicio>();
 
 builder.Services.AddHttpContextAccessor();
 

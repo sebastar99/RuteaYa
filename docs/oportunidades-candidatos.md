@@ -75,6 +75,7 @@ inexistente o que dejó de estar disponible responde con el mismo 404, sin revel
 `DetalleCandidatoDto` reutiliza `ViajeOportunidadesDto` y `EnvioDto`. Las proyecciones
 EF del listado y detalle son compartidas. No se consultan relaciones de Usuario,
 nombres, correos o teléfonos; el ID de publicador del DTO no se muestra en HTML.
+El viaje incluye su límite real de desvío, que no se confunde con distancia calculada.
 
 La acción GET `OportunidadesController.Detalle` toma la identidad de la sesión y
 reutiliza `Views/Panel/DetalleOportunidad.cshtml`, con `DetalleOportunidadViewModel`.
@@ -84,19 +85,24 @@ de haber sido mostrado en el listado. El regreso al listado vuelve a ejecutar su
 paginación normal y puede ajustarla si cambió la cantidad de publicaciones.
 
 Se muestran direcciones, descripción, peso, tamaño, fecha límite publicada y monto
-del modelo. El estado continúa siendo **Pendiente de evaluación**, sin distancias,
-desvíos, horarios de entrega inventados ni botón de aceptación. La fecha publicada
-se muestra sin interpretar su zona horaria. Los errores de almacenamiento conocidos
-devuelven HTTP 503 y un mensaje seguro, sin exponer detalles del proveedor.
+del modelo. Después de verificar propiedad y estado, el detalle llama una sola vez a
+`IEvaluacionOportunidadServicio`: con requisitos faltantes muestra **Pendiente de
+evaluación** y sus motivos, sin consultar rutas. Si una fuente del servidor aporta
+todos los datos confirmados, invoca el motor y muestra el resultado real, incluidos
+segmentos y métricas cuando existe inserción seleccionada. No hay botón de aceptación.
+La fecha publicada se muestra sin interpretar automáticamente su zona horaria.
+Los errores de almacenamiento o evaluación conocidos devuelven HTTP 503 y un
+mensaje seguro, sin exponer detalles del proveedor.
 
 ## Datos pendientes para evaluar compatibilidad
 
-No se llama a HERE, geocodificación, rutas, desvíos ni al motor de compatibilidad.
-Tener una dirección escrita o coordenadas numéricamente válidas no acredita su
-confirmación. Para evaluar de verdad se necesitan coordenadas confirmadas, una
-salida concreta, capacidad restante real y restricciones temporales mapeadas con
-sus estados explícitos. El listado no transforma datos faltantes en `SinRestriccion`
-ni máximos del viaje en capacidad libre.
+El listado no llama a HERE, geocodificación, rutas, desvíos ni al motor. El detalle
+solo invoca el motor tras preparar todos los datos confirmados. Tener una dirección
+escrita o coordenadas numéricamente válidas no acredita su confirmación. Con los
+contratos actuales, la fuente conservadora no puede acreditar coordenadas, salida
+concreta o capacidad restante: devuelve esos datos desconocidos y se evita HERE.
+No se convierten datos faltantes en `SinRestriccion` ni máximos del viaje en capacidad
+libre. Ver [Integración de evaluación](oportunidades-evaluacion.md).
 
 Para usar datos reales, la base ya debe contener las tablas del proyecto y el
 usuario debe tener viajes propios. Esta etapa no crea tablas, aplica migraciones,

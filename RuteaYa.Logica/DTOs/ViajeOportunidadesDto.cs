@@ -7,4 +7,5 @@ public class ViajeOportunidadesDto
     public string Origen { get; set; } = string.Empty;
     public string Destino { get; set; } = string.Empty;
     public bool Activo { get; set; }
+    public decimal DesvioMaxKm { get; set; }
 }

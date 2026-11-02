@@ -1,4 +1,6 @@
 @model RuteaYa.Web.Models.DetalleOportunidadViewModel
+@using RuteaYa.Logica.DTOs
+@using RuteaYa.Web.Models
 @{
     ViewData["Title"] = "Detalle de oportunidad";
     ViewData["ActivePage"] = "Oportunidades";
@@ -9,7 +11,7 @@
     <div>
         <span class="eyebrow">DETALLE DEL CANDIDATO</span>
         <h1>Detalle de oportunidad</h1>
-        <p>Información publicada del envío, pendiente de evaluación para tu viaje.</p>
+        <p>Información publicada y estado de evaluación para tu viaje.</p>
     </div>
     <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
        asp-route-viajeId="@Model.ViajeId" asp-route-pagina="@Model.Pagina"
@@ -24,11 +26,20 @@ else if (Model.Detalle != null)
 {
     var candidato = Model.Detalle;
     var envio = candidato.Envio;
+    var evaluacion = candidato.Evaluacion;
+    var textoEstado = !evaluacion.MotorEjecutado ? "Pendiente de evaluación" : evaluacion.Estado switch
+    {
+        EstadoCompatibilidad.Compatible => "Compatible según la evaluación",
+        EstadoCompatibilidad.Incompatible => "No compatible",
+        _ => "Compatibilidad indeterminada"
+    };
+    var color = !evaluacion.MotorEjecutado || evaluacion.Estado == EstadoCompatibilidad.Indeterminado
+        ? "orange" : evaluacion.Estado == EstadoCompatibilidad.Compatible ? "green" : "red";
     <div class="panel-card">
         <h2>Viaje #@candidato.Viaje.Id: @candidato.Viaje.Origen → @candidato.Viaje.Destino</h2>
         <p>Estado del viaje: @(candidato.Viaje.Activo ? "Activo" : "Inactivo").
             Esto no confirma disponibilidad ni capacidad de una salida concreta.</p>
-        <span class="panel-pill orange">Pendiente de evaluación</span>
+        <span class="panel-pill @color">@textoEstado</span>
     </div>
     <div class="panel-card">
         <h2>Envío #@envio.Id</h2>
@@ -49,9 +60,62 @@ else if (Model.Detalle != null)
         <p class="panel-note">La fecha se muestra tal como fue publicada, sin interpretar su zona horaria.
             La disponibilidad por estado se verificó al consultar; no representa una reserva.</p>
     </div>
-    <div class="panel-alert" role="note">
-        Este candidato no tiene compatibilidad confirmada. Aún no se verificaron coordenadas confirmadas,
-        una salida concreta, capacidad restante, distancias, desvíos ni restricciones temporales.
-        No se calculó una hora de entrega y todavía no se pueden aceptar paquetes.
+    <div class="panel-card">
+        @if (!evaluacion.MotorEjecutado)
+        {
+            <h2>Datos pendientes para evaluar</h2>
+            <p>No se ejecutó el motor ni se consultaron rutas para este candidato.</p>
+            @if (evaluacion.DatosPendientes.Count == 0)
+            {
+                <p>La evaluación aún no está preparada.</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var dato in evaluacion.DatosPendientes)
+                    {
+                        <li>@MensajesEvaluacionOportunidad.DatoPendiente(dato)</li>
+                    }
+                </ul>
+            }
+        }
+        else
+        {
+            var resultado = evaluacion.ResultadoMotor!;
+            <h2>Resultado del motor de compatibilidad</h2>
+            <ul>
+                @foreach (var motivo in resultado.Motivos)
+                {
+                    <li>@MensajesEvaluacionOportunidad.Motivo(motivo)</li>
+                }
+            </ul>
+            @if (resultado.InsercionSeleccionada != null)
+            {
+                var insercion = resultado.InsercionSeleccionada;
+                var desvio = insercion.Desvio;
+                <div class="panel-table-wrap">
+                    <table class="panel-table">
+                        <tbody>
+                            <tr><th scope="row">Distancia original</th><td>@((desvio.DistanciaOriginalMetros / 1000m).ToString("0.###")) km</td></tr>
+                            <tr><th scope="row">Distancia con envío</th><td>@((desvio.DistanciaConEnvioMetros / 1000m).ToString("0.###")) km</td></tr>
+                            <tr><th scope="row">Distancia adicional calculada</th><td>@((desvio.DistanciaAdicionalMetros / 1000m).ToString("0.###")) km</td></tr>
+                            <tr><th scope="row">Duración total con envío</th><td>@((desvio.DuracionConEnvioSegundos / 60m).ToString("0.##")) minutos</td></tr>
+                            <tr><th scope="row">Tiempo adicional calculado</th><td>@((desvio.TiempoAdicionalSegundos / 60m).ToString("0.##")) minutos</td></tr>
+                            <tr><th scope="row">Segmento de retiro</th><td>@insercion.SegmentoRetiro</td></tr>
+                            <tr><th scope="row">Segmento de entrega</th><td>@insercion.SegmentoEntrega</td></tr>
+                            @if (insercion.FinalizacionEstimada.HasValue)
+                            {
+                                <tr><th scope="row">Finalización estimada del recorrido completo</th><td>@insercion.FinalizacionEstimada.Value.ToString("dd/MM/yyyy HH:mm zzz")</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="panel-note">Los segmentos empiezan en cero y se refieren al recorrido base confirmado.
+                    Las diferencias negativas se conservan. La finalización del recorrido no es una hora de entrega del paquete.</p>
+            }
+            <p class="panel-note">Resultado basado en los datos confirmados y las estimaciones del proveedor,
+                no una garantía de llegada ni una reserva. HERE Routing usa actualmente departureTime=any.</p>
+        }
     </div>
+    <div class="panel-alert" role="note">La aceptación de paquetes todavía no está habilitada.</div>
 }

@@ -8,9 +8,10 @@ namespace RuteaYa.Logica;
 public class OportunidadesLogica : IOportunidadesLogica
 {
     private readonly RuteaYaDbContext _db;
+    private readonly IEvaluacionOportunidadServicio _evaluacion;
 
     private static readonly Expression<Func<Viaje, ViajeOportunidadesDto>> DatosViaje = v =>
-        new ViajeOportunidadesDto { Id = v.Id, Origen = v.Origen, Destino = v.Destino, Activo = v.Activo };
+        new ViajeOportunidadesDto { Id = v.Id, Origen = v.Origen, Destino = v.Destino, Activo = v.Activo, DesvioMaxKm = v.DesvioMaxKm };
 
     private static readonly Expression<Func<Envio, EnvioDto>> DatosEnvio = e => new EnvioDto
     {
@@ -19,10 +20,12 @@ public class OportunidadesLogica : IOportunidadesLogica
         Descripcion = e.Descripcion, Monto = e.Monto, Estado = e.Estado
     };
 
-    public OportunidadesLogica(RuteaYaDbContext db)
+    public OportunidadesLogica(RuteaYaDbContext db, IEvaluacionOportunidadServicio evaluacion)
     {
         ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(evaluacion);
         _db = db;
+        _evaluacion = evaluacion;
     }
 
     public async Task<ListadoCandidatosDto?> ConsultarAsync(
@@ -89,6 +92,8 @@ public class OportunidadesLogica : IOportunidadesLogica
             .Where(e => e.Id == envioId && e.Estado == EstadoEnvio.BuscandoConductor)
             .Select(DatosEnvio)
             .SingleOrDefaultAsync(cancellationToken);
-        return envio == null ? null : new DetalleCandidatoDto { Viaje = viaje, Envio = envio };
+        if (envio == null) return null;
+        var evaluacion = await _evaluacion.EvaluarAsync(viaje, envio, cancellationToken);
+        return new DetalleCandidatoDto { Viaje = viaje, Envio = envio, Evaluacion = evaluacion };
     }
 }

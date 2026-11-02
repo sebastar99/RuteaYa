@@ -170,6 +170,94 @@ public class OportunidadesVistaTest
         }
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(EstadoCompatibilidad.Compatible)]
+    [InlineData(EstadoCompatibilidad.Incompatible)]
+    [InlineData(EstadoCompatibilidad.Indeterminado)]
+    public async Task DetalleRazor_EstadosYMetricas_SoloMuestraResultadosCuandoHuboMotor(EstadoCompatibilidad? estado)
+    {
+        var evaluacion = new EvaluacionOportunidadDto();
+        if (!estado.HasValue)
+        {
+            evaluacion.DatosPendientes = new[]
+            {
+                DatoPendienteOportunidad.RecorridoSinCoordenadasConfirmadas,
+                DatoPendienteOportunidad.PesoDisponibleDesconocido,
+                DatoPendienteOportunidad.VencimientoEntregaNoInterpretado
+            };
+        }
+        else
+        {
+            evaluacion.ResultadoMotor = new ResultadoCompatibilidadDto
+            {
+                ViajeId = 10, EnvioId = 25, Estado = estado.Value,
+                Motivos = new[] { estado == EstadoCompatibilidad.Incompatible ? MotivoCompatibilidad.PesoExcedido :
+                    estado == EstadoCompatibilidad.Compatible ? MotivoCompatibilidad.HorarioAprobado : MotivoCompatibilidad.HorarioRetiroNoVerificable },
+                InsercionSeleccionada = estado == EstadoCompatibilidad.Incompatible ? null : new InsercionCompatibilidadDto
+                {
+                    SegmentoRetiro = 0, SegmentoEntrega = 1,
+                    FinalizacionEstimada = new DateTimeOffset(2026, 11, 2, 8, 11, 0, TimeSpan.Zero),
+                    Desvio = new ResultadoDesvioDto
+                    {
+                        DistanciaOriginalMetros = 10000, DistanciaConEnvioMetros = 10500, DistanciaAdicionalMetros = 500,
+                        DuracionConEnvioSegundos = 660, TiempoAdicionalSegundos = 60
+                    }
+                }
+            };
+        }
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, It.IsAny<CancellationToken>())).ReturnsAsync(new DetalleCandidatoDto
+        {
+            Viaje = new ViajeOportunidadesDto { Id = 10, Origen = "Origen publicado", Destino = "Destino publicado" },
+            Envio = new EnvioDto { Id = 25, OrigenDir = "Retiro publicado", DestinoDir = "Entrega publicada" },
+            Evaluacion = evaluacion
+        });
+        await using var app = CrearHost(logica.Object);
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await app.StartAsync(limite.Token);
+        try
+        {
+            var direccion = app.Services.GetRequiredService<IServer>().Features
+                .Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient { BaseAddress = new Uri(direccion) };
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            using var respuesta = await cliente.GetAsync("/Oportunidades/Detalle?viajeId=10&envioId=25", limite.Token);
+            var html = WebUtility.HtmlDecode(await respuesta.Content.ReadAsStringAsync(limite.Token));
+
+            Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+            Assert.DoesNotContain(">Aceptar", html);
+            if (!estado.HasValue)
+            {
+                Assert.Contains("Pendiente de evaluación", html);
+                Assert.Contains("Falta el peso restante real", html);
+                Assert.Contains("vencimiento obligatorio", html);
+                Assert.Contains("No se ejecutó el motor", html);
+                Assert.DoesNotContain("Distancia adicional calculada", html);
+                Assert.DoesNotContain("Tiempo adicional calculado", html);
+            }
+            else
+            {
+                Assert.Contains(estado == EstadoCompatibilidad.Compatible ? "Compatible según la evaluación" :
+                    estado == EstadoCompatibilidad.Incompatible ? "No compatible" : "Compatibilidad indeterminada", html);
+                if (estado != EstadoCompatibilidad.Incompatible)
+                {
+                    Assert.Contains("Distancia adicional calculada", html);
+                    Assert.Contains("Tiempo adicional calculado", html);
+                    Assert.Contains("Segmento de retiro", html);
+                    Assert.Contains("Segmento de entrega", html);
+                    Assert.Contains("Finalización estimada del recorrido completo", html);
+                    Assert.Contains("no es una hora de entrega", html);
+                }
+                else Assert.DoesNotContain("Distancia adicional calculada", html);
+            }
+        }
+        finally
+        {
+            await app.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static IEnumerable<string> Enlaces(string html) =>
         Regex.Matches(html, "href=\"([^\"]+)\"")
             .Select(m => WebUtility.HtmlDecode(m.Groups[1].Value));

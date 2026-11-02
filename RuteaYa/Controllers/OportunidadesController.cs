@@ -78,7 +78,7 @@ public class OportunidadesController : Controller
                 conductorId, viajeId, envioId, cancellationToken);
             if (modelo.Detalle == null) return NotFound();
         }
-        catch (Exception error) when (error is DbException or TimeoutException)
+        catch (Exception error) when (error is DbException or TimeoutException or HttpRequestException or InvalidOperationException)
         {
             Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             modelo.Error = "No se pudo cargar el detalle. Intentá nuevamente más tarde.";
