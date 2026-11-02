@@ -37,6 +37,8 @@ else if (Model.Detalle != null)
         ? "orange" : evaluacion.Estado == EstadoCompatibilidad.Compatible ? "green" : "red";
     <div class="panel-card">
         <h2>Viaje #@candidato.Viaje.Id: @candidato.Viaje.Origen → @candidato.Viaje.Destino</h2>
+        <a class="panel-button outline" asp-controller="Recorridos" asp-action="Index"
+           asp-route-viajeId="@candidato.Viaje.Id">Previsualizar recorrido del viaje</a>
         <p>Estado del viaje: @(candidato.Viaje.Activo ? "Activo" : "Inactivo").
             Esto no confirma disponibilidad ni capacidad de una salida concreta.</p>
         <span class="panel-pill @color">@textoEstado</span>

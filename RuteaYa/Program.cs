@@ -10,6 +10,17 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllersWithViews();
 
 builder.Services.Configure<HereRoutingOpciones>(builder.Configuration.GetSection("HereRouting"));
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
+builder.Services.AddScoped<PrevisualizacionRecorridoServicio>();
+builder.Services.AddHttpClient<IRutasGeometriaServicio, RutasHereServicio>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30))
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient<MapasHereServicio>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30))
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient<IRutasServicio, RutasHereServicio>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(30);

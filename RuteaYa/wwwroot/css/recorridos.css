@@ -1,0 +1,6 @@
+#mapa-recorrido { height: 520px; min-height: 320px; width: 100%; z-index: 0; }
+.candidato-recorrido { border-top: 1px solid #ddd; padding: 1rem 0; }
+.candidato-recorrido label { display: block; }
+.candidato-recorrido select { max-width: 100%; margin-top: .5rem; padding: .5rem; }
+fieldset.panel-card { min-width: 0; margin: 1rem 0; }
+.leaflet-control-attribution { max-width: 100%; }
