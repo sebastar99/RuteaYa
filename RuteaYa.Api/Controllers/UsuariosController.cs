@@ -203,8 +203,10 @@ namespace RuteaYa.Api.Controllers
         [HttpGet("perfil")]
         public IActionResult Perfil()
         {
-            var id = User.FindFirstValue(
-                ClaimTypes.NameIdentifier);
+            var id = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                ?? User.FindFirstValue("sub")
+                ?? User.FindFirstValue("nameid");
 
             var email = User.FindFirstValue(
                 ClaimTypes.Email);

@@ -11,6 +11,7 @@ namespace RuteaYa.Web.Controllers
 {
     public class AccesoController : Controller
     {
+        private const string AccessTokenCookieName = "RuteaYa.AccessToken";
         private readonly IUsuariosApiServicio _usuariosApi;
 
         public AccesoController(IUsuariosApiServicio usuariosApi)
@@ -88,9 +89,10 @@ namespace RuteaYa.Web.Controllers
                 {
                     IsPersistent = false,
                     AllowRefresh = true,
-                    ExpiresUtc = resultado.Usuario != null
-                        ? DateTimeOffset.UtcNow.AddMinutes(30)
-                        : null
+                    // Debe coincidir con Jwt:ExpirationMinutes para que la
+                    // sesión MVC no termine antes que el token usado por los
+                    // endpoints protegidos de viajes.
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddHours(2)
                 };
 
                     propiedades.StoreTokens(new[]
@@ -111,6 +113,22 @@ namespace RuteaYa.Web.Controllers
                     CookieAuthenticationDefaults.AuthenticationScheme,
                     principal,
                     propiedades);
+
+                // El token también se conserva en una cookie HTTP-only. Es
+                // el respaldo usado por JwtTokenHandler al llamar a la API;
+                // así no depende de que el proveedor de cookies exponga los
+                // tokens serializados en AuthenticationProperties.
+                Response.Cookies.Append(
+                    AccessTokenCookieName,
+                    resultado.Token,
+                    new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = Request.IsHttps,
+                        SameSite = SameSiteMode.Lax,
+                        IsEssential = true,
+                        Expires = DateTimeOffset.UtcNow.AddHours(2)
+                    });
 
                 return RedirectToAction(nameof(Inicio));
 
@@ -195,6 +213,8 @@ namespace RuteaYa.Web.Controllers
         {
             await HttpContext.SignOutAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme);
+
+            Response.Cookies.Delete(AccessTokenCookieName);
 
             return RedirectToAction(nameof(Login));
         }

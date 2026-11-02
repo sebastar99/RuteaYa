@@ -1,11 +1,13 @@
 ﻿
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace RuteaYa.Web.Services
 {
     public class JwtTokenHandler : DelegatingHandler
     {
+        private const string AccessTokenCookieName = "RuteaYa.AccessToken";
         private readonly IHttpContextAccessor _httpContextAccessor;
 
         public JwtTokenHandler(
@@ -22,7 +24,12 @@ namespace RuteaYa.Web.Services
 
             if (httpContext?.User.Identity?.IsAuthenticated == true)
             {
-                var token = await httpContext.GetTokenAsync("access_token");
+                var token = httpContext.Request.Cookies[
+                    AccessTokenCookieName];
+
+                token ??= await httpContext.GetTokenAsync(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    "access_token");
 
                 if (!string.IsNullOrWhiteSpace(token))
                 {

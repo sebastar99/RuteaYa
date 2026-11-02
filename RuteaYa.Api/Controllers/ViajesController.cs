@@ -22,9 +22,19 @@ public class ViajesController : ControllerBase
 
     private int ObtenerUsuarioId()
     {
-        var identificador =
-            User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        // JwtBearer puede conservar la claim como NameIdentifier, sub,
+        // nameid o como el URI completo según MapInboundClaims y la versión
+        // del handler. El login de esta API emite NameIdentifier y sub, por
+        // eso aceptamos todas las variantes equivalentes.
+        var identificador = new[]
+        {
+            ClaimTypes.NameIdentifier,
+            JwtRegisteredClaimNames.Sub,
+            "sub",
+            "nameid"
+        }
+        .Select(User.FindFirstValue)
+        .FirstOrDefault(valor => !string.IsNullOrWhiteSpace(valor));
 
         return int.TryParse(identificador, out var id) && id > 0 ? id : 0;
     }

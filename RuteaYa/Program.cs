@@ -52,7 +52,13 @@ builder.Services
         options.AccessDeniedPath = "/Acceso/Denegado";
         options.Cookie.Name = "RuteaYa.Auth";
         options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        // En producción la cookie debe viajar exclusivamente por HTTPS. En
+        // desarrollo también se permite el perfil HTTP definido en
+        // launchSettings.json; con Always el navegador descarta la cookie y
+        // el token no llega nunca a la API.
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.ExpireTimeSpan = TimeSpan.FromHours(2);
         options.SlidingExpiration = true;
