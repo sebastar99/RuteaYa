@@ -1,10 +1,11 @@
 ﻿
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 using RuteaYa.Entidades;
 using RuteaYa.Web.Models;
+using RuteaYa.Web.Services;
 
 namespace RuteaYa.Web.Controllers
 {
@@ -12,15 +13,14 @@ namespace RuteaYa.Web.Controllers
     public class PanelController : Controller
     {
         private readonly RuteaYaDbContext _dbContext;
+        private readonly IViajesApiServicio _viajesApiServicio;
 
-        public PanelController(RuteaYaDbContext dbContext)
+        public PanelController(RuteaYaDbContext dbContext, IViajesApiServicio viajesApiServicio)
         {
             _dbContext = dbContext;
+            _viajesApiServicio = viajesApiServicio;
         }
 
-        public IActionResult Viajes() => View();
-        public IActionResult NuevoViaje() => View();
-        public IActionResult DetalleViaje() => View();
         public IActionResult Envios() => View();
         public IActionResult NuevoEnvio() => View();
         public IActionResult DetalleEnvio() => View();
@@ -30,6 +30,350 @@ namespace RuteaYa.Web.Controllers
         public IActionResult ConfirmarCombinacion() => View();
         public IActionResult Transportes() => View();
 
+        private int ObtenerUsuarioId()
+        {
+            var identificador =
+                User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue("sub");
+
+            return int.TryParse(identificador, out var usuarioId) ? usuarioId : 0;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Viajes()
+        {
+            var usuarioId = ObtenerUsuarioId();
+            
+            if (usuarioId <= 0)
+            {
+                return Forbid();
+            }
+
+            var resultado = await _viajesApiServicio.ListarViajesAsync(usuarioId);
+
+            ViewBag.Error = resultado.Exito ? null : resultado.Mensaje;
+
+            return View(resultado.Viajes);
+        }
+
+        [HttpGet]
+        public IActionResult NuevoViaje()
+        {
+            return View(new ViajeViewModel());
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> NuevoViaje(ViajeViewModel modelo)
+        {
+            if (modelo.DiasSemana == null || modelo.DiasSemana.Count == 0)
+            {
+                ModelState.AddModelError(
+                    nameof(modelo.DiasSemana),
+                    "Seleccionar al menos un dia de circulacion."
+                );
+            }
+
+            if (modelo.HoraLlegada <= modelo.HoraSalida)
+            {
+                ModelState.AddModelError(
+                    nameof(modelo.HoraLlegada),
+                    "La hora de llegada debe ser despues de la hora de salida."
+                );
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return View(modelo);
+            }
+
+            var usuarioId = ObtenerUsuarioId();
+
+            if (usuarioId <= 0)
+            {
+                return Forbid();
+            }
+
+            var resultado = await _viajesApiServicio.CrearViajeAsync(usuarioId, modelo);
+
+            if (!resultado.Exito)
+            {
+                ModelState.AddModelError(string.Empty, resultado.Mensaje);
+
+                return View(modelo);
+            }
+
+            TempData["MensajeExito"] = resultado.Mensaje;
+
+            return RedirectToAction(nameof(Viajes));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DetalleViaje(int id)
+        {
+            if (id <= 0)
+            {
+                return NotFound();
+            }
+            var usuarioId = ObtenerUsuarioId();
+
+            if (usuarioId <= 0)
+            {
+                return Forbid();
+            }
+
+            var resultado = await _viajesApiServicio.ObtenerViajePorIdAsync(usuarioId, id);
+
+            if (!resultado.Exito || resultado.Viaje is null)
+            {
+                ViewBag.Error = resultado.Mensaje;
+
+                return View (new ViajeViewModel {Id = id});
+            }
+
+            return View(resultado.Viaje);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> EditarViaje(int id)
+        {
+            if(id <= 0)
+            {
+                return NotFound();
+            }
+
+            var usuarioId = ObtenerUsuarioId();
+            if(usuarioId <= 0)
+            {
+                return Forbid();
+            }
+
+            var resultado = await _viajesApiServicio.ObtenerViajePorIdAsync(usuarioId, id);
+
+            if(!resultado.Exito || resultado.Viaje is null)
+            {
+                TempData["MensajeError"] = resultado.Mensaje;
+                return RedirectToAction(nameof(Viajes));
+            }
+
+            var modelo = resultado.Viaje;
+
+            modelo.ParadasTexto = string.Join(
+                ", ",
+                (modelo.Paradas ?? new List<ParadaViewModel>())
+                .OrderBy(p => p.Orden)
+                .Select(p => p.Ubicacion)
+            );
+
+            return View(modelo);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditarViaje(ViajeViewModel modelo)
+        {
+            if(modelo.DiasSemana == null || modelo.DiasSemana.Count == 0 ) 
+            {
+                ModelState.AddModelError(
+                    nameof(modelo.DiasSemana),
+                    "Selecciona al menos un dia de circulacion."
+                );
+            }
+
+            if(modelo.HoraLlegada <= modelo.HoraSalida)
+            {
+                ModelState.AddModelError(
+                    nameof(modelo.HoraLlegada),
+                    "La hora de llegada debe ser despues de la hora de salida."
+                );
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return View(modelo);
+            }
+
+            var usuarioId = ObtenerUsuarioId();
+            if(usuarioId <= 0)
+            {
+                return Forbid();
+            }
+
+            var resultado = await _viajesApiServicio.EditarViajeAsync(
+                usuarioId,
+                modelo.Id,
+                modelo
+            );
+
+            if (!resultado.Exito)
+            {
+                ModelState.AddModelError(string.Empty, resultado.Mensaje);
+                return View(modelo);
+            }
+
+            TempData["MensajeExito"] = resultado.Mensaje;
+
+            return RedirectToAction(nameof(DetalleViaje), new {id = modelo.Id});
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DesactivarViaje(int id)
+        {
+            if(id <= 0)
+            {
+                return NotFound();
+            }
+
+            var usuarioId = ObtenerUsuarioId();
+            if(usuarioId <= 0)
+            {
+                return Forbid();
+            }
+
+            var resultado = await _viajesApiServicio.DesactivarViajeAsync(usuarioId, id);
+
+            if (!resultado.Exito)
+            {
+                TempData["MensajeError"] = resultado.Mensaje;
+            }
+            else
+            {
+                TempData["MensajeExito"] = resultado.Mensaje;
+            }
+
+            return RedirectToAction(nameof(DetalleViaje), new {id});
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AgregarParada(int viajeId, string ubicacion, int orden) 
+        {
+            if (viajeId <= 0)
+            {
+                return NotFound();
+            }
+
+            var usuarioId = ObtenerUsuarioId();
+
+            if (usuarioId <= 0)
+            {
+                return Forbid();
+            }
+           
+            if (string.IsNullOrWhiteSpace(ubicacion))
+            {
+                TempData["MensajeError"] = "Ingresar la ubicacion de la parada.";
+                return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
+            }
+
+            var resultado = await _viajesApiServicio.AgregarParadaAsync(
+                usuarioId,
+                viajeId,
+                ubicacion.Trim(),
+                orden
+            );
+
+            if (!resultado.Exito)
+            {
+                TempData["MensajeError"] = resultado.Mensaje;
+            }
+            else
+            {
+                TempData["MensajeExito"] = resultado.Mensaje;
+            }
+                
+            return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EliminarParada(int viajeId, int paradaId)
+        {
+            if (viajeId <= 0 || paradaId <= 0)
+            {
+                return NotFound();
+            }
+
+            var usuarioId = ObtenerUsuarioId();
+
+            if (usuarioId <= 0)
+            {
+                return Forbid();
+            }
+                
+            var resultado = await _viajesApiServicio.EliminarParadaAsync(
+                usuarioId,
+                viajeId,
+                paradaId
+            );
+
+            if (!resultado.Exito)
+            {
+                TempData["MensajeError"] = resultado.Mensaje;
+            }
+            else
+            {
+                TempData["MensajeExito"] = resultado.Mensaje;
+            }
+                
+            return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReordenarParadas(int viajeId, List<int> paradasIds, List<int> ordenes)
+        {
+            if (viajeId <= 0)
+            {
+                return NotFound();
+            }
+                
+            var usuarioId = ObtenerUsuarioId();
+            if (usuarioId <= 0)
+            {
+                return Forbid();
+            }
+                
+            if (paradasIds == null || ordenes == null ||
+                paradasIds.Count == 0 || paradasIds.Count != ordenes.Count ||
+                paradasIds.Distinct().Count() != paradasIds.Count ||
+                ordenes.Distinct().Count() != ordenes.Count ||
+                ordenes.Any(o => o < 1 || o > paradasIds.Count)
+            ) {
+                TempData["MensajeError"] = "La lista de paradas o su orden, no es valido.";
+                return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
+            }
+
+            var IdOrdenadas = paradasIds
+                .Select((id, indice) => new 
+                {
+                    Id = id, 
+                    Orden = ordenes[indice] 
+                })
+                .OrderBy(p => p.Orden)
+                .Select(p => p.Id)
+                .ToList();
+
+            var resultado = await _viajesApiServicio.ReordenarParadasAsync(
+                usuarioId,
+                viajeId,
+                IdOrdenadas
+            );
+
+            if (!resultado.Exito)
+            {
+                TempData["MensajeError"] = resultado.Mensaje;
+            }
+            else
+            {
+                TempData["MensajeExito"] = resultado.Mensaje;
+            }
+                
+            return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
+        }
+
+   // ============================= Historial usuario ==========================================
         [HttpGet]
         public async Task<IActionResult> Historial(
             string? buscar,

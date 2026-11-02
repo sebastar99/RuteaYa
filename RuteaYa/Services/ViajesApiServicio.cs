@@ -1,222 +1,311 @@
 using System.Net.Http.Json;
-using System.Net.Http;
 using System.Text.Json;
 using RuteaYa.Web.Models;
 
-namespace RuteaYa.Web.Services
+namespace RuteaYa.Web.Services;
+
+public class ViajesApiServicio : IViajesApiServicio
 {
-    public class ViajesApiServicio : IViajesApiServicio
+    private readonly HttpClient _httpClient;
+
+    public ViajesApiServicio(HttpClient httpClient)
     {
-        private readonly HttpClient _httpClient;
+        _httpClient = httpClient;
+    }
 
-        public ViajesApiServicio(HttpClient httpClient)
+    public async Task<(bool Exito, string Mensaje, List<ViajeViewModel> Viajes)> ListarViajesAsync(int usuarioId)
+    {
+        if (usuarioId <= 0)
+            return (false, "El usuario no es valido.", new());
+
+        try {
+            var response = await _httpClient.GetAsync("api/viajes?estado=todos");
+
+            if (!response.IsSuccessStatusCode)
+                return (false, await ObtenerMensajeError(response), new());
+
+            var viajes = await response.Content
+                .ReadFromJsonAsync<List<ViajeViewModel>>() ?? new();
+
+            return (true, "", viajes);
+        }
+        catch (HttpRequestException)
         {
-            _httpClient = httpClient;
+            return (false, "No se pudo conectar con la API.", new());
         }
-
-        public async Task<(bool Exito, string Mensaje, List<ViajeViewModel> Viajes)> ListarViajesAsync(int usuarioId)
+        catch (TaskCanceledException)
         {
-            if (usuarioId <= 0)
-            {
-                return (false, "El usuario no es valido.", new List<ViajeViewModel>());
-            }
-
-            try {
-                var respuesta = await _httpClient.GetAsync(
-                    $"api/viajes?usuarioId={usuarioId}&estado=todos"
-                );
-
-                if (!respuesta.IsSuccessStatusCode)
-                {
-                    return (
-                        false,
-                        await ObtenerMensajeError(respuesta),
-                        new List<ViajeViewModel>()
-                    );
-                }
-
-                var viajes = await respuesta
-                    .Content
-                    .ReadFromJsonAsync<List<ViajeViewModel>>()
-                    ?? new List<ViajeViewModel>();
-
-                return (true, string.Empty, viajes);
-            }
-            catch (HttpRequestException)
-            {
-                return (false, "No se pudo conectar con la API.", new List<ViajeViewModel>());
-            }
-            catch (TaskCanceledException)
-            {
-                return (false, "La API tardo en responder.", new List<ViajeViewModel>());
-            }
-            catch (JsonException)
-            {
-                return (
-                    false,
-                    "La API devolvio una respuesta con formato invalido.",
-                    new List<ViajeViewModel>()
-                );
-            }
+            return (false, "La API tardo en responder.", new());
         }
-
-        public async Task<(bool Exito, string Mensaje)> CrearViajeAsync(int usuarioId, ViajeViewModel modelo)
+        catch (JsonException)
         {
-            if (usuarioId <= 0)
-            {
-                return (false, "El usuario no es valido.");
-            }
-            if (modelo == null)
-            {
-                return (false, "Los datos del viaje son obligatorios.");
-            }
-            if (string.IsNullOrWhiteSpace(modelo.Origen) ||
-                string.IsNullOrWhiteSpace(modelo.Destino))
-            {
-                return (false, "El origen y el destino son obligatorios.");
-            }
-            if (string.Equals(modelo.Origen.Trim(), modelo.Destino.Trim(), StringComparison.OrdinalIgnoreCase))
-            {
-                return (false, "El origen y el destino deben ser diferentes.");
-            }
-
-            var paradas = (modelo.ParadasTexto ?? string.Empty)
-                .Split(
-                    ',',
-                    StringSplitOptions.RemoveEmptyEntries |
-                    StringSplitOptions.TrimEntries
-                )
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .ToList();
-
-            var datos = new
-            {
-                origen = modelo.Origen,
-                destino = modelo.Destino,
-
-                diasSemana = modelo.DiasSemana,
-                horaSalida = modelo.HoraSalida.ToString(@"hh\:mm\:ss"),
-                horaLlegada = modelo.HoraLlegada.ToString(@"hh\:mm\:ss"),
-
-                cantMaxPaquetes = modelo.CantMaxPaquetes,
-                pesoMax = modelo.PesoMax,
-                desvioMaxKm = modelo.DesvioMaxKm,
-
-                paradas
-            };
-
-            try {
-                var respuesta = await _httpClient.PostAsJsonAsync(
-                    $"api/viajes?usuarioId={usuarioId}",
-                    datos
-                );
-
-                if (respuesta.IsSuccessStatusCode)
-                {
-                    return (true, "El viaje se creo correctamente.");
-                }
-
-                return (false, await ObtenerMensajeError(respuesta));
-            }
-            catch (HttpRequestException)
-            {
-                return (false, "No se pudo conectar con la API.");
-            }
-            catch (TaskCanceledException)
-            {
-                return (false, "La API tardo en responder.");
-            }
-            catch (JsonException)
-            {
-                return (false, "No se pudo interpretar la respuesta de la API.");
-            }
+            return (false, "La respuesta de la API no es valida.", new());
         }
+    }
 
-        public async Task<(bool Exito, string Mensaje, ViajeViewModel? Viaje)> ObtenerViajePorIdAsync(
-            int usuarioId, 
-            int viajeId
-        ) {
-            if (usuarioId <= 0 || viajeId <= 0)
-            {
-                return (false, "El usuario o el viaje no son validos.", null);
-            }
+    public async Task<(bool Exito, string Mensaje)> CrearViajeAsync(int usuarioId, ViajeViewModel modelo)
+    {
+        if (usuarioId <= 0)
+            return (false, "El usuario no es valido.");
 
-            try {
-                var respuesta = await _httpClient.GetAsync(
-                    $"api/viajes/{viajeId}?usuarioId={usuarioId}"
-                );
+        if (modelo == null)
+            return (false, "Los datos del viaje son obligatorios.");
 
-                if (!respuesta.IsSuccessStatusCode)
-                {
-                    return (false, await ObtenerMensajeError(respuesta), null);
-                }
+        if (string.IsNullOrWhiteSpace(modelo.Origen) ||
+            string.IsNullOrWhiteSpace(modelo.Destino))
+            return (false, "El origen y destino son obligatorios.");
 
-                var viaje = await respuesta.Content.ReadFromJsonAsync<ViajeViewModel>();
+        if (modelo.Origen.Trim().Equals(
+            modelo.Destino.Trim(),
+            StringComparison.OrdinalIgnoreCase))
+            return (false, "El origen y destino deben ser diferentes.");
 
-                if (viaje is null)
-                {
-                    return (false, "La API no devolvio los datos del viaje.", null);
-                }
-
-                return (true, string.Empty, viaje);
-            }
-            
-            catch (HttpRequestException)
-            {
-                return (false, "No se pudo conectar con la API.", null);
-            }
-            catch (TaskCanceledException)
-            {
-                return (false, "La API tardo en responder.", null);
-            }
-            catch (JsonException)
-            {
-                return (
-                    false,
-                    "La API devolvio una respuesta que no se pudo interpretar.",
-                    null
-                );
-            }
-        }
-
-    
-
-        private static async Task<string> ObtenerMensajeError(HttpResponseMessage respuesta)
+        try
         {
-            var contenido = await respuesta.Content.ReadAsStringAsync();
+            var response = await _httpClient.PostAsJsonAsync("api/viajes", CrearDatosViaje(modelo));
 
-            if (string.IsNullOrWhiteSpace(contenido))
-            {
-                return $"La API respondio con el código {(int)respuesta.StatusCode}.";
-            }
-
-            try {
-                using var documento = JsonDocument.Parse(contenido);
-                var raiz = documento.RootElement;
-
-                if (raiz.ValueKind == JsonValueKind.Object)
-                {
-                    if (raiz.TryGetProperty("mensaje", out var mensaje))
-                    {
-                        return mensaje.ValueKind == JsonValueKind.String
-                            ? mensaje.GetString() ?? "No se pudo completar la accion."
-                            : "No se pudo completar la accion.";
-                    }
-
-                    if (raiz.TryGetProperty("title", out var titulo))
-                    {
-                        return titulo.ValueKind == JsonValueKind.String
-                            ? titulo.GetString() ?? "No se pudo completar la accion."
-                            : "No se pudo completar la accion.";
-                    }
-                }
-            }
-            catch (JsonException)
-            {
-                return "No se pudo interpretar la respuesta de la API.";
-            }
-
-            return $"La API respondió con el código {(int)respuesta.StatusCode}.";
+            return response.IsSuccessStatusCode
+                ? (true, "El viaje se creó correctamente.")
+                : (false, await ObtenerMensajeError(response));
         }
+        catch (HttpRequestException)
+        {
+            return (false, "No se pudo conectar con la API.");
+        }
+        catch (TaskCanceledException)
+        {
+            return (false, "La API tardo en responder.");
+        }
+        catch (JsonException)
+        {
+            return (false, "No se pudo interpretar la respuesta.");
+        }
+    }
+
+    public async Task<(bool Exito, string Mensaje, ViajeViewModel? Viaje)> ObtenerViajePorIdAsync(int usuarioId, int viajeId)
+    {
+        if (usuarioId <= 0 || viajeId <= 0)
+            return (false, "El usuario o viaje no son validos.", null);
+
+        try {
+            var response = await _httpClient.GetAsync($"api/viajes/{viajeId}");
+
+            if (!response.IsSuccessStatusCode)
+                return (false, await ObtenerMensajeError(response), null);
+
+            var viaje = await response.Content
+                .ReadFromJsonAsync<ViajeViewModel>();
+
+            return viaje == null
+                ? (false, "No se recibieron los datos del viaje.", null)
+                : (true, "", viaje);
+        }
+        catch (HttpRequestException)
+        {
+            return (false, "No se pudo conectar con la API.", null);
+        }
+        catch (TaskCanceledException)
+        {
+            return (false, "La API tardo en responder.", null);
+        }
+        catch (JsonException)
+        {
+            return (false, "La respuesta de la API no es valida.", null);
+        }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> EditarViajeAsync(
+        int usuarioId,
+        int viajeId,
+        ViajeViewModel modelo
+    ) {
+        if (usuarioId <= 0 || viajeId <= 0)
+            return (false, "El usuario o viaje no son validos.");
+
+        if (modelo == null)
+            return (false, "Los datos del viaje son obligatorios.");
+
+        try {
+            var response = await _httpClient.PutAsJsonAsync(
+                $"api/viajes/{viajeId}", 
+                CrearDatosViaje(modelo)
+            );
+
+            return response.IsSuccessStatusCode
+                ? (true, "El viaje se modificó correctamente.")
+                : (false, await ObtenerMensajeError(response));
+        }
+        catch (HttpRequestException)
+        {
+            return (false, "No se pudo conectar con la API.");
+        }
+        catch (TaskCanceledException)
+        {
+            return (false, "La API tardo en responder.");
+        }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> DesactivarViajeAsync(int usuarioId, int viajeId)
+    {
+        if (usuarioId <= 0 || viajeId <= 0)
+            return (false, "El usuario o viaje no son validos.");
+
+        try
+        {
+            var response = await _httpClient.PatchAsync($"api/viajes/{viajeId}/desactivar", null);
+
+            return response.IsSuccessStatusCode
+                ? (true, "El viaje se desactivó correctamente.")
+                : (false, await ObtenerMensajeError(response));
+        }
+        catch (HttpRequestException)
+        {
+            return (false, "No se pudo conectar con la API.");
+        }
+        catch (TaskCanceledException)
+        {
+            return (false, "La API tardo en responder.");
+        }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> AgregarParadaAsync(
+        int usuarioId,
+        int viajeId,
+        string ubicacion,
+        int orden
+    ) {
+        if (usuarioId <= 0 || viajeId <= 0)
+            return (false, "El usuario o viaje no son validos.");
+
+        if (string.IsNullOrWhiteSpace(ubicacion))
+            return (false, "La ubicación es obligatoria.");
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"api/viajes/{viajeId}/paradas",
+                new { ubicacion = ubicacion.Trim(), orden }
+            );
+
+            return response.IsSuccessStatusCode
+                ? (true, "La parada se agrego.")
+                : (false, await ObtenerMensajeError(response));
+        }
+        catch (HttpRequestException)
+        {
+            return (false, "No se pudo conectar con la API.");
+        }
+        catch (TaskCanceledException)
+        {
+            return (false, "La API tardo en responder.");
+        }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> EliminarParadaAsync(
+        int usuarioId,
+        int viajeId,
+        int paradaId
+    ) {
+        if (usuarioId <= 0 || viajeId <= 0 || paradaId <= 0)
+            return (false, "Los identificadores no son validos.");
+
+        try {
+            var response = await _httpClient.DeleteAsync($"api/viajes/{viajeId}/paradas/{paradaId}");
+
+            return response.IsSuccessStatusCode
+                ? (true, "La parada se elimino.")
+                : (false, await ObtenerMensajeError(response));
+        }
+        catch (HttpRequestException)
+        {
+            return (false, "No se pudo conectar con la API.");
+        }
+        catch (TaskCanceledException)
+        {
+            return (false, "La API tardo en responder.");
+        }
+    }
+
+    public async Task<(bool Exito, string Mensaje)> ReordenarParadasAsync(
+        int usuarioId,
+        int viajeId,
+        List<int> paradasId
+    ) {
+        if (usuarioId <= 0 || viajeId <= 0)
+            return (false, "Los identificadores no son validos.");
+
+        if (paradasId == null)
+            return (false, "La lista de paradas es obligatoria.");
+
+        try {
+            var response = await _httpClient.PutAsJsonAsync(
+                $"api/viajes/{viajeId}/paradas/orden",
+                new { paradasIds = paradasId }
+            );
+
+            return response.IsSuccessStatusCode
+                ? (true, "Las paradas se ordenaron correctamente.")
+                : (false, await ObtenerMensajeError(response));
+        }
+        catch (HttpRequestException)
+        {
+            return (false, "No se pudo conectar con la API.");
+        }
+        catch (TaskCanceledException)
+        {
+            return (false, "La API tardo en responder.");
+        }
+    }
+
+    private static object CrearDatosViaje(ViajeViewModel modelo)
+    {
+        var paradas = (modelo.ParadasTexto ?? string.Empty)
+            .Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries |
+                StringSplitOptions.TrimEntries)
+            .ToList();
+
+        return new
+        {
+            origen = modelo.Origen.Trim(),
+            destino = modelo.Destino.Trim(),
+
+            diasSemana = modelo.DiasSemana,
+            horaSalida = modelo.HoraSalida.ToString(@"hh\:mm\:ss"),
+            horaLlegada = modelo.HoraLlegada.ToString(@"hh\:mm\:ss"),
+
+            cantMaxPaquetes = modelo.CantMaxPaquetes,
+            pesoMax = modelo.PesoMax,
+            desvioMaxKm = modelo.DesvioMaxKm,
+
+            paradas
+        };
+    }
+
+    private static async Task<string> ObtenerMensajeError(HttpResponseMessage response)
+    {
+        var contenido = await response.Content.ReadAsStringAsync();
+
+        if (string.IsNullOrWhiteSpace(contenido))
+            return $"Error de API: {(int)response.StatusCode}.";
+
+        try
+        {
+            using var documento = JsonDocument.Parse(contenido);
+            var raiz = documento.RootElement;
+
+            if (raiz.TryGetProperty("mensaje", out var mensaje))
+                return mensaje.GetString() ?? "La solicitud no pudo completarse.";
+
+            if (raiz.TryGetProperty("title", out var titulo))
+                return titulo.GetString() ?? "La solicitud no pudo completarse.";
+        }
+        catch (JsonException)
+        {
+            return "La API devolvió una respuesta invalida.";
+        }
+
+        return $"Error de API: {(int)response.StatusCode}.";
     }
 }

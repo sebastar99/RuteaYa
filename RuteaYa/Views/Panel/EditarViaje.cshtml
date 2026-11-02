@@ -1,0 +1,145 @@
+@model RuteaYa.Web.Models.ViajeViewModel
+
+@{
+    ViewData["Title"] = "Editar viaje";
+    ViewData["ActivePage"] = "Viajes";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+
+    var diasSeleccionados = Model.DiasSemana ?? new List<int>();
+    var paradasTexto = Model.ParadasTexto ?? string.Join(
+        ", ",
+        (Model.Paradas ?? new List<RuteaYa.Web.Models.ParadaViewModel>())
+            .OrderBy(p => p.Orden)
+            .Select(p => p.Ubicacion)
+    );
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / GESTION</span>
+        <h1>Editar viaje</h1>
+        <p>Actualizar el recorrido, los horarios y la capacidad.</p>
+    </div>
+
+    <a class="panel-button outline" asp-controller="Panel"
+    asp-action="DetalleViaje" asp-route-id="@Model.Id"
+    >
+        ← Volver al detalle
+    </a>
+</div>
+
+<div class="panel-card">
+    <form asp-controller="Panel" asp-action="EditarViaje" method="post">
+
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+
+        <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
+
+        <div class="panel-form-grid">
+
+            <div class="panel-field">
+                <label asp-for="Origen">Origen</label>
+                <input asp-for="Origen" class="panel-input" />
+                <span asp-validation-for="Origen" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="Destino">Destino</label>
+                <input asp-for="Destino" class="panel-input" />
+                <span asp-validation-for="Destino" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="HoraSalida">Hora de salida</label>
+                <input asp-for="HoraSalida" type="time" class="panel-input" step="60" />
+                <span asp-validation-for="HoraSalida" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="HoraLlegada">Hora de llegada</label>
+                <input asp-for="HoraLlegada" type="time" class="panel-input" step="60" />
+                <span asp-validation-for="HoraLlegada" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="CantMaxPaquetes">Cantidad maxima de paquetes</label>
+
+                <input asp-for="CantMaxPaquetes" type="number" min="1" max="100" 
+                    class="panel-input" 
+                />
+
+                <span asp-validation-for="CantMaxPaquetes" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="PesoMax">Peso maximo (kg)</label>
+
+                <input asp-for="PesoMax" type="number" min="0.01" max="100000" 
+                    step="0.01" class="panel-input" 
+                />
+
+                <span asp-validation-for="PesoMax" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="DesvioMaxKm">Desvio maximo (km)</label>
+
+                <input asp-for="DesvioMaxKm" type="number" min="0" max="100000" 
+                    step="0.01" class="panel-input" 
+                />
+
+                <span asp-validation-for="DesvioMaxKm" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label for="ParadasTexto">Paradas intermedias</label>
+
+                <input id="ParadasTexto" name="ParadasTexto" value="@paradasTexto"
+                    class="panel-input" placeholder="Ej.: Lujan, Mercedes" 
+                />
+
+                <small>Separar las paradas con comas y respetar el orden deseado.</small>
+            </div>
+        </div>
+
+        <div class="panel-field">
+
+            <label>Dias de circulacion</label>
+
+            <div class="panel-form-grid">
+                @foreach (var dia in new[]
+                {
+                    (Id: 1, Nombre: "Lunes"),
+                    (Id: 2, Nombre: "Martes"),
+                    (Id: 3, Nombre: "Miercoles"),
+                    (Id: 4, Nombre: "Jueves"),
+                    (Id: 5, Nombre: "Viernes"),
+                    (Id: 6, Nombre: "Sabado"),
+                    (Id: 7, Nombre: "Domingo")
+                })
+                {
+                    <label>
+                        <input type="checkbox" name="DiasSemana"
+                            value="@dia.Id" checked="@diasSeleccionados.Contains(dia.Id)" 
+                        />
+                        @dia.Nombre
+                    </label>
+                }
+            </div>
+
+            <span asp-validation-for="DiasSemana" class="text-danger"></span>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-top:24px;">
+            <button type="submit" class="panel-button">
+                Guardar cambios
+            </button>
+
+            <a class="panel-button outline" asp-controller="Panel" 
+            asp-action="DetalleViaje" asp-route-id="@Model.Id">
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
