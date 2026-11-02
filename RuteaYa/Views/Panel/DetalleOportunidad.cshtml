@@ -1,4 +1,57 @@
-@{ ViewData["Title"]="Detalle de oportunidad"; ViewData["ActivePage"]="Oportunidades"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">DETALLE</span><h1>Caballito → Lomas de Zamora</h1><p>Revisá la compatibilidad antes de aceptar el envío.</p></div><a class="panel-button outline" href="/Panel/Oportunidades">← Volver</a></div>
-<div class="panel-card"><div class="panel-route-line"><span class="panel-point"></span><strong>Caballito</strong><div class="panel-line"></div><span class="panel-point end"></span><strong>Lomas de Zamora</strong></div></div>
-<div class="panel-card"><h2>Información</h2><div class="panel-table-wrap"><table class="panel-table"><tbody><tr><td>Pago ofrecido</td><td><strong>$4.000</strong></td></tr><tr><td>Peso</td><td><strong>2 kg</strong></td></tr><tr><td>Desvío estimado</td><td><strong>1 km</strong></td></tr><tr><td>Tiempo adicional</td><td><strong>+3 minutos</strong></td></tr><tr><td>Capacidad restante</td><td><strong>8 kg · 2 paquetes</strong></td></tr><tr><td>Compatibilidad</td><td><strong>Alta</strong></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Datos de demostración. El detalle real se obtendrá desde la API cuando se conecte la lógica correspondiente.</p><div class="panel-form-actions"><a class="panel-button outline" href="/Panel/Oportunidades">Volver al listado</a><button class="panel-button" onclick="alert('Esta acción se conectará a la API en una etapa posterior.')">Continuar</button></div></div>
+@model RuteaYa.Web.Models.DetalleOportunidadViewModel
+@{
+    ViewData["Title"] = "Detalle de oportunidad";
+    ViewData["ActivePage"] = "Oportunidades";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">DETALLE DEL CANDIDATO</span>
+        <h1>Detalle de oportunidad</h1>
+        <p>Información publicada del envío, pendiente de evaluación para tu viaje.</p>
+    </div>
+    <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
+       asp-route-viajeId="@Model.ViajeId" asp-route-pagina="@Model.Pagina"
+       asp-route-tamanoPagina="@Model.TamanoPagina">Volver al listado</a>
+</div>
+
+@if (Model.Error != null)
+{
+    <div class="panel-card" role="alert"><p>@Model.Error</p></div>
+}
+else if (Model.Detalle != null)
+{
+    var candidato = Model.Detalle;
+    var envio = candidato.Envio;
+    <div class="panel-card">
+        <h2>Viaje #@candidato.Viaje.Id: @candidato.Viaje.Origen → @candidato.Viaje.Destino</h2>
+        <p>Estado del viaje: @(candidato.Viaje.Activo ? "Activo" : "Inactivo").
+            Esto no confirma disponibilidad ni capacidad de una salida concreta.</p>
+        <span class="panel-pill orange">Pendiente de evaluación</span>
+    </div>
+    <div class="panel-card">
+        <h2>Envío #@envio.Id</h2>
+        <div class="panel-table-wrap">
+            <table class="panel-table">
+                <tbody>
+                    <tr><th scope="row">Dirección de retiro</th><td>@envio.OrigenDir</td></tr>
+                    <tr><th scope="row">Dirección de entrega</th><td>@envio.DestinoDir</td></tr>
+                    <tr><th scope="row">Descripción</th><td>@envio.Descripcion</td></tr>
+                    <tr><th scope="row">Peso publicado</th><td>@envio.PesoKg.ToString("0.##") kg</td></tr>
+                    <tr><th scope="row">Tamaño</th><td>@envio.TamanoTexto</td></tr>
+                    <tr><th scope="row">Fecha límite publicada</th><td>@(envio.FechaLimite == default ? "No informada" : envio.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</td></tr>
+                    <tr><th scope="row">Monto ofrecido</th><td>@envio.Monto.ToString("C")</td></tr>
+                    <tr><th scope="row">Estado de publicación</th><td>Buscando conductor</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="panel-note">La fecha se muestra tal como fue publicada, sin interpretar su zona horaria.
+            La disponibilidad por estado se verificó al consultar; no representa una reserva.</p>
+    </div>
+    <div class="panel-alert" role="note">
+        Este candidato no tiene compatibilidad confirmada. Aún no se verificaron coordenadas confirmadas,
+        una salida concreta, capacidad restante, distancias, desvíos ni restricciones temporales.
+        No se calculó una hora de entrega y todavía no se pueden aceptar paquetes.
+    </div>
+}

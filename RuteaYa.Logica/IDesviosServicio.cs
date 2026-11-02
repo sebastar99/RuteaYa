@@ -5,6 +5,18 @@ namespace RuteaYa.Logica;
 public interface IDesviosServicio
 {
     /// <summary>
+    /// Valida y copia los datos y calcula la ruta base una sola vez.
+    /// Devuelve una evaluación local para consultar varias inserciones sin recalcularla.
+    /// Una nueva invocación siempre vuelve a calcular su propia base.
+    /// </summary>
+    Task<IEvaluacionDesvios> PrepararAsync(
+        IReadOnlyList<PuntoRutaDto> rutaBase,
+        PuntoRutaDto retiro,
+        PuntoRutaDto entrega,
+        decimal desvioMaxKm,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Compara el recorrido base con uno que incorpora retiro y entrega.
     /// El límite en kilómetros se aplica a la distancia adicional, no a la total.
     /// </summary>

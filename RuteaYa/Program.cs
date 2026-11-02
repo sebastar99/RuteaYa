@@ -1,5 +1,6 @@
 
 using Microsoft.AspNetCore.Authentication.Cookies;
+using RuteaYa.Logica;
 using Microsoft.EntityFrameworkCore;
 using RuteaYa.Entidades;
 using RuteaYa.Web.Services;
@@ -8,12 +9,30 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
 
+builder.Services.Configure<HereRoutingOpciones>(builder.Configuration.GetSection("HereRouting"));
+builder.Services.AddHttpClient<IRutasServicio, RutasHereServicio>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    })
+    // La API Key viaja en la query según el contrato de HERE; no registrar la URL.
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
+builder.Services.AddHttpClient<IGeocodificacionServicio, GeocodificacionHereServicio>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    })
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
 var connectionString = builder.Configuration.GetConnectionString("RuteaYa")
     ?? throw new InvalidOperationException(
         "No se configuró la conexión RuteaYa para MVC.");
 
 builder.Services.AddDbContext<RuteaYaDbContext>(options =>
     options.UseSqlServer(connectionString));
+
+builder.Services.AddScoped<IOportunidadesLogica, OportunidadesLogica>();
 
 builder.Services.AddHttpContextAccessor();
 
