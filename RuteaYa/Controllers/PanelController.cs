@@ -79,11 +79,11 @@ namespace RuteaYa.Web.Controllers
                 );
             }
 
-            if (modelo.HoraLlegada <= modelo.HoraSalida)
+            if (modelo.HoraLlegada == modelo.HoraSalida)
             {
                 ModelState.AddModelError(
                     nameof(modelo.HoraLlegada),
-                    "La hora de llegada debe ser despues de la hora de salida."
+                    "La hora de llegada no puede ser igual a la de salida."
                 );
             }
 
@@ -185,11 +185,11 @@ namespace RuteaYa.Web.Controllers
                 );
             }
 
-            if(modelo.HoraLlegada <= modelo.HoraSalida)
+            if(modelo.HoraLlegada == modelo.HoraSalida)
             {
                 ModelState.AddModelError(
                     nameof(modelo.HoraLlegada),
-                    "La hora de llegada debe ser despues de la hora de salida."
+                    "La hora de llegada no puede ser igual a la de salida."
                 );
             }
 
@@ -640,6 +640,72 @@ namespace RuteaYa.Web.Controllers
                 _ => string.Empty
             };
 
-        public IActionResult Potencial() => View();
+        [HttpGet]
+        public async Task<IActionResult> Potencial()
+        {
+            var usuarioId = ObtenerUsuarioId();
+
+            if (usuarioId <= 0)
+            {
+                return Forbid();
+            }
+
+            var hoy = DateTime.Now.Date;
+
+            var viajesActivos = _dbContext.Viajes
+                .AsNoTracking()
+                .Where(v => v.UsuarioId == usuarioId && v.Activo);
+
+            var candidatos = _dbContext.Envios
+                .AsNoTracking()
+                .Where(e => e.UsuarioId != usuarioId &&
+                            e.Estado == EstadoEnvio.BuscandoConductor &&
+                            e.FechaLimite >= hoy);
+
+            var modelo = new PotencialViewModel
+            {
+                ViajesAnalizados = await viajesActivos.CountAsync()
+            };
+
+            if (modelo.ViajesAnalizados == 0)
+            {
+                modelo.MontosSemanales = new List<decimal> { 0, 0, 0, 0 };
+                return View(modelo);
+            }
+
+            var envios = await candidatos
+                .Select(e => new { e.Id, e.OrigenDir, e.DestinoDir, e.Descripcion, e.Monto, e.FechaLimite })
+                .ToListAsync();
+
+            var capacidad = await viajesActivos.SumAsync(v => (int?)v.CantMaxPaquetes) ?? 0;
+
+            modelo.EnviosCandidatos = envios.Count;
+            modelo.PotencialTotal = envios.Sum(e => e.Monto);
+            modelo.PaquetesPosibles = Math.Min(envios.Count, capacidad);
+
+            // Monto de los envios que vencen en cada una de las proximas 4 semanas.
+            modelo.MontosSemanales = Enumerable.Range(0, 4)
+                .Select(i => envios
+                    .Where(e => e.FechaLimite.Date >= hoy.AddDays(7 * i) &&
+                                e.FechaLimite.Date < hoy.AddDays(7 * (i + 1)))
+                    .Sum(e => e.Monto))
+                .ToList();
+
+            var mejor = envios.OrderByDescending(e => e.Monto).FirstOrDefault();
+
+            if (mejor != null)
+            {
+                modelo.MejorEnvio = new EnvioDashboardViewModel
+                {
+                    Id = mejor.Id,
+                    Origen = mejor.OrigenDir,
+                    Destino = mejor.DestinoDir,
+                    Descripcion = mejor.Descripcion,
+                    Importe = mejor.Monto
+                };
+            }
+
+            return View(modelo);
+        }
     }
 }

@@ -19,6 +19,8 @@ namespace RuteaYa.Logica
         //lista de envios de un usuario(filtrado por estados)
         public async Task<List<EnvioDto>> ListarAsync(int usuarioId, EstadoEnvio? estado = null)
         {
+            if (usuarioId <= 0)
+                throw new ArgumentException("Usuario no válido.");
 
             var consulta = _db.Envios
                 .AsNoTracking()
@@ -37,6 +39,9 @@ namespace RuteaYa.Logica
         // Busca envío por ID para el usuario
         public async Task<EnvioDto?> ObtenerAsync(int usuarioId, int id)
         {
+            if (usuarioId <= 0 || id <= 0)
+                throw new ArgumentException("Los identificadores no son válidos.");
+
             var envio = await _db.Envios
                 .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.Id == id && e.UsuarioId == usuarioId);
@@ -47,6 +52,12 @@ namespace RuteaYa.Logica
         // Valida y guarda un nuevo envío
         public async Task<EnvioDto> CrearAsync(int usuarioId, CrearEnvioDto dto)
         {
+            if (usuarioId <= 0)
+                throw new ArgumentException("Usuario no válido.");
+
+            if (dto == null)
+                throw new ArgumentException("Los datos del envío son obligatorios.");
+
             Validar(dto);
 
             var envio = new Envio
@@ -72,6 +83,9 @@ namespace RuteaYa.Logica
         // Cancela un envío (Regla TP: No se puede cancelar si ya fue entregado)
         public async Task<bool> CancelarAsync(int usuarioId, int id)
         {
+            if (usuarioId <= 0 || id <= 0)
+                throw new ArgumentException("Los identificadores no son válidos.");
+
             var envio = await _db.Envios
                 .FirstOrDefaultAsync(e => e.Id == id && e.UsuarioId == usuarioId);
 
@@ -90,9 +104,19 @@ namespace RuteaYa.Logica
         }
 
         // Actualiza estado desde la perspectiva del transporte/conductor
-        public async Task<bool> ActualizarEstadoAsync(int envioId, EstadoEnvio nuevoEstado)
+        public async Task<bool> ActualizarEstadoAsync(int usuarioId, int envioId, EstadoEnvio nuevoEstado)
         {
-            var envio = await _db.Envios.FindAsync(envioId);
+            if (usuarioId <= 0)
+                throw new ArgumentException("Usuario no válido.");
+
+            if (envioId <= 0)
+                throw new ArgumentException("Envío no válido.");
+
+            if (!Enum.IsDefined(typeof(EstadoEnvio), nuevoEstado))
+                throw new ArgumentException("Estado de envío no válido.");
+
+            var envio = await _db.Envios.FirstOrDefaultAsync(
+                e => e.Id == envioId && e.UsuarioId == usuarioId);
 
             if (envio == null) return false;
 
@@ -100,12 +124,18 @@ namespace RuteaYa.Logica
             if (envio.Estado == EstadoEnvio.Entregado || envio.Estado == EstadoEnvio.Cancelado)
                 throw new ArgumentException("No se puede modificar un envío finalizado.");
 
-            // Validaciones de transición de estados
-            if (nuevoEstado == EstadoEnvio.EnCamino && envio.Estado != EstadoEnvio.Retirado)
-                throw new ArgumentException("El paquete debe ser retirado antes de estar en camino.");
+            bool transicionValida = (envio.Estado, nuevoEstado) switch
+            {
+                (EstadoEnvio.BuscandoConductor, EstadoEnvio.ConductorAsignado) => true,
+                (EstadoEnvio.ConductorAsignado, EstadoEnvio.Retirado) => true,
+                (EstadoEnvio.Retirado, EstadoEnvio.EnCamino) => true,
+                (EstadoEnvio.EnCamino, EstadoEnvio.Entregado) => true,
+                (_, EstadoEnvio.Cancelado) => true,
+                _ => false
+            };
 
-            if (nuevoEstado == EstadoEnvio.Entregado && envio.Estado != EstadoEnvio.EnCamino)
-                throw new ArgumentException("El paquete debe estar en camino antes de marcarse como entregado.");
+            if (!transicionValida)
+                throw new ArgumentException("La transición de estado solicitada no está permitida.");
 
             envio.Estado = nuevoEstado;
             await _db.SaveChangesAsync();

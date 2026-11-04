@@ -95,6 +95,11 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (dto == null)
+        {
+            return BadRequest(new { mensaje = "Los datos del viaje son obligatorios." });
+        }
            
         try {
             var resultado = await _viajesLogica.CrearViajeAsync(usuarioId, dto);
@@ -129,6 +134,16 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje no válido." });
+        }
+
+        if (dto == null)
+        {
+            return BadRequest(new { mensaje = "Los datos del viaje son obligatorios." });
+        }
             
         try {
             var resultado = await _viajesLogica.EditarViajeAsync(usuarioId, id, dto);
@@ -159,6 +174,11 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje no válido." });
+        }
             
         var resultado = await _viajesLogica.DesactivarViajeAsync(usuarioId, id);
 
@@ -179,6 +199,16 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
 
+        }
+
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje no válido." });
+        }
+
+        if (dto == null)
+        {
+            return BadRequest(new { mensaje = "Los datos de la parada son obligatorios." });
         }
             
         try {
@@ -211,6 +241,11 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (id <= 0 || paradaId <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje o parada no válido." });
+        }
            
         var resultado = await _viajesLogica.EliminarParadaAsync(usuarioId, id, paradaId);
 
@@ -232,7 +267,12 @@ public class ViajesController : ControllerBase
             return Unauthorized();
         }
             
-        if (dto.ParadasIds is null)
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje no válido." });
+        }
+
+        if (dto?.ParadasIds is null)
         {
             return BadRequest(new {mensaje = "La lista de paradas es obligatoria."});
         }

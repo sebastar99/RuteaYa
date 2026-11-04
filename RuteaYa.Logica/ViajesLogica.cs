@@ -17,6 +17,8 @@ public class ViajesLogica : IViajesLogica
     // ============== Lista viajes por usuario (filtra: activos/inactivos) ==============
     public async Task<List<ViajeDto>> ListarViajesAsync(int usuarioId, string estado = "todos")
     {
+        ValidarUsuarioId(usuarioId);
+
         var consulta = _db.Viajes
             .AsNoTracking()
             .Where(v => v.UsuarioId == usuarioId);
@@ -49,6 +51,8 @@ public class ViajesLogica : IViajesLogica
     // ================================ Busca viaje ==========================
     public async Task<ViajeDto?> ObtenerPorIdAsync(int usuarioId, int id)
     {
+        ValidarViajeId(usuarioId, id);
+
         var viaje = await _db.Viajes
             .Include(v => v.Dias)
             .Include(v => v.Paradas)
@@ -60,6 +64,13 @@ public class ViajesLogica : IViajesLogica
     // =========================== Valida y guarda nuevo viaje =======================
     public async Task<(bool Exito, string mensaje, ViajeDto? viaje)> CrearViajeAsync(int usuarioId, CrearViajeDto dto)
     {
+        ValidarUsuarioId(usuarioId);
+
+        if (dto == null)
+        {
+            return (false, "Los datos del viaje son obligatorios.", null);
+        }
+
         var error = Validar(dto);
         if(error != null)
         {
@@ -105,6 +116,13 @@ public class ViajesLogica : IViajesLogica
     // ============================= Modifica viaje ==============================
     public async Task<(bool exito, string mensaje, ViajeDto? viaje)> EditarViajeAsync(int usuarioId, int id, EditarViajeDto dto)
     {
+        ValidarViajeId(usuarioId, id);
+
+        if (dto == null)
+        {
+            return (false, "Los datos del viaje son obligatorios.", null);
+        }
+
         var error = Validar(dto);
         if(error != null)
         {
@@ -160,6 +178,8 @@ public class ViajesLogica : IViajesLogica
     // ============================ Desactiva viaje sin borrarlo de BD =============================
     public async Task<(bool exito, string mensaje)> DesactivarViajeAsync(int usuarioId, int id)
     {
+        ValidarViajeId(usuarioId, id);
+
         var viaje = await _db.Viajes
             .FirstOrDefaultAsync(v => v.Id == id && v.UsuarioId == usuarioId);
         
@@ -185,6 +205,8 @@ public class ViajesLogica : IViajesLogica
         string ubicacion,
         int Orden
     ) {
+        ValidarViajeId(usuarioId, viajeId);
+
         var viaje = await _db.Viajes
             .Include(v => v.Paradas)
             .FirstOrDefaultAsync(v => v.Id == viajeId && v.UsuarioId == usuarioId);
@@ -260,6 +282,8 @@ public class ViajesLogica : IViajesLogica
     // ======================== Elimina parada (reorganiza posicion) ============================
     public async Task<(bool exito, string mensaje)> EliminarParadaAsync(int usuarioId, int viajeId, int paradaId)
     {
+        ValidarViajeId(usuarioId, viajeId);
+
         var viaje = await _db.Viajes
             .Include(v => v.Paradas)
             .FirstOrDefaultAsync(v => v.Id == viajeId && v.UsuarioId == usuarioId);
@@ -314,6 +338,8 @@ public class ViajesLogica : IViajesLogica
         int viajeId,
         List<int> paradasId
     ) {
+        ValidarViajeId(usuarioId, viajeId);
+
         if (paradasId == null)
         {
             return (false, "La lista de paradas es obligatoria.");
@@ -370,6 +396,20 @@ public class ViajesLogica : IViajesLogica
 
 
     // ================================== METODOS ============================
+    private static void ValidarUsuarioId(int usuarioId)
+    {
+        if (usuarioId <= 0)
+            throw new ArgumentException("Usuario no válido.");
+    }
+
+    private static void ValidarViajeId(int usuarioId, int viajeId)
+    {
+        ValidarUsuarioId(usuarioId);
+
+        if (viajeId <= 0)
+            throw new ArgumentException("ID de viaje no válido.");
+    }
+
     private static ViajeDto Convertir(Viaje v) => new()
     {
         Id = v.Id,
@@ -425,24 +465,35 @@ public class ViajesLogica : IViajesLogica
             return "Debes seleccionar un dia valido para el viaje.";
         }
         
-        if(dto.CantMaxPaquetes <= 0)
+        if(dto.DiasSemana.Distinct().Count() != dto.DiasSemana.Count)
         {
-            return "No se pueden elegir numeros negativos.";
+            return "No se pueden repetir los días de circulación.";
+        }
+
+        if(dto.CantMaxPaquetes < 1 || dto.CantMaxPaquetes > 100)
+        {
+            return "La cantidad de paquetes debe estar entre 1 y 100.";
         }
         
-        if(dto.PesoMax <= 0 )
+        if(dto.PesoMax <= 0 || dto.PesoMax > 100000)
         {
-            return "Revisa que el peso sea valido.";
+            return "El peso máximo no es válido.";
         }
-        if(dto.DesvioMaxKm < 0)
+        if(dto.DesvioMaxKm < 0 || dto.DesvioMaxKm > 100000)
         {
-            return "Revisa que el desvio maximo sea valido.";
+            return "El desvío máximo no es válido.";
         }
 
         if(dto.HoraSalida < TimeSpan.Zero || dto.HoraSalida >= TimeSpan.FromDays(1) ||
             dto.HoraLlegada < TimeSpan.Zero || dto.HoraLlegada >= TimeSpan.FromDays(1)
         ) {
             return "Los horarios no son validos.";
+        }
+
+        // Una llegada menor a la salida se interpreta como llegada al dia siguiente.
+        if(dto.HoraLlegada == dto.HoraSalida)
+        {
+            return "La hora de llegada no puede ser igual a la de salida.";
         }
         
         if(dto.Paradas == null)

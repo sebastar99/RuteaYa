@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using RuteaYa.Entidades;
 using RuteaYa.Web.Models;
 using RuteaYa.Web.Services;
 
@@ -201,10 +203,107 @@ namespace RuteaYa.Web.Controllers
 
         [Authorize]
         [HttpGet]
-        public IActionResult Inicio()
+        public async Task<IActionResult> Inicio([FromServices] RuteaYaDbContext db)
         {
-            return View();
+            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var usuarioId) || usuarioId <= 0)
+                return Forbid();
+
+            var hoy = DateTime.Now.Date;
+
+            var viajesActivos = db.Viajes
+                .AsNoTracking()
+                .Where(v => v.UsuarioId == usuarioId && v.Activo);
+
+            var enviosPendientes = db.Envios
+                .AsNoTracking()
+                .Where(e => e.UsuarioId == usuarioId &&
+                            e.Estado != EstadoEnvio.Entregado &&
+                            e.Estado != EstadoEnvio.Cancelado);
+
+            // Envios de otros usuarios que buscan conductor (solo si el usuario tiene viajes activos).
+            var candidatos = db.Envios
+                .AsNoTracking()
+                .Where(e => e.UsuarioId != usuarioId &&
+                            e.Estado == EstadoEnvio.BuscandoConductor &&
+                            e.FechaLimite >= hoy);
+
+            var modelo = new DashboardViewModel
+            {
+                ProximosViajes = await viajesActivos.CountAsync(),
+                EnviosPendientes = await enviosPendientes.CountAsync()
+            };
+
+            if (modelo.ProximosViajes > 0)
+            {
+                modelo.OportunidadesDisponibles = await candidatos.CountAsync();
+                modelo.PotencialMensual = await candidatos.SumAsync(e => (decimal?)e.Monto) ?? 0m;
+            }
+
+            var viajes = await viajesActivos
+                .OrderByDescending(v => v.Id)
+                .Take(3)
+                .Select(v => new
+                {
+                    v.Id,
+                    v.Origen,
+                    v.Destino,
+                    v.HoraSalida,
+                    v.HoraLlegada,
+                    Dias = v.Dias.Select(d => d.DiaSemana).ToList()
+                })
+                .ToListAsync();
+
+            modelo.ViajesRecientes = viajes.Select(v => new ViajeDashboardViewModel
+            {
+                Id = v.Id,
+                Origen = v.Origen,
+                Destino = v.Destino,
+                Dias = string.Join(", ", v.Dias.OrderBy(d => d).Select(NombreDia)),
+                HorarioSalida = v.HoraSalida.ToString(@"hh\:mm"),
+                HorarioLlegada = v.HoraLlegada.ToString(@"hh\:mm"),
+                Estado = "Activo"
+            }).ToList();
+
+            var envios = await enviosPendientes
+                .OrderByDescending(e => e.Id)
+                .Take(3)
+                .Select(e => new { e.Id, e.OrigenDir, e.DestinoDir, e.Descripcion, e.Monto, e.Estado })
+                .ToListAsync();
+
+            modelo.EnviosPendientesLista = envios.Select(e => new EnvioDashboardViewModel
+            {
+                Id = e.Id,
+                Origen = e.OrigenDir,
+                Destino = e.DestinoDir,
+                Descripcion = e.Descripcion,
+                Importe = e.Monto,
+                Estado = TextoEstado(e.Estado),
+                EstadoCss = e.Estado == EstadoEnvio.BuscandoConductor ? "orange" : "blue"
+            }).ToList();
+
+            return View(modelo);
         }
+
+        private static string NombreDia(int dia) => dia switch
+        {
+            1 => "Lun",
+            2 => "Mar",
+            3 => "Mié",
+            4 => "Jue",
+            5 => "Vie",
+            6 => "Sáb",
+            7 => "Dom",
+            _ => dia.ToString()
+        };
+
+        private static string TextoEstado(EstadoEnvio estado) => estado switch
+        {
+            EstadoEnvio.BuscandoConductor => "Buscando conductor",
+            EstadoEnvio.ConductorAsignado => "Conductor asignado",
+            EstadoEnvio.Retirado => "Retirado",
+            EstadoEnvio.EnCamino => "En camino",
+            _ => estado.ToString()
+        };
 
         [Authorize]
         [HttpPost]

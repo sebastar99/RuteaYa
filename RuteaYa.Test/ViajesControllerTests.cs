@@ -250,6 +250,78 @@ public class ViajesControllerTests
     }
 
     [Fact]
+    public async Task EditarViaje_IdInvalido_RetornaBadRequest()
+    {
+        var dto = new EditarViajeDto();
+
+        var resultado = await _controller.EditarViaje(0, dto);
+
+        Assert.IsType<BadRequestObjectResult>(resultado);
+
+        _logica.Verify(
+            x => x.EditarViajeAsync(
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<EditarViajeDto>()
+            ),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public async Task ObtenerViaje_UsuarioNoAutenticado_RetornaUnauthorized()
+    {
+        ConfigurarUsuario(0);
+
+        var resultado = await _controller.ObtenerPorId(10);
+
+        Assert.IsType<UnauthorizedResult>(resultado);
+
+        _logica.Verify(
+            x => x.ObtenerPorIdAsync(
+                It.IsAny<int>(),
+                It.IsAny<int>()
+            ),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public async Task EditarViaje_UtilizaUsuarioDelToken()
+    {
+        ConfigurarUsuario(7);
+
+        var dto = new EditarViajeDto
+        {
+            Origen = "Avellaneda",
+            Destino = "Quilmes",
+            DiasSemana = new() { 1 },
+            HoraSalida = new TimeSpan(8, 0, 0),
+            HoraLlegada = new TimeSpan(9, 0, 0),
+            CantMaxPaquetes = 5,
+            PesoMax = 50,
+            DesvioMaxKm = 3
+        };
+
+        _logica
+            .Setup(x => x.EditarViajeAsync(7, 10, dto))
+            .ReturnsAsync((
+                true,
+                "Editado",
+                new ViajeDto { Id = 10, UsuarioId = 7 }
+            ));
+
+        var resultado = await _controller.EditarViaje(10, dto);
+
+        Assert.IsType<OkObjectResult>(resultado);
+
+        _logica.Verify(
+            x => x.EditarViajeAsync(7, 10, dto),
+            Times.Once
+        );
+    }
+
+    [Fact]
     public async Task UsuarioSinIdentidad_NoPuedeCrearViaje()
     {
         ConfigurarUsuario(0);
