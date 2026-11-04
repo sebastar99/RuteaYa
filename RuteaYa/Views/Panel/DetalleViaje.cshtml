@@ -1,4 +1,299 @@
-@{ ViewData["Title"]="Detalle del viaje"; ViewData["ActivePage"]="Viajes"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">DETALLE</span><h1>Belgrano → Lomas de Zamora</h1><p>Consultá horarios, capacidad y paquetes asignados.</p></div><a class="panel-button outline" href="/Panel/Viajes">← Volver</a></div>
-<div class="panel-card"><div class="panel-route-line"><span class="panel-point"></span><strong>Belgrano</strong><div class="panel-line"></div><span class="panel-point end"></span><strong>Lomas de Zamora</strong></div></div>
-<div class="panel-card"><h2>Información</h2><div class="panel-table-wrap"><table class="panel-table"><tbody><tr><td>Estado</td><td><strong>Activo</strong></td></tr><tr><td>Días</td><td><strong>Lun, Mié, Vie</strong></td></tr><tr><td>Horario</td><td><strong>08:00 – 08:55</strong></td></tr><tr><td>Capacidad</td><td><strong>3 paquetes</strong></td></tr><tr><td>Peso máximo</td><td><strong>10 kg</strong></td></tr><tr><td>Desvío máximo</td><td><strong>5 km</strong></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Datos de demostración. El detalle real se obtendrá desde la API cuando se conecte la lógica correspondiente.</p><div class="panel-form-actions"><a class="panel-button outline" href="/Panel/Viajes">Volver al listado</a><button class="panel-button" onclick="alert('Esta acción se conectará a la API en una etapa posterior.')">Continuar</button></div></div>
+@model RuteaYa.Web.Models.ViajeViewModel
+
+@{
+    ViewData["Title"] = "Detalle del viaje";
+    ViewData["ActivePage"] = "Viajes";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+
+    var dias = Model.DiasSemana ?? new List<int>();
+    var paradas = Model.Paradas ?? new List<RuteaYa.Web.Models.ParadaViewModel>();
+
+    string NombreDia(int dia) => dia switch
+    {
+        1 => "Lun",
+        2 => "Mar",
+        3 => "Mie",
+        4 => "Jue",
+        5 => "Vie",
+        6 => "Sab",
+        7 => "Dom",
+        _ => dia.ToString()
+    };
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / GESTION</span>
+        <h1>Detalle del viaje</h1>
+        <p>Revisa el recorrido, los horarios y la capacidad configurada.</p>
+    </div>
+
+    <a class="panel-button outline" asp-controller="Panel" asp-action="Viajes">
+        ← Volver a mis viajes
+    </a>
+</div>
+
+@if (TempData["MensajeExito"] is string mensajeExito)
+{
+    <div class="panel-alert success" role="status">
+        @mensajeExito
+    </div>
+}
+
+@if (TempData["MensajeError"] is string mensajeError)
+{
+    <div class="panel-alert danger" role="alert">
+        @mensajeError
+    </div>
+}
+
+@if (ViewBag.Error is string error && !string.IsNullOrWhiteSpace(error))
+{
+    <div class="panel-card" role="alert">
+        <strong>No se pudo cargar el viaje.</strong>
+        <p>@error</p>
+    </div>
+}
+else
+{
+    <div class="panel-card">
+
+        <div class="detail-head">
+            <div>
+                <span class="eyebrow">RECORRIDO</span>
+                <h2>@Model.Origen → @Model.Destino</h2>
+            </div>
+
+            @if (Model.Activo)
+            {
+                <span class="panel-pill green">Activo</span>
+            }
+            else
+            {
+                <span class="panel-pill blue">Inactivo</span>
+            }
+        </div>
+
+        @if (Model.Activo)
+        {
+            <div class="detail-actions">
+                <a asp-controller="Panel" asp-action="EditarViaje"
+                    asp-route-id="@Model.Id" class="panel-button">
+                    Editar viaje
+                </a>
+
+                <form asp-controller="Panel" asp-action="DesactivarViaje" asp-route-id="@Model.Id"
+                    method="post" onsubmit="return confirm('¿Querés desactivar este viaje?');">
+
+                    @Html.AntiForgeryToken()
+
+                    <button type="submit" class="panel-button danger">
+                        Desactivar viaje
+                    </button>
+                </form>
+            </div>
+        }
+
+        <div class="panel-stats">
+
+            <div class="panel-stat">
+                <span>Hora de salida</span>
+                <strong>
+                    @Model.HoraSalida.ToString(@"hh\:mm")
+                </strong>
+            </div>
+
+            <div class="panel-stat">
+                <span>Hora de llegada</span>
+                <strong>
+                    @Model.HoraLlegada.ToString(@"hh\:mm")
+                </strong>
+            </div>
+
+            <div class="panel-stat">
+                <span>Máximo de paquetes</span>
+                <strong>@Model.CantMaxPaquetes</strong>
+            </div>
+
+        </div>
+
+        <hr class="panel-divider" />
+
+        <div class="panel-form-grid">
+
+            <div class="panel-field">
+                <label>Días de circulación</label>
+                <p>
+                    @if (dias.Count > 0)
+                    {
+                        @string.Join(", ", dias.Select(NombreDia))
+                    }
+                    else
+                    {
+                        <span class="panel-muted">No hay días registrados.</span>
+                    }
+                </p>
+            </div>
+
+            <div class="panel-field">
+                <label>Peso máximo</label>
+                <p>@Model.PesoMax kg</p>
+            </div>
+
+            <div class="panel-field">
+                <label>Desvío máximo</label>
+                <p>@Model.DesvioMaxKm km</p>
+            </div>
+
+            <div class="panel-field">
+                <label>Estado</label>
+                <p>@(Model.Activo ? "Activo" : "Inactivo")</p>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="panel-card">
+        <h2>Paradas intermedias</h2>
+
+        @if (Model.Activo)
+        {
+            <form asp-controller="Panel" asp-action="AgregarParada" method="post" class="panel-form">
+                @Html.AntiForgeryToken()
+
+                <input type="hidden" name="viajeId" value="@Model.Id" />
+
+                <div class="panel-form-grid">
+
+                    <div class="panel-field">
+                        <label for="ubicacion">Ubicación de la parada</label>
+
+                        <input type="text" id="ubicacion" name="ubicacion"  maxlength="150"
+                            required class="panel-input" placeholder="Ej. Chivilcoy, Buenos Aires" 
+                        />
+                    </div>
+
+                    <div class="panel-field">
+                        <label for="orden">Orden de la parada</label>
+
+                        <input type="number" id="orden" name="orden" min="1" max="100"
+                            value="@(paradas.Count + 1)" required class="panel-input" 
+                        />
+                    </div>
+                </div>
+
+                <div class="panel-form-actions">
+                    <button type="submit" class="panel-button">
+                        Agregar parada
+                    </button>
+                </div>
+            </form>
+
+            <hr class="panel-divider" />
+        }
+
+        @if (paradas.Count == 0)
+        {
+            <div class="panel-empty">
+                <p>Este viaje todavía no tiene paradas intermedias.</p>
+            </div>
+        }
+        else
+        {
+            <div class="panel-table-wrap">
+                <table class="panel-table">
+
+                    <thead>
+                        <tr>
+                            <th>Orden</th>
+                            <th>Ubicación</th>
+
+                            @if (Model.Activo)
+                            {
+                                <th>Acciones</th>
+                            }
+                            
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var parada in paradas.OrderBy(p => p.Orden))
+                        {
+                            <tr>
+                                <td>@parada.Orden</td>
+                                <td><strong>@parada.Ubicacion</strong></td>
+
+                                @if (Model.Activo)
+                                {
+                                    <td>
+                                        <form asp-controller="Panel" asp-action="EliminarParada" method="post"
+                                        onsubmit="return confirm('¿Querés eliminar esta parada?');">
+
+                                            @Html.AntiForgeryToken()
+
+                                            <input type="hidden" name="viajeId" value="@Model.Id" />
+                                            <input type="hidden" name="paradaId" value="@parada.Id" />
+
+                                            <button type="submit" class="panel-button danger small">
+                                                Eliminar
+                                            </button>
+                                        </form>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                    
+                </table>
+            </div>
+
+            @* FORMULARIO PARA REORDENAR PARADAS *@
+
+            @if (Model.Activo && paradas.Count > 1)
+            {
+                <hr class="panel-divider" />
+                <h3>Reordenar paradas</h3>
+
+                <p class="panel-note">
+                    Modificá los números para establecer un nuevo orden
+                    para el recorrido. Cada parada debe tener un número diferente.
+                </p>
+
+                <form asp-controller="Panel" asp-action="ReordenarParadas" method="post" class="panel-form">
+
+                    @Html.AntiForgeryToken()
+
+                    <input type="hidden" name="viajeId" value="@Model.Id" />
+
+                    @foreach (var parada in paradas.OrderBy(p => p.Orden))
+                    {
+                        <div class="reorder-row">
+
+                            <div class="panel-field">
+                                <label>Parada</label>
+                                <p>@parada.Ubicacion</p>
+                                <input type="hidden" name="paradasIds"  value="@parada.Id" />
+                            </div>
+
+                            <div class="panel-field">
+                                <label>Nuevo orden</label>
+                                <input type="number" class="panel-input" name="ordenes" value="@parada.Orden"
+                                    min="1" max="@paradas.Count" required />
+                            </div>
+
+                        </div>
+                    }
+
+                    <div class="panel-form-actions">
+                        <button type="submit" class="panel-button">
+                            Guardar nuevo orden
+                        </button>
+                    </div>
+
+                </form>
+            }
+        }
+
+    </div>
+}

@@ -30,6 +30,23 @@ namespace RuteaYa.Api.Controllers
         public async Task<IActionResult> Registrar(
             [FromBody] RegistroUsuarioDto dto)
         {
+            if (dto == null)
+                return BadRequest(new
+                {
+                    mensaje = "Los datos del registro son obligatorios."
+                });
+
+            if (string.IsNullOrWhiteSpace(dto.Nombre) ||
+                string.IsNullOrWhiteSpace(dto.Apellido) ||
+                string.IsNullOrWhiteSpace(dto.Email) ||
+                string.IsNullOrWhiteSpace(dto.Password))
+            {
+                return BadRequest(new
+                {
+                    mensaje = "Todos los campos son obligatorios."
+                });
+            }
+
             var usuario = new Usuario
             {
                 Nombre = dto.Nombre.Trim(),
@@ -64,93 +81,144 @@ namespace RuteaYa.Api.Controllers
         public async Task<IActionResult> Login(
             [FromBody] LoginUsuarioDto dto)
         {
-                var usuario = await _usuariosLogica.ValidarCredencialesAsync(
-                    dto.Email,
+            if (dto == null ||
+                string.IsNullOrWhiteSpace(dto.Email) ||
+                string.IsNullOrWhiteSpace(dto.Password))
+            {
+                return BadRequest(new
+                {
+                    mensaje = "El correo y la contraseña son obligatorios."
+                });
+            }
+
+            var usuario =
+                await _usuariosLogica.ValidarCredencialesAsync(
+                    dto.Email.Trim(),
                     dto.Password);
 
-                if (usuario == null)
-                {
-                    return Unauthorized(new
-                    {
-                        mensaje = "Correo o contraseña incorrectos."
-                    });
-                }
-
-                var issuer = _configuration["Jwt:Issuer"]!;
-                var audience = _configuration["Jwt:Audience"]!;
-                var key = _configuration["Jwt:Key"]!;
-
-                var claims = new List<Claim>
+            if (usuario == null)
             {
-                new(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
-                new(JwtRegisteredClaimNames.Email, usuario.Email),
-                new(ClaimTypes.Name, usuario.Nombre),
-                new("Apellido", usuario.Apellido),
-                new(JwtRegisteredClaimNames.Jti,
-                Guid.NewGuid().ToString())
+                return Unauthorized(new
+                {
+                    mensaje = "Correo o contraseña incorrectos."
+                });
+            }
+
+            var issuer = _configuration["Jwt:Issuer"];
+            var audience = _configuration["Jwt:Audience"];
+            var key = _configuration["Jwt:Key"];
+
+            if (string.IsNullOrWhiteSpace(issuer) ||
+                string.IsNullOrWhiteSpace(audience) ||
+                string.IsNullOrWhiteSpace(key))
+            {
+                return StatusCode(500, new
+                {
+                    mensaje = "La configuración JWT está incompleta."
+                });
+            }
+
+            if (Encoding.UTF8.GetByteCount(key) < 32)
+            {
+                return StatusCode(500, new
+                {
+                    mensaje = "La clave JWT debe tener al menos 32 bytes."
+                });
+            }
+
+            var claims = new List<Claim>
+            {
+                new(
+                    ClaimTypes.NameIdentifier,
+                    usuario.Id.ToString()),
+
+                new(
+                    JwtRegisteredClaimNames.Sub,
+                    usuario.Id.ToString()),
+
+                new(
+                    ClaimTypes.Name,
+                    usuario.Nombre),
+
+                new(
+                    ClaimTypes.Email,
+                    usuario.Email),
+
+                new(
+                    JwtRegisteredClaimNames.Email,
+                    usuario.Email),
+
+                new(
+                    "Apellido",
+                    usuario.Apellido),
+
+                new(
+                    JwtRegisteredClaimNames.Jti,
+                    Guid.NewGuid().ToString())
             };
 
-                var signingKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(key));
+            var signingKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(key));
 
-                var credentials = new SigningCredentials(
-                    signingKey,
-                    SecurityAlgorithms.HmacSha256);
+            var credentials = new SigningCredentials(
+                signingKey,
+                SecurityAlgorithms.HmacSha256);
 
-                var expiration = DateTime.UtcNow.AddMinutes(
-                    int.TryParse(
-                        _configuration["Jwt:ExpirationMinutes"],
-                        out var minutes)
-                        ? minutes
-                        : 30);
+            var expiration = DateTime.UtcNow.AddMinutes(
+                int.TryParse(
+                    _configuration["Jwt:ExpirationMinutes"],
+                    out var minutes) && minutes > 0
+                    ? minutes
+                    : 30);
 
-                var token = new JwtSecurityToken(
-                    issuer: issuer,
-                    audience: audience,
-                    claims: claims,
-                    expires: expiration,
-                    signingCredentials: credentials);
+            var token = new JwtSecurityToken(
+                issuer: issuer,
+                audience: audience,
+                claims: claims,
+                expires: expiration,
+                signingCredentials: credentials);
 
-                var tokenString = new JwtSecurityTokenHandler()
-                    .WriteToken(token);
+            var tokenString = new JwtSecurityTokenHandler()
+                .WriteToken(token);
 
-                return Ok(new
-                {
-                    token = tokenString,
-                    tipo = "Bearer",
-                    expiraEn = expiration,
-                    usuario = new UsuarioRespuestaDto
-                    {
-                        Id = usuario.Id,
-                        Nombre = usuario.Nombre,
-                        Apellido = usuario.Apellido,
-                        Email = usuario.Email
-                    }
-                });
+            var respuestaUsuario = new UsuarioRespuestaDto
+            {
+                Id = usuario.Id,
+                Nombre = usuario.Nombre,
+                Apellido = usuario.Apellido,
+                Email = usuario.Email,
+                Token = tokenString
+            };
+
+            return Ok(new
+            {
+                token = tokenString,
+                tipo = "Bearer",
+                expiraEn = expiration,
+                usuario = respuestaUsuario
+            });
         }
 
-        [Authorize(AuthenticationSchemes =
-            Microsoft.AspNetCore.Authentication.JwtBearer
-                .JwtBearerDefaults.AuthenticationScheme)]
+        [Authorize]
         [HttpGet("perfil")]
         public IActionResult Perfil()
         {
+            var id = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                ?? User.FindFirstValue("sub")
+                ?? User.FindFirstValue("nameid");
+
+            var email = User.FindFirstValue(
+                ClaimTypes.Email);
+
+            if (string.IsNullOrWhiteSpace(id))
+                return Unauthorized();
+
             return Ok(new
             {
                 mensaje = "Token válido",
-                id = User.FindFirst(
-                    System.Security.Claims.ClaimTypes.NameIdentifier
-                )?.Value
-                ?? User.FindFirst(
-                    System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub
-                )?.Value,
-
-                email = User.FindFirst(
-                    System.Security.Claims.ClaimTypes.Email
-                )?.Value
-                ?? User.FindFirst(
-                    System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Email
-                )?.Value
+                id = id,
+                email = email
             });
         }
     }
