@@ -21,8 +21,8 @@ namespace RuteaYa.Web.Controllers
             _viajesApiServicio = viajesApiServicio;
         }
 
-        public IActionResult Envios() => View();
-        public IActionResult NuevoEnvio() => View();
+        public IActionResult Envios() => RedirectToAction("Index", "Envios");
+        public IActionResult NuevoEnvio() => RedirectToAction("Crear", "Envios");
         public IActionResult DetalleEnvio() => View();
         public IActionResult Oportunidades(int? viajeId = null, int pagina = 1, int tamanoPagina = 10) =>
             RedirectToAction("Index", "Oportunidades", new { viajeId, pagina, tamanoPagina });
@@ -33,7 +33,7 @@ namespace RuteaYa.Web.Controllers
                 : RedirectToAction("Index", "Oportunidades", new { viajeId, pagina, tamanoPagina });
         public IActionResult Optimizador() => View();
         public IActionResult ConfirmarCombinacion() => View();
-        public IActionResult Transportes() => View();
+        public IActionResult Transportes() => RedirectToAction("Index", "Transportes");
 
         private int ObtenerUsuarioId()
         {

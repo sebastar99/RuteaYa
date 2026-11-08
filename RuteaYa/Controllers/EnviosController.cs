@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 
 namespace RuteaYa.Web.Controllers;
 
+[Authorize]
 [Route("Envios")]
 public class EnviosController : Controller
 {
@@ -99,6 +101,6 @@ public class EnviosController : Controller
     private int ObtenerUsuarioIdActual()
     {
         var usuarioIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(usuarioIdClaim, out int id) ? id : 1;
+        return int.TryParse(usuarioIdClaim, out int id) ? id : 0;
     }
 }

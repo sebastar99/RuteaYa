@@ -1,4 +1,140 @@
-@{ ViewData["Title"]="Mis transportes"; ViewData["ActivePage"]="Transportes"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">RUTEAYA / GESTIÓN</span><h1>Mis transportes</h1><p>Gestioná los paquetes que aceptaste transportar y su seguimiento.</p></div><a class="panel-button" href="/Panel/Oportunidades">＋ Buscar oportunidades</a></div>
-<div class="panel-stats"><div class="panel-stat "><span>Paquetes activos</span><strong>2</strong></div><div class="panel-stat "><span>Por retirar</span><strong>1</strong></div><div class="panel-stat "><span>En camino</span><strong>1</strong></div><div class="panel-stat highlight"><span>Pago potencial</span><strong>$7.500</strong></div></div>
-<div class="panel-card"><div class="panel-toolbar"><div><h2>Mis transportes registrados</h2><p>Contenido ilustrativo para validar la interfaz.</p></div><input class="panel-search" placeholder="Buscar..." data-filter="#listTable"/></div><div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Detalle</th><th>Información</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="listTable"><tr data-search="Zapatillas · Plaza Italia → Obelisco $4.000 · 25% del proceso Conductor asignado"><td><strong>Zapatillas · Plaza Italia → Obelisco</strong></td><td>$4.000 · 25% del proceso</td><td><span class="panel-pill blue">Conductor asignado</span></td><td><a class="panel-button outline small" href="/Panel/Transportes">Ver detalle</a></td></tr><tr data-search="Documentos · Recoleta → Quilmes $3.500 · 65% del proceso En camino"><td><strong>Documentos · Recoleta → Quilmes</strong></td><td>$3.500 · 65% del proceso</td><td><span class="panel-pill orange">En camino</span></td><td><a class="panel-button outline small" href="/Panel/Transportes">Ver detalle</a></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Los datos son de demostración. Esta pantalla aún no consulta ni modifica la base de datos.</p></div>
+@using RuteaYa.Entidades
+@model IEnumerable<RuteaYa.Logica.DTOs.EnvioDto>
+@{
+    ViewData["Title"] = "Mis transportes";
+    ViewData["ActivePage"] = "Transportes";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+
+    var transportes = Model ?? Enumerable.Empty<RuteaYa.Logica.DTOs.EnvioDto>();
+    var activos = transportes.Where(e => e.Estado is EstadoEnvio.ConductorAsignado or EstadoEnvio.Retirado or EstadoEnvio.EnCamino).ToList();
+    var porRetirar = transportes.Count(e => e.Estado == EstadoEnvio.ConductorAsignado);
+    var enCamino = transportes.Count(e => e.Estado is EstadoEnvio.Retirado or EstadoEnvio.EnCamino);
+    var pagoPotencial = activos.Sum(e => e.Monto);
+    var cultura = System.Globalization.CultureInfo.GetCultureInfo("es-AR");
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / GESTIÓN</span>
+        <h1>Mis transportes</h1>
+        <p>Gestioná los paquetes que aceptaste transportar y su seguimiento.</p>
+    </div>
+    <a class="panel-button" asp-controller="Panel" asp-action="Oportunidades">＋ Buscar oportunidades</a>
+</div>
+
+@if (TempData["Exito"] is string exito)
+{
+    <div class="panel-alert success" role="status">@exito</div>
+}
+
+@if (TempData["Error"] is string errorTemp)
+{
+    <div class="panel-alert danger" role="alert">@errorTemp</div>
+}
+
+@if (ViewBag.Error is string error && !string.IsNullOrWhiteSpace(error))
+{
+    <div class="panel-alert danger" role="alert">@error</div>
+}
+
+<div class="panel-stats">
+    <div class="panel-stat"><span>Paquetes activos</span><strong>@activos.Count</strong></div>
+    <div class="panel-stat"><span>Por retirar</span><strong>@porRetirar</strong></div>
+    <div class="panel-stat"><span>En camino</span><strong>@enCamino</strong></div>
+    <div class="panel-stat highlight"><span>Pago potencial</span><strong>@pagoPotencial.ToString("C0", cultura)</strong></div>
+</div>
+
+<div class="panel-card">
+    <div class="panel-toolbar">
+        <div>
+            <h2>Mis transportes registrados</h2>
+            <p>Envíos que aceptaste transportar.</p>
+        </div>
+        <input class="panel-search" placeholder="Buscar..." data-filter="#listTable" />
+    </div>
+
+    <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead>
+                <tr>
+                    <th>Detalle</th>
+                    <th>Información</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="listTable">
+                @if (!transportes.Any())
+                {
+                    <tr>
+                        <td colspan="4" style="text-align:center;padding:20px;">
+                            Todavía no aceptaste ningún envío. Buscalo desde Oportunidades.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var envio in transportes)
+                    {
+                        var estadoTexto = envio.Estado switch
+                        {
+                            EstadoEnvio.ConductorAsignado => "Conductor asignado",
+                            EstadoEnvio.Retirado => "Retirado",
+                            EstadoEnvio.EnCamino => "En camino",
+                            EstadoEnvio.Entregado => "Entregado",
+                            EstadoEnvio.Cancelado => "Cancelado",
+                            _ => envio.Estado.ToString()
+                        };
+
+                        var pill = envio.Estado switch
+                        {
+                            EstadoEnvio.Entregado => "green",
+                            EstadoEnvio.Cancelado => "red",
+                            EstadoEnvio.EnCamino => "orange",
+                            _ => "blue"
+                        };
+
+                        EstadoEnvio? siguiente = envio.Estado switch
+                        {
+                            EstadoEnvio.ConductorAsignado => EstadoEnvio.Retirado,
+                            EstadoEnvio.Retirado => EstadoEnvio.EnCamino,
+                            EstadoEnvio.EnCamino => EstadoEnvio.Entregado,
+                            _ => null
+                        };
+
+                        var textoBoton = siguiente switch
+                        {
+                            EstadoEnvio.Retirado => "Marcar retirado",
+                            EstadoEnvio.EnCamino => "Salir en camino",
+                            EstadoEnvio.Entregado => "Marcar entregado",
+                            _ => ""
+                        };
+
+                        <tr data-search="@envio.Descripcion @envio.OrigenDir @envio.DestinoDir @estadoTexto">
+                            <td>
+                                <strong>@envio.Descripcion</strong>
+                                <span class="panel-muted">@envio.OrigenDir → @envio.DestinoDir</span>
+                            </td>
+                            <td>@envio.Monto.ToString("C0", cultura)<span class="panel-muted">@envio.PesoKg.ToString("0.##") kg · @envio.TamanoTexto</span></td>
+                            <td><span class="panel-pill @pill">@estadoTexto</span></td>
+                            <td>
+                                @if (siguiente.HasValue)
+                                {
+                                    <form asp-controller="Transportes" asp-action="Avanzar" asp-route-id="@envio.Id" method="post">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="estado" value="@siguiente.Value" />
+                                        <button type="submit" class="panel-button small">@textoBoton</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <span class="panel-muted">Sin acciones</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

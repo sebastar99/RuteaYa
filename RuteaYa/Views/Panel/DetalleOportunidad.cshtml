@@ -52,6 +52,16 @@ else if (Model.Detalle != null)
     <div class="panel-alert" role="note">
         Este candidato no tiene compatibilidad confirmada. Aún no se verificaron coordenadas confirmadas,
         una salida concreta, capacidad restante, distancias, desvíos ni restricciones temporales.
-        No se calculó una hora de entrega y todavía no se pueden aceptar paquetes.
+        No se calculó una hora de entrega. Al aceptar, asumís la responsabilidad de evaluar si el envío entra en tu recorrido.
     </div>
+    @if (candidato.Viaje.Activo)
+    {
+        <form asp-controller="Oportunidades" asp-action="Aceptar" method="post"
+              onsubmit="return confirm('¿Querés aceptar transportar este envío con este viaje?');">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="viajeId" value="@candidato.Viaje.Id" />
+            <input type="hidden" name="envioId" value="@envio.Id" />
+            <button type="submit" class="panel-button">Tomar este envío</button>
+        </form>
+    }
 }

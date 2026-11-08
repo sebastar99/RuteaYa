@@ -146,7 +146,8 @@ public class OportunidadesVistaTest
             Assert.DoesNotContain("UsuarioId", detalleHtml);
             Assert.DoesNotContain("Desvío estimado", detalleHtml);
             Assert.DoesNotContain("Caballito", detalleHtml);
-            Assert.DoesNotContain(">Aceptar", detalleHtml);
+            Assert.Contains("Tomar este envío", detalleHtml);
+            Assert.Contains("/Oportunidades/Aceptar", detalleHtml);
             var enlaceVolver = Enlaces(detalleHtml).Single(e =>
             {
                 var uri = new Uri(cliente.BaseAddress, e);

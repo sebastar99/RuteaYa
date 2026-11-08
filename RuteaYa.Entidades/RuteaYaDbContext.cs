@@ -119,6 +119,13 @@ namespace RuteaYa.Entidades
                     .WithMany()
                     .HasForeignKey(e => e.UsuarioId)
                     .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Conductor)
+                    .WithMany()
+                    .HasForeignKey(e => e.ConductorId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(e => e.ConductorId);
             });
 
             

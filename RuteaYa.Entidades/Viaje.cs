@@ -24,7 +24,7 @@ public class Viaje {
     [Range(0.01, 100000)]
     public decimal PesoMax { get; set; }
 
-    [Range(typeof(decimal), "0", "100000")]
+    [Range(0, 100000)]
     public decimal DesvioMaxKm { get; set; }
 
     public bool Activo { get; set; }

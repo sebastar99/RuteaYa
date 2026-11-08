@@ -16,8 +16,4 @@
     <ProjectReference Include="..\RuteaYa.Logica\RuteaYa.Logica.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\RuteaYa.Logica\RuteaYa.Logica.csproj" />
-  </ItemGroup>
-
 </Project>

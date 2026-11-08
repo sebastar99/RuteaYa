@@ -18,7 +18,7 @@
 <div class="panel-alert" role="note">
     Estos envíos no son oportunidades compatibles confirmadas. Todavía no se verificaron
     coordenadas, salida concreta, capacidad disponible, desvíos ni restricciones temporales.
-    Esta pantalla no permite aceptar paquetes.
+    Podés aceptar un envío desde su detalle; quedará asignado a tu viaje y lo vas a gestionar en Mis transportes.
 </div>
 
 @if (Model.Error != null)
@@ -102,7 +102,7 @@ else
                     </table>
                 </div>
                 <p class="panel-note">La fecha se muestra tal como fue publicada, sin interpretar su zona horaria ni evaluar el vencimiento.
-                    Se incluyen publicaciones propias y de otros usuarios; la selección de candidatos no confirma compatibilidad.</p>
+                    Solo se listan envíos de otros usuarios que siguen buscando conductor; la selección de candidatos no confirma compatibilidad.</p>
                 <nav class="panel-form-actions" aria-label="Páginas de candidatos">
                     @if (listado.Pagina > 1)
                     {

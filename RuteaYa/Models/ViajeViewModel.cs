@@ -27,8 +27,7 @@ namespace RuteaYa.Web.Models
         [Range(1, 100, ErrorMessage = "La cantidad debe estar entre 1 y 100.")]
         public int CantMaxPaquetes { get; set; }
 
-        [Range(typeof(decimal), "0,01", "100000",
-            ErrorMessage = "Ingresar un peso valido.")]
+        [Range(0.01, 100000, ErrorMessage = "Ingresar un peso valido.")]
         public decimal PesoMax { get; set; }
 
         [Range(0.01, 100000, ErrorMessage = "Ingresar un desvio valido.")]

@@ -23,7 +23,10 @@ namespace RuteaYa.Entidades
         public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
 
+        public int? ConductorId { get; set; }
+
         public virtual Usuario? Usuario { get; set; }
+        public virtual Usuario? Conductor { get; set; }
     }
 
     public enum EstadoEnvio : byte

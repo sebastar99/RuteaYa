@@ -86,6 +86,28 @@ public class OportunidadesController : Controller
         return View("~/Views/Panel/DetalleOportunidad.cshtml", modelo);
     }
 
+    [HttpPost("Aceptar")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Aceptar(
+        int viajeId, int envioId, [FromServices] EnviosLogica envios)
+    {
+        var conductorId = ObtenerConductorId();
+        if (conductorId <= 0) return Forbid();
+        if (viajeId <= 0 || envioId <= 0) return NotFound();
+
+        try
+        {
+            await envios.AceptarAsync(conductorId, viajeId, envioId);
+            TempData["Exito"] = "Aceptaste el envío. Ya podés gestionarlo desde Mis transportes.";
+        }
+        catch (ArgumentException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction("Index", "Transportes");
+    }
+
     private int ObtenerConductorId()
     {
         var identificador = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
