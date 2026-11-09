@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using RuteaYa.Entidades;
 using RuteaYa.Web.Models;
 using RuteaYa.Web.Services;
+using Microsoft.Extensions.Logging; // <-- Agregado para A09
 
 namespace RuteaYa.Web.Controllers
 {
@@ -15,10 +16,12 @@ namespace RuteaYa.Web.Controllers
     {
         private const string AccessTokenCookieName = "RuteaYa.AccessToken";
         private readonly IUsuariosApiServicio _usuariosApi;
+        private readonly ILogger<AccesoController> _logger; // <-- 1. Campo para el logger (A09)
 
-        public AccesoController(IUsuariosApiServicio usuariosApi)
+        public AccesoController(IUsuariosApiServicio usuariosApi, ILogger<AccesoController> logger)
         {
             _usuariosApi = usuariosApi;
+            _logger = logger; // <-- 2. Inicialización del logger (A09)
         }
 
         [AllowAnonymous]
@@ -48,11 +51,16 @@ namespace RuteaYa.Web.Controllers
                 resultado.Usuario == null ||
                 string.IsNullOrWhiteSpace(resultado.Token))
             {
-                ModelState.AddModelError(string.Empty, resultado.Mensaje);
+                    // AUDITORÍA DE SEGURIDAD (OWASP A09): Log de intento fallido ---
+                    _logger.LogWarning("ALERTA DE SEGURIDAD: Intento de inicio de sesión fallido para el correo: {Email}", modelo.Email);
+
+                    ModelState.AddModelError(string.Empty, resultado.Mensaje);
                 return View(modelo);
             }
 
-            var usuario = resultado.Usuario;
+                // --- 4. AUDITORÍA DE SEGURIDAD (OWASP A09): Log de acceso exitoso ---
+                _logger.LogInformation("Auditoría: El usuario ID {UserId} ({Email}) inició sesión correctamente.", usuario.Id, usuario.Email);
+                var usuario = resultado.Usuario;
 
 
                 var claims = new List<Claim>
