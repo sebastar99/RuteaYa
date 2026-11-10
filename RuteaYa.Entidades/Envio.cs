@@ -1,5 +1,6 @@
-﻿using System;
-using RuteaYa.Entidades; // O el namespace donde esté definido EstadoEnvio
+﻿using RuteaYa.Entidades; // O el namespace donde esté definido EstadoEnvio
+using System;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace RuteaYa.Entidades
 {
@@ -22,10 +23,13 @@ namespace RuteaYa.Entidades
         public DateTime CreadoEn { get; set; } = DateTime.Now;
         public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
-
+     
         public int? ConductorId { get; set; }
 
+
         public virtual Usuario? Usuario { get; set; }
+
+      
         public virtual Usuario? Conductor { get; set; }
     }
 

@@ -16,4 +16,26 @@
 .reorder-row{display:grid;grid-template-columns:1fr 150px;gap:14px;align-items:end;padding:10px 0;border-top:1px dashed #e5ebf5}.reorder-row:first-of-type{border-top:0}
 .panel-card h3{margin:0 0 8px;color:#101a33;font-size:14px}
 @media(max-width:760px){.reorder-row{grid-template-columns:1fr}}.panel-empty{text-align:center;padding:30px 20px}.panel-empty h3{margin:0 0 8px}.panel-empty p{max-width:440px;margin:0 auto 15px;color:var(--pm);font-size:12px}.panel-route-line{display:flex;align-items:center;gap:12px;padding:16px;border:1px solid #e5ebf5;border-radius:13px;background:#f9fbff}.panel-point{width:11px;height:11px;border:3px solid #2563eb;border-radius:50%;flex-shrink:0}.panel-point.end{border-color:#19a878}.panel-line{flex:1;border-top:2px dashed #cbd7e9}.panel-progress{height:8px;overflow:hidden;margin-top:8px;border-radius:99px;background:#e8edf6}.panel-progress span{display:block;height:100%;border-radius:99px;background:#2563eb}.panel-week-bars{display:flex;align-items:flex-end;gap:14px;min-height:180px;padding-top:15px}.panel-week{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:flex-end;gap:8px;height:160px}.panel-week .bar{width:100%;max-width:54px;min-height:8px;border-radius:8px 8px 2px 2px;background:#2563eb}.panel-week small{color:var(--pm);font-size:10px}
+
+
+
 @media(max-width:1200px){.panel-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:760px){.panel-page-content{padding-top:20px}.page-heading h1{font-size:26px}.panel-card{padding:16px}.panel-form-grid{grid-template-columns:1fr}.panel-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.panel-stat{padding:14px}.panel-stat strong{font-size:21px}.panel-search{max-width:none}.panel-route-line{flex-wrap:wrap}}
+
+.panel-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.panel-modal-content {
+    max-width: 450px;
+    width: 90%;
+    animation: fadeIn 0.2s ease-in-out;
+}

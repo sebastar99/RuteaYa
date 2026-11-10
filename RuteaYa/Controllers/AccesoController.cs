@@ -58,9 +58,11 @@ namespace RuteaYa.Web.Controllers
                 return View(modelo);
             }
 
-                // --- 4. AUDITORÍA DE SEGURIDAD (OWASP A09): Log de acceso exitoso ---
+
+            var usuario = resultado.Usuario;
+
+                //  AUDITORÍA DE SEGURIDAD (OWASP A09): Log de acceso exitoso ---
                 _logger.LogInformation("Auditoría: El usuario ID {UserId} ({Email}) inició sesión correctamente.", usuario.Id, usuario.Email);
-                var usuario = resultado.Usuario;
 
 
                 var claims = new List<Claim>

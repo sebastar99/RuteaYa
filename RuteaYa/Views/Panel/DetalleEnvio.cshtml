@@ -1,4 +1,148 @@
-@{ ViewData["Title"]="Detalle del envío"; ViewData["ActivePage"]="Envios"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">DETALLE</span><h1>Plaza Italia → Obelisco</h1><p>Revisá los datos del paquete y el estado de seguimiento.</p></div><a class="panel-button outline" href="/Panel/Envios">← Volver</a></div>
-<div class="panel-card"><div class="panel-route-line"><span class="panel-point"></span><strong>Plaza Italia</strong><div class="panel-line"></div><span class="panel-point end"></span><strong>Obelisco</strong></div></div>
-<div class="panel-card"><h2>Información</h2><div class="panel-table-wrap"><table class="panel-table"><tbody><tr><td>Descripción</td><td><strong>Zapatillas</strong></td></tr><tr><td>Estado</td><td><strong>Buscando conductor</strong></td></tr><tr><td>Monto ofrecido</td><td><strong>$4.000</strong></td></tr><tr><td>Peso</td><td><strong>1,2 kg</strong></td></tr><tr><td>Tamaño</td><td><strong>Mediano</strong></td></tr><tr><td>Fecha límite</td><td><strong>25/10/2026</strong></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Datos de demostración. El detalle real se obtendrá desde la API cuando se conecte la lógica correspondiente.</p><div class="panel-form-actions"><a class="panel-button outline" href="/Panel/Envios">Volver al listado</a><button class="panel-button" onclick="alert('Esta acción se conectará a la API en una etapa posterior.')">Continuar</button></div></div>
+@model RuteaYa.Logica.DTOs.EnvioDto 
+
+@{
+    ViewData["Title"] = "Detalle del envío";
+    ViewData["ActivePage"] = "Envios";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+
+    var estadoTexto = Model?.Estado switch
+    {
+        RuteaYa.Entidades.EstadoEnvio.BuscandoConductor => "Buscando conductor",
+        RuteaYa.Entidades.EstadoEnvio.ConductorAsignado => "Conductor asignado",
+        RuteaYa.Entidades.EstadoEnvio.Retirado => "Retirado",
+        RuteaYa.Entidades.EstadoEnvio.EnCamino => "En camino",
+        RuteaYa.Entidades.EstadoEnvio.Entregado => "Entregado",
+        RuteaYa.Entidades.EstadoEnvio.Cancelado => "Cancelado",
+        _ => Model?.Estado.ToString()
+    };
+
+    var pillCss = Model?.Estado switch
+    {
+        RuteaYa.Entidades.EstadoEnvio.BuscandoConductor => "orange",
+        RuteaYa.Entidades.EstadoEnvio.ConductorAsignado => "blue",
+        RuteaYa.Entidades.EstadoEnvio.Retirado => "blue",
+        RuteaYa.Entidades.EstadoEnvio.EnCamino => "blue",
+        RuteaYa.Entidades.EstadoEnvio.Entregado => "green",
+        RuteaYa.Entidades.EstadoEnvio.Cancelado => "red",
+        _ => ""
+    };
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">DETALLE</span>
+        <h1>@Model?.OrigenDir → @Model?.DestinoDir</h1>
+        <p>Revisá los datos del paquete y el estado de seguimiento.</p>
+    </div>
+    <a class="panel-button outline" asp-controller="Envios" asp-action="Index">← Volver</a>
+</div>
+
+@if (TempData["Exito"] is string mensajeExito)
+{
+    <div class="panel-alert success" role="status">
+        @mensajeExito
+    </div>
+}
+
+@if (TempData["Error"] is string mensajeError)
+{
+    <div class="panel-alert danger" role="alert">
+        @mensajeError
+    </div>
+}
+
+@if (ViewBag.Error != null)
+{
+    <div class="panel-card" role="alert">
+        <strong>No se pudo cargar el envío.</strong>
+        <p>@ViewBag.Error</p>
+    </div>
+}
+else if (Model != null)
+{
+    <div class="panel-card">
+        <div class="panel-route-line">
+            <span class="panel-point"></span>
+            <strong>@Model.OrigenDir</strong>
+            <div class="panel-line"></div>
+            <span class="panel-point end"></span>
+            <strong>@Model.DestinoDir</strong>
+        </div>
+    </div>
+
+    <div class="panel-card">
+        <h2>Información</h2>
+        <div class="panel-table-wrap">
+            <table class="panel-table">
+                <tbody>
+                    <tr>
+                        <td>Descripción</td>
+                        <td><strong>@Model.Descripcion</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Estado</td>
+                        <td><span class="panel-pill @pillCss">@estadoTexto</span></td>
+                    </tr>
+                    <tr>
+                        <td>Monto ofrecido</td>
+                        <td><strong>$@Model.Monto.ToString("N0")</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Peso</td>
+                        <td><strong>@Model.PesoKg.ToString("N2") kg</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Tamaño</td>
+                        <td><strong>@Model.Tamano</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Fecha límite</td>
+                        <td><strong>@Model.FechaLimite.ToString("dd/MM/yyyy")</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="panel-form-actions" style="margin-top: 20px;">
+            <a class="panel-button outline" asp-controller="Envios" asp-action="Index">Volver al listado</a>
+
+         @if (Model.Estado == RuteaYa.Entidades.EstadoEnvio.BuscandoConductor)
+{
+    <!-- Botón que abre el cartel -->
+    <button type="button" class="panel-button danger" onclick="abrirModalCancelar()">
+        Cancelar envío
+    </button>
+
+    <!-- Cartel / Modal de advertencia -->
+    <div id="modalCancelar" class="panel-modal-backdrop" style="display: none;">
+        <div class="panel-card panel-modal-content">
+            <h3>¿Estás seguro de cancelar?</h3>
+            <p class="panel-muted">El paquete dejará de estar disponible para los conductores y la publicación se dará por finalizada.</p>
+            
+            <div class="panel-form-actions" style="margin-top: 20px;">
+                <button type="button" class="panel-button outline" onclick="cerrarModalCancelar()">
+                    Volver atrás
+                </button>
+                
+                <form asp-controller="Envios" asp-action="Cancelar" asp-route-id="@Model.Id" method="post" style="display:inline;">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="panel-button danger">
+                        Sí, cancelar envío
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function abrirModalCancelar() {
+            document.getElementById('modalCancelar').style.display = 'flex';
+        }
+        function cerrarModalCancelar() {
+            document.getElementById('modalCancelar').style.display = 'none';
+        }
+    </script>
+}
+        </div>
+    </div>
+}
