@@ -19,7 +19,9 @@
         <h1>Mis transportes</h1>
         <p>Gestioná los paquetes que aceptaste transportar y su seguimiento.</p>
     </div>
-    <a class="panel-button" asp-controller="Panel" asp-action="Oportunidades">＋ Buscar oportunidades</a>
+   @* <a class="panel-button" asp-controller="Panel" asp-action="Oportunidades">＋ Buscar oportunidades</a>*@
+<a class="panel-button" asp-controller="Oportunidades" asp-action="Index">＋ Buscar oportunidades</a>
+
 </div>
 
 @if (TempData["Exito"] is string exito)
