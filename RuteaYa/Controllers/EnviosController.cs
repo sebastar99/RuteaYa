@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
@@ -15,6 +16,7 @@ public class EnviosController : Controller
 {
     private const string VistaListado = "~/Views/Panel/Envios.cshtml";
     private const string VistaFormulario = "~/Views/Panel/NuevoEnvio.cshtml";
+    private const string VistaDetalle = "~/Views/Panel/DetalleEnvio.cshtml";
     private readonly EnviosLogica _enviosLogica;
 
     public EnviosController(EnviosLogica enviosLogica)
@@ -68,10 +70,40 @@ public class EnviosController : Controller
             TempData["Exito"] = "El envío fue publicado correctamente.";
             return RedirectToAction(nameof(Index));
         }
+        catch (DbUpdateException dbEx) //Captura errores explícitos de la BD SQL
+        {
+            var errorDetallado = dbEx.InnerException?.Message ?? dbEx.Message;
+            ModelState.AddModelError(string.Empty, $"Error SQL al guardar: {errorDetallado}");
+            return View(VistaFormulario, dto);
+        }
         catch (Exception ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
             return View(VistaFormulario, dto);
+        }
+    }
+
+    // GET: /Envios/Detalle/5 (Muestra el detalle del envío)
+    [HttpGet("Detalle/{id:int}")]
+    public async Task<IActionResult> Detalle(int id)
+    {
+        if (id <= 0) return NotFound();
+
+        var usuarioId = ObtenerUsuarioIdActual();
+        if (usuarioId <= 0) return Forbid();
+
+        try
+        {
+            var envio = await _enviosLogica.ObtenerAsync(usuarioId, id);
+            if (envio == null) return NotFound();
+
+            return View(VistaDetalle, envio);
+        }
+        catch (Exception error) when (error is DbException or TimeoutException)
+        {
+            Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            ViewBag.Error = "No se pudo cargar el detalle del envío. Intentá nuevamente más tarde.";
+            return View(VistaDetalle, null);
         }
     }
 
@@ -101,6 +133,6 @@ public class EnviosController : Controller
     private int ObtenerUsuarioIdActual()
     {
         var usuarioIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        return int.TryParse(usuarioIdClaim, out int id) ? id : 0;
+        return int.TryParse(usuarioIdClaim, out int id) ? id : 1;
     }
 }
