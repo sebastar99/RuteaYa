@@ -1,5 +1,8 @@
 # Previsualización de recorridos propios
 
+La pantalla también dispone de [autocompletado y confirmación por lookup de HERE](direcciones-autocompletado-here.md),
+mediante **Elegir ubicaciones con autocompletado HERE**, sin modificar el viaje publicado.
+
 ## Acceso y recorrido de la pantalla
 
 En **Oportunidades**, seleccioná un viaje y usá **Previsualizar recorrido del viaje**.

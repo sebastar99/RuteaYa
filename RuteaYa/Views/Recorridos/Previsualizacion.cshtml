@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
 <link rel="stylesheet" href="~/css/recorridos.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/direcciones-here.css" asp-append-version="true" />
 <div class="page-heading">
     <div><h1>Previsualización del viaje #@Model.ViajeId</h1><p>@Model.Origen → @Model.Destino</p></div>
     <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index" asp-route-viajeId="@Model.ViajeId">Volver a oportunidades</a>
@@ -18,12 +19,35 @@
     <form asp-controller="Recorridos" asp-action="Buscar" asp-route-viajeId="@Model.ViajeId" method="post">
         <button class="panel-button" type="submit">Buscar ubicaciones del viaje</button>
     </form>
+    <form asp-controller="Recorridos" asp-action="Autocompletar" asp-route-viajeId="@Model.ViajeId" method="post">
+        <button class="panel-button" type="submit">Elegir ubicaciones con autocompletado HERE</button>
+    </form>
 </div>
 @if (Model.Error != null)
 {
     <div class="panel-card" role="alert">@Model.Error</div>
 }
-@if (Model.Ubicaciones.Count > 0 && Model.Ruta == null)
+@if (Model.UsaAutocompletado && Model.Ruta == null)
+{
+    <form asp-controller="Recorridos" asp-action="ConfirmarDirecciones" asp-route-viajeId="@Model.ViajeId" method="post" data-recorrido-autocompletado>
+        <input type="hidden" name="Sesion" value="@Model.Sesion" />
+        <p>Elegí y confirmá cada ubicación. Los cambios se usan solo en esta previsualización; el viaje conserva sus direcciones publicadas.</p>
+        @for (var i = 0; i < Model.Ubicaciones.Count; i++)
+        {
+            <div class="panel-card">
+                <partial name="_CampoDireccionHere" model="@(new RuteaYa.Web.Models.CampoDireccionViewModel {
+                    IdHtml = $"direccion-{i}", Etiqueta = Model.Ubicaciones[i].Etiqueta,
+                    TextoInicial = Model.Ubicaciones[i].Direccion, NombreToken = $"Confirmaciones[{i}]",
+                    UrlSugerencias = Url.Action("Sugerencias", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion, ubicacion = i })!,
+                    UrlResolver = Url.Action("ResolverDireccion", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion, ubicacion = i })!,
+                    UrlConfirmar = Url.Action("ConfirmarDireccion", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion, ubicacion = i })!
+                })" />
+            </div>
+        }
+        <button class="panel-button" type="submit" data-calcular-direcciones disabled>Calcular recorrido con ubicaciones confirmadas</button>
+    </form>
+}
+@if (!Model.UsaAutocompletado && Model.Ubicaciones.Count > 0 && Model.Ruta == null)
 {
     <form asp-controller="Recorridos" asp-action="Confirmar" asp-route-viajeId="@Model.ViajeId" method="post" id="confirmar-recorrido">
         <input type="hidden" name="Sesion" value="@Model.Sesion" />
@@ -80,6 +104,10 @@
                     — navegación confirmada (@(Model.AccesosConfirmados[i] == -1 ? "position" : $"access {Model.AccesosConfirmados[i] + 1}")):
                     @Model.PuntosConfirmados[i].Latitud, @Model.PuntosConfirmados[i].Longitud
                     (@confirmado.TipoResultado; @(confirmado.PosicionEstimada ? "estimada/interpolada" : "posición informada")).</li>
+                @if (Model.UsaAutocompletado)
+                {
+                    <li>Identificador HERE: @confirmado.IdHere · Ubicación confirmada para esta previsualización.</li>
+                }
             }
         </ol>
         <div id="mapa-recorrido" role="region" aria-label="Mapa interactivo del recorrido"
@@ -91,10 +119,11 @@
     <script id="datos-recorrido" type="application/json">@Html.Raw(JsonSerializer.Serialize(new
         { secciones = Model.Ruta.Secciones, puntos = Model.PuntosConfirmados,
           posiciones = Model.CandidatosConfirmados.Select(c => c.Posicion),
-          etiquetas = Model.Ubicaciones.Select(u => u.Etiqueta + ": " + u.Direccion) }))</script>
+          etiquetas = Model.Ubicaciones.Select((u, i) => u.Etiqueta + ": " + Model.CandidatosConfirmados[i].DireccionNormalizada) }))</script>
 }
 @section Scripts {
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
     <script src="~/js/recorridos.js" asp-append-version="true"></script>
+    <script src="~/js/direcciones-here.js" asp-append-version="true"></script>
 }

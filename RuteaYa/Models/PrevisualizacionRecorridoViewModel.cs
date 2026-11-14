@@ -14,6 +14,8 @@ public class PrevisualizacionRecorridoViewModel
     public List<PuntoRutaDto> PuntosConfirmados { get; set; } = new();
     public List<ResultadoGeocodificacionDto> CandidatosConfirmados { get; set; } = new();
     public List<int> AccesosConfirmados { get; set; } = new();
+    public bool UsaAutocompletado { get; set; }
+    public List<EstadoSeleccionDireccion> ConfirmacionesDirecciones { get; set; } = new();
 }
 
 public class UbicacionPrevisualizacion
@@ -34,4 +36,10 @@ public class SeleccionUbicacion
 {
     public int? Candidato { get; set; }
     public int? Acceso { get; set; }
+}
+
+public class ConfirmarDireccionesRecorridoFormulario
+{
+    public string Sesion { get; set; } = "";
+    public List<string> Confirmaciones { get; set; } = new();
 }

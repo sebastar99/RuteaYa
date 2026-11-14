@@ -1,0 +1,16 @@
+@model RuteaYa.Web.Models.CampoDireccionViewModel
+<div class="campo-direccion-here" data-direccion-here
+     data-sugerencias-url="@Model.UrlSugerencias" data-resolver-url="@Model.UrlResolver" data-confirmar-url="@Model.UrlConfirmar">
+    <label for="@Model.IdHtml">@Model.Etiqueta</label>
+    <input id="@Model.IdHtml" type="search" autocomplete="off" minlength="3" maxlength="200"
+           value="@Model.TextoInicial" aria-controls="@(Model.IdHtml)-sugerencias" aria-describedby="@(Model.IdHtml)-estado" data-texto-direccion />
+    <p id="@(Model.IdHtml)-estado" role="status" aria-live="polite" data-estado-direccion>Escribí al menos 3 caracteres. Ninguna ubicación está confirmada.</p>
+    <ul id="@(Model.IdHtml)-sugerencias" aria-label="Sugerencias de dirección" data-sugerencias></ul>
+    <div data-detalle-direccion hidden>
+        <p data-resumen-direccion></p>
+        <label for="@(Model.IdHtml)-acceso">Punto para navegar (selección explícita)</label>
+        <select id="@(Model.IdHtml)-acceso" data-acceso-direccion disabled><option value="">Seleccioná position o access</option></select>
+        <button type="button" class="panel-button outline" data-confirmar-direccion disabled>Confirmar ubicación</button>
+    </div>
+    <input type="hidden" name="@Model.NombreToken" value="" data-confirmacion-direccion />
+</div>

@@ -34,8 +34,14 @@ public class PrevisualizacionRecorridoServicio(
         return JsonSerializer.Deserialize<PrevisualizacionRecorridoViewModel>(sesion.Modelo)!;
     }
 
-    public async Task<PrevisualizacionRecorridoViewModel?> BuscarAsync(
-        int usuarioId, int viajeId, CancellationToken ct = default)
+    public Task<PrevisualizacionRecorridoViewModel?> BuscarAsync(
+        int usuarioId, int viajeId, CancellationToken ct = default) => CrearSesionAsync(usuarioId, viajeId, false, ct);
+
+    public Task<PrevisualizacionRecorridoViewModel?> IniciarAutocompletadoAsync(
+        int usuarioId, int viajeId, CancellationToken ct = default) => CrearSesionAsync(usuarioId, viajeId, true, ct);
+
+    private async Task<PrevisualizacionRecorridoViewModel?> CrearSesionAsync(
+        int usuarioId, int viajeId, bool autocompletado, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var viaje = await viajes.ObtenerPorIdAsync(usuarioId, viajeId);
@@ -45,7 +51,7 @@ public class PrevisualizacionRecorridoServicio(
         var modelo = new PrevisualizacionRecorridoViewModel
         {
             ViajeId = viaje.Id, Origen = viaje.Origen, Destino = viaje.Destino,
-            Sesion = Convert.ToHexString(RandomNumberGenerator.GetBytes(32))
+            Sesion = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), UsaAutocompletado = autocompletado
         };
         var direcciones = new List<(string Etiqueta, string Direccion)> { ("Origen", viaje.Origen) };
         direcciones.AddRange(viaje.Paradas.OrderBy(p => p.Orden).Select(p => ($"Parada {p.Orden}", p.Ubicacion)));
@@ -54,7 +60,7 @@ public class PrevisualizacionRecorridoServicio(
             modelo.Ubicaciones.Add(new()
             {
                 Etiqueta = etiqueta, Direccion = direccion,
-                Candidatos = (await geocodificacion.GeocodificarAsync(direccion, ct)).ToList()
+                Candidatos = autocompletado ? new() : (await geocodificacion.GeocodificarAsync(direccion, ct)).ToList()
             });
         ct.ThrowIfCancellationRequested();
         var sesion = new Sesion(usuarioId, viajeId, Huella(viaje), _reloj.GetUtcNow().AddMinutes(10),
@@ -68,6 +74,7 @@ public class PrevisualizacionRecorridoServicio(
     {
         var modelo = await ObtenerAsync(usuarioId, viajeId, formulario.Sesion, ct);
         if (modelo == null) return null;
+        if (modelo.UsaAutocompletado) throw new ArgumentException("Confirmá las direcciones mediante el autocompletado.");
         // Un token vacío nunca permite confirmar el modelo inicial.
         var sesion = LeerSesion(usuarioId, viajeId, formulario.Sesion);
         if (formulario.Selecciones == null || formulario.Selecciones.Count != modelo.Ubicaciones.Count)
@@ -85,13 +92,38 @@ public class PrevisualizacionRecorridoServicio(
             puntos.Add(acceso == -1 ? elegido.Posicion : elegido.Accesos[acceso]);
             confirmados.Add(elegido);
         }
-        modelo.Ruta = await rutas.CalcularGeometriaAsync(puntos, ct);
         modelo.PuntosConfirmados = puntos;
         modelo.CandidatosConfirmados = confirmados;
         modelo.AccesosConfirmados = formulario.Selecciones.Select(s => s.Acceso!.Value).ToList();
+        return await CalcularYGuardarAsync(usuarioId, viajeId, formulario.Sesion, modelo, sesion, ct);
+    }
+
+    public static string AmbitoDireccion(string sesion, int ubicacion) => $"recorrido:{sesion}:{ubicacion}";
+
+    public async Task<PrevisualizacionRecorridoViewModel?> ConfirmarDireccionesAsync(
+        int usuarioId, int viajeId, ConfirmarDireccionesRecorridoFormulario formulario,
+        SeleccionDireccionServicio direcciones, CancellationToken ct = default)
+    {
+        var modelo = await ObtenerAsync(usuarioId, viajeId, formulario.Sesion, ct);
+        if (modelo == null) return null;
+        var sesion = LeerSesion(usuarioId, viajeId, formulario.Sesion);
+        if (!modelo.UsaAutocompletado || formulario.Confirmaciones == null || formulario.Confirmaciones.Count != modelo.Ubicaciones.Count)
+            throw new ArgumentException("Confirmá cada dirección de este recorrido.");
+        modelo.ConfirmacionesDirecciones = formulario.Confirmaciones.Select((token, i) =>
+            direcciones.ObtenerConfirmada(usuarioId, AmbitoDireccion(formulario.Sesion, i), token)).ToList();
+        modelo.PuntosConfirmados = modelo.ConfirmacionesDirecciones.Select(c => c.Navegacion!).ToList();
+        modelo.CandidatosConfirmados = modelo.ConfirmacionesDirecciones.Select(c => c.Ubicacion).ToList();
+        modelo.AccesosConfirmados = modelo.ConfirmacionesDirecciones.Select(c => c.Acceso!.Value).ToList();
+        return await CalcularYGuardarAsync(usuarioId, viajeId, formulario.Sesion, modelo, sesion, ct);
+    }
+
+    private async Task<PrevisualizacionRecorridoViewModel?> CalcularYGuardarAsync(int usuarioId, int viajeId,
+        string token, PrevisualizacionRecorridoViewModel modelo, Sesion sesion, CancellationToken ct)
+    {
+        modelo.Ruta = await rutas.CalcularGeometriaAsync(modelo.PuntosConfirmados, ct);
         // Revalidar propiedad, contenido y vencimiento después de la llamada externa.
-        if (await ObtenerAsync(usuarioId, viajeId, formulario.Sesion, ct) == null) return null;
-        cache.Set(Clave(formulario.Sesion), sesion with { Modelo = JsonSerializer.Serialize(modelo) },
+        if (await ObtenerAsync(usuarioId, viajeId, token, ct) == null) return null;
+        cache.Set(Clave(token), sesion with { Modelo = JsonSerializer.Serialize(modelo) },
             sesion.Vence - _reloj.GetUtcNow());
         return modelo;
     }

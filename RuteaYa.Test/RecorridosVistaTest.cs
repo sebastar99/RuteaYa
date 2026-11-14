@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
@@ -132,6 +133,151 @@ public class RecorridosVistaTest
         await app.StopAsync();
     }
 
+    [Fact]
+    public async Task AutocompletadoMvc_RenderizaComponenteYVerificaLookupConfirmacionYAutorizacion()
+    {
+        var viaje = new ViajeDto { Id = 10, UsuarioId = 7, Origen = "Origen publicado", Destino = "Destino publicado",
+            Paradas = new() { new() { Id = 1, Orden = 1, Ubicacion = "Parada publicada" } } };
+        var viajes = new Mock<IViajesLogica>(MockBehavior.Strict);
+        viajes.Setup(v => v.ObtenerPorIdAsync(7, 10)).ReturnsAsync(viaje);
+        viajes.Setup(v => v.ObtenerPorIdAsync(8, 10)).ReturnsAsync((ViajeDto?)null);
+        var geo = new Mock<IGeocodificacionServicio>(MockBehavior.Strict);
+        var busqueda = new Mock<IBusquedaDireccionesServicio>(MockBehavior.Strict);
+        busqueda.Setup(b => b.SugerirAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string texto, CancellationToken _) => new[] { new SugerenciaDireccionDto
+                { IdHere = "here:af:" + texto[^1], Nombre = "Calle <script>alert('prueba')</script>", Localidad = "Morón", Direccion = "Calle, Morón" } });
+        busqueda.Setup(b => b.SugerirAsync("fallar", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("credencial-ficticia-no-exponer"));
+        busqueda.Setup(b => b.SugerirAsync("sin resultados", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SugerenciaDireccionDto>());
+        busqueda.Setup(b => b.SugerirAsync("ab", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ArgumentException("Texto corto"));
+        busqueda.Setup(b => b.ResolverAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) => {
+                var i = int.Parse(id.Split(':').Last());
+                return new ResultadoGeocodificacionDto { IdHere = id, DireccionNormalizada = "Elegida " + i + " </script><script>alert('prueba')</script>",
+                    TipoResultado = "houseNumber", TipoNumeroPuerta = "PA", Posicion = new() { Latitud = -34 - i, Longitud = -58 },
+                    Accesos = new() { new() { Latitud = -44 - i, Longitud = -68 } } };
+            });
+        var rutas = new Mock<IRutasGeometriaServicio>(MockBehavior.Strict);
+        rutas.Setup(r => r.CalcularGeometriaAsync(It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<PuntoRutaDto>, CancellationToken>((p, _) =>
+                Assert.Equal(new[] { -34m, -45m, -36m }, p.Select(x => x.Latitud)))
+            .ReturnsAsync(new ResultadoRutaGeometriaDto { Totales = new() { DistanciaMetros = 3210, DuracionSegundos = 123 },
+                Secciones = new() { new() { new() { Latitud = -34, Longitud = -58 }, new() { Latitud = -35, Longitud = -58 } } } });
+        using var handler = new Handler(_ => throw new Exception("No debe consultar mapa ni HERE real"));
+        using var http = new HttpClient(handler);
+        await using var app = CrearHost(viajes.Object, geo.Object, rutas.Object,
+            new MapasHereServicio(http, Options.Create(new HereRoutingOpciones())), busqueda.Object);
+        await app.StartAsync();
+        try
+        {
+            var direccion = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+                { BaseAddress = new Uri(direccion), Timeout = TimeSpan.FromSeconds(20) };
+            using var anonimo = await cliente.GetAsync("/Recorridos/10/Direcciones/Sugerencias?sesion=abc&ubicacion=0&texto=calle");
+            Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "sin-id");
+            using var sinClaim = await cliente.GetAsync("/Recorridos/10");
+            Assert.Equal(HttpStatusCode.Forbidden, sinClaim.StatusCode);
+            cliente.DefaultRequestHeaders.Remove("X-Usuario-Prueba");
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            using var inicial = await cliente.GetAsync("/Recorridos/10");
+            var csrf = Valor(await inicial.Content.ReadAsStringAsync(), "__RequestVerificationToken");
+            Task<HttpResponseMessage> Post(string url, params (string Clave, string Valor)[] campos) => cliente.PostAsync(url,
+                Form(campos.Append(("__RequestVerificationToken", csrf)).ToArray()));
+            using var inicio = await Post("/Recorridos/10/Autocompletar");
+            Assert.Equal(HttpStatusCode.Redirect, inicio.StatusCode);
+            using var pagina = await cliente.GetAsync(inicio.Headers.Location);
+            var html = await pagina.Content.ReadAsStringAsync();
+            csrf = Valor(html, "__RequestVerificationToken");
+            var sesion = Valor(html, "Sesion");
+            Assert.Equal(3, Regex.Matches(html, "data-direccion-here").Count);
+            Assert.Contains("name=\"Confirmaciones[2]\"", html);
+            Assert.Contains("minlength=\"3\"", html);
+            Assert.Contains("aria-live=\"polite\"", html);
+            Assert.Contains("/js/direcciones-here.js", html);
+            busqueda.VerifyNoOtherCalls();
+            geo.VerifyNoOtherCalls();
+            var urls = Regex.Matches(html, "data-sugerencias-url=\"([^\"]+)\"")
+                .Select(m => WebUtility.HtmlDecode(m.Groups[1].Value)).ToArray();
+            using var indiceInvalido = await cliente.GetAsync(urls[0].Replace("ubicacion=0", "ubicacion=99") + "&texto=calle");
+            Assert.Equal(HttpStatusCode.NotFound, indiceInvalido.StatusCode);
+            using var corto = await cliente.GetAsync(urls[0] + "&texto=ab");
+            Assert.Equal(HttpStatusCode.BadRequest, corto.StatusCode);
+            using var fallo = await cliente.GetAsync(urls[0] + "&texto=fallar");
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, fallo.StatusCode);
+            Assert.DoesNotContain("credencial-ficticia", await fallo.Content.ReadAsStringAsync());
+            using var vacio = await cliente.GetAsync(urls[0] + "&texto=sin%20resultados");
+            Assert.Equal("[]", await vacio.Content.ReadAsStringAsync());
+            var confirmaciones = new List<string>();
+            string? primerResuelto = null;
+            for (var i = 0; i < 3; i++)
+            {
+                using var sugerir = await cliente.GetAsync(urls[i] + "&texto=calle" + i);
+                Assert.Equal(HttpStatusCode.OK, sugerir.StatusCode);
+                Assert.Contains("no-store", sugerir.Headers.CacheControl!.ToString());
+                var cuerpo = await sugerir.Content.ReadAsStringAsync();
+                Assert.DoesNotContain("<script>", cuerpo);
+                using var sugeridas = JsonDocument.Parse(cuerpo);
+                Assert.Equal("Morón", sugeridas.RootElement[0].GetProperty("sugerencia").GetProperty("localidad").GetString());
+                var token = sugeridas.RootElement[0].GetProperty("token").GetString()!;
+                var resolver = urls[i].Replace("/Sugerencias", "/Resolver");
+                var confirmar = urls[i].Replace("/Sugerencias", "/Confirmar");
+                using var sinCsrf = await cliente.PostAsync(resolver, Form(("token", token)));
+                Assert.Equal(HttpStatusCode.BadRequest, sinCsrf.StatusCode);
+                using var idLibre = await Post(resolver, ("token", "here:af:id-libre"));
+                Assert.Equal(HttpStatusCode.BadRequest, idLibre.StatusCode);
+                using var pendiente = await Post(confirmar, ("token", token), ("acceso", "-1"), ("confirmada", "true"));
+                Assert.Equal(HttpStatusCode.BadRequest, pendiente.StatusCode);
+                using var resuelta = await Post(resolver, ("token", token));
+                using var datos = JsonDocument.Parse(await resuelta.Content.ReadAsStringAsync());
+                Assert.False(datos.RootElement.GetProperty("confirmada").GetBoolean());
+                var tokenResuelto = datos.RootElement.GetProperty("token").GetString()!;
+                primerResuelto ??= tokenResuelto;
+                using var sinAcceso = await Post(confirmar, ("token", tokenResuelto));
+                Assert.Equal(HttpStatusCode.BadRequest, sinAcceso.StatusCode);
+                using var confirmada = await Post(confirmar, ("token", tokenResuelto), ("acceso", i == 1 ? "0" : "-1"),
+                    ("latitud", "90"), ("longitud", "0"), ("confirmada", "true"));
+                using var estado = JsonDocument.Parse(await confirmada.Content.ReadAsStringAsync());
+                Assert.True(estado.RootElement.GetProperty("confirmada").GetBoolean());
+                Assert.Equal(i == 1 ? -45m : -34m - i, estado.RootElement.GetProperty("navegacion").GetProperty("latitud").GetDecimal());
+                confirmaciones.Add(estado.RootElement.GetProperty("token").GetString()!);
+            }
+            rutas.VerifyNoOtherCalls();
+            using var incompleto = await Post("/Recorridos/10/ConfirmarDirecciones", ("Sesion", sesion), ("Confirmaciones[0]", confirmaciones[0]));
+            Assert.Equal(HttpStatusCode.BadRequest, incompleto.StatusCode);
+            using var sinConfirmacion = await Post("/Recorridos/10/ConfirmarDirecciones", ("Sesion", sesion),
+                ("Confirmaciones[0]", primerResuelto!), ("Confirmaciones[1]", confirmaciones[1]), ("Confirmaciones[2]", confirmaciones[2]));
+            Assert.Equal(HttpStatusCode.BadRequest, sinConfirmacion.StatusCode);
+            using var cruzadas = await Post("/Recorridos/10/ConfirmarDirecciones", ("Sesion", sesion),
+                ("Confirmaciones[0]", confirmaciones[1]), ("Confirmaciones[1]", confirmaciones[0]), ("Confirmaciones[2]", confirmaciones[2]));
+            Assert.Equal(HttpStatusCode.BadRequest, cruzadas.StatusCode);
+            rutas.VerifyNoOtherCalls();
+            using var calcular = await Post("/Recorridos/10/ConfirmarDirecciones", ("Sesion", sesion),
+                ("Confirmaciones[0]", confirmaciones[0]), ("Confirmaciones[1]", confirmaciones[1]), ("Confirmaciones[2]", confirmaciones[2]));
+            Assert.Equal(HttpStatusCode.Redirect, calcular.StatusCode);
+            using var resultado = await cliente.GetAsync(calcular.Headers.Location);
+            var resultadoHtml = await resultado.Content.ReadAsStringAsync();
+            Assert.Contains("Identificador HERE: here:af:0", resultadoHtml);
+            Assert.DoesNotContain("<script>alert", resultadoHtml);
+            Assert.Contains("datos-recorrido", resultadoHtml);
+            Assert.Equal("Origen publicado", viaje.Origen);
+            rutas.Verify(r => r.CalcularGeometriaAsync(It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<CancellationToken>()), Times.Once);
+            geo.VerifyNoOtherCalls();
+            cliente.DefaultRequestHeaders.Remove("X-Usuario-Prueba");
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "8");
+            using var ajeno = await cliente.GetAsync(urls[0] + "&texto=calle");
+            Assert.Equal(HttpStatusCode.NotFound, ajeno.StatusCode);
+            cliente.DefaultRequestHeaders.Remove("X-Usuario-Prueba");
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            viaje.Origen = "Viaje editado";
+            using var cambiado = await cliente.GetAsync(urls[0] + "&texto=calle");
+            Assert.Equal(HttpStatusCode.NotFound, cambiado.StatusCode);
+        }
+        finally { await app.StopAsync(); }
+    }
+
     private static string Valor(string html, string nombre) => WebUtility.HtmlDecode(
         Regex.Match(html, $"name=\"{Regex.Escape(nombre)}\"[^>]*value=\"([^\"]+)\"").Groups[1].Value);
     private static FormUrlEncodedContent Form(params (string Clave, string Valor)[] valores) => new(
@@ -140,7 +286,7 @@ public class RecorridosVistaTest
         { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 
     private static WebApplication CrearHost(IViajesLogica viajes, IGeocodificacionServicio geo,
-        IRutasGeometriaServicio rutas, MapasHereServicio mapas)
+        IRutasGeometriaServicio rutas, MapasHereServicio mapas, IBusquedaDireccionesServicio? busqueda = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             { ApplicationName = typeof(RecorridosController).Assembly.GetName().Name, EnvironmentName = "Testing" });
@@ -154,6 +300,11 @@ public class RecorridosVistaTest
         builder.Services.AddSingleton(rutas);
         builder.Services.AddSingleton(mapas);
         builder.Services.AddScoped<PrevisualizacionRecorridoServicio>();
+        if (busqueda != null)
+        {
+            builder.Services.AddSingleton(busqueda);
+            builder.Services.AddScoped<SeleccionDireccionServicio>();
+        }
         builder.Services.AddAuthentication("Prueba").AddScheme<AuthenticationSchemeOptions, UsuarioHandler>("Prueba", _ => { });
         builder.Services.AddAuthorization();
         var app = builder.Build();
@@ -168,6 +319,8 @@ public class RecorridosVistaTest
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
             var usuario = Request.Headers["X-Usuario-Prueba"].ToString();
+            if (usuario == "sin-id") return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(
+                new ClaimsPrincipal(new ClaimsIdentity(Array.Empty<Claim>(), Scheme.Name)), Scheme.Name)));
             if (usuario is not ("7" or "8")) return Task.FromResult(AuthenticateResult.NoResult());
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(
                 new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, usuario) }, Scheme.Name)), Scheme.Name)));

@@ -90,6 +90,9 @@ public class GeocodificacionHereServicio : IGeocodificacionServicio
         }
     }
 
+    internal static ResultadoGeocodificacionDto ConvertirLookup(JsonElement item) =>
+        Convertir(item.Deserialize<ItemHere>(JsonOpciones));
+
     private static ResultadoGeocodificacionDto Convertir(ItemHere? item)
     {
         if (item == null || string.IsNullOrWhiteSpace(item.Id) ||

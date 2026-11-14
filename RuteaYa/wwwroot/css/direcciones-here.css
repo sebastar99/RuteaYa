@@ -1,0 +1,6 @@
+.campo-direccion-here label { display: block; margin: .5rem 0; font-weight: 600; }
+.campo-direccion-here input[type=search], .campo-direccion-here select { padding: .7rem; width: 100%; max-width: 100%; }
+.campo-direccion-here ul { list-style: none; padding: 0; margin: .5rem 0; }
+.campo-direccion-here li button { display: block; width: 100%; text-align: left; padding: .7rem; background: #f5f8fc; border: 1px solid #cbd5e1; cursor: pointer; }
+.campo-direccion-here button:focus-visible { outline: 3px solid #1765ba; }
+.campo-direccion-here [data-confirmar-direccion] { margin-top: .7rem; }

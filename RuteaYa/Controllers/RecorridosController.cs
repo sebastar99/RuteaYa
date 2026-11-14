@@ -41,6 +41,53 @@ public class RecorridosController(PrevisualizacionRecorridoServicio recorridos, 
             return modelo == null ? NotFound() : RedirectToAction(nameof(Index), new { viajeId, sesion = modelo.Sesion });
         });
 
+    [HttpPost("Autocompletar")]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> Autocompletar(int viajeId, CancellationToken ct) => Ejecutar(viajeId, async () =>
+    {
+        var modelo = await recorridos.IniciarAutocompletadoAsync(UsuarioId, viajeId, ct);
+        return modelo == null ? NotFound() : RedirectToAction(nameof(Index), new { viajeId, sesion = modelo.Sesion });
+    });
+
+    [HttpGet("Direcciones/Sugerencias")]
+    public Task<IActionResult> Sugerencias(int viajeId, string sesion, int ubicacion, string texto,
+        [FromServices] SeleccionDireccionServicio direcciones, CancellationToken ct) =>
+        EjecutarDireccion(viajeId, sesion, ubicacion, async ambito =>
+            Json(await direcciones.SugerirAsync(UsuarioId, ambito, texto, ct)), ct);
+
+    [HttpPost("Direcciones/Resolver")]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> ResolverDireccion(int viajeId, string sesion, int ubicacion, string token,
+        [FromServices] SeleccionDireccionServicio direcciones, CancellationToken ct) =>
+        EjecutarDireccion(viajeId, sesion, ubicacion, async ambito =>
+            Json(await direcciones.ResolverAsync(UsuarioId, ambito, token, ct)), ct);
+
+    [HttpPost("Direcciones/Confirmar")]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> ConfirmarDireccion(int viajeId, string sesion, int ubicacion, string token, int? acceso,
+        [FromServices] SeleccionDireccionServicio direcciones, CancellationToken ct) =>
+        EjecutarDireccion(viajeId, sesion, ubicacion, ambito =>
+            Task.FromResult<IActionResult>(Json(direcciones.Confirmar(UsuarioId, ambito, token, acceso))), ct);
+
+    [HttpPost("ConfirmarDirecciones")]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(16384)]
+    public Task<IActionResult> ConfirmarDirecciones(int viajeId, ConfirmarDireccionesRecorridoFormulario formulario,
+        [FromServices] SeleccionDireccionServicio direcciones, CancellationToken ct) => Ejecutar(viajeId, async () =>
+    {
+        var modelo = await recorridos.ConfirmarDireccionesAsync(UsuarioId, viajeId, formulario, direcciones, ct);
+        return modelo == null ? NotFound() : RedirectToAction(nameof(Index), new { viajeId, sesion = modelo.Sesion });
+    });
+
+    private Task<IActionResult> EjecutarDireccion(int viajeId, string sesion, int ubicacion,
+        Func<string, Task<IActionResult>> accion, CancellationToken ct) => Ejecutar(viajeId, async () =>
+    {
+        var modelo = await recorridos.ObtenerAsync(UsuarioId, viajeId, sesion, ct);
+        if (modelo == null || !modelo.UsaAutocompletado || ubicacion < 0 || ubicacion >= modelo.Ubicaciones.Count) return NotFound();
+        try { return await accion(PrevisualizacionRecorridoServicio.AmbitoDireccion(sesion, ubicacion)); }
+        catch (ArgumentException) { return BadRequest("La búsqueda o selección no es válida o venció. Buscá nuevamente."); }
+    }, recurso: true);
+
     [HttpGet("Atribuciones")]
     public Task<IActionResult> Atribuciones(int viajeId, string sesion, CancellationToken ct) => Ejecutar(viajeId, async () =>
     {

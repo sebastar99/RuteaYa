@@ -13,6 +13,11 @@ builder.Services.Configure<HereRoutingOpciones>(builder.Configuration.GetSection
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
 builder.Services.AddScoped<PrevisualizacionRecorridoServicio>();
+builder.Services.AddScoped<SeleccionDireccionServicio>();
+builder.Services.AddHttpClient<IBusquedaDireccionesServicio, BusquedaDireccionesHereServicio>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30))
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient<IRutasGeometriaServicio, RutasHereServicio>(client =>
     client.Timeout = TimeSpan.FromSeconds(30))
     .RemoveAllLoggers()
