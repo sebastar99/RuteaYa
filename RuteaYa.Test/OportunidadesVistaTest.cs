@@ -146,7 +146,9 @@ public class OportunidadesVistaTest
             Assert.DoesNotContain("UsuarioId", detalleHtml);
             Assert.DoesNotContain("Desvío estimado", detalleHtml);
             Assert.DoesNotContain("Caballito", detalleHtml);
-            Assert.DoesNotContain(">Aceptar", detalleHtml);
+            Assert.DoesNotContain("Tomar este envío", detalleHtml);
+            Assert.DoesNotContain("/Oportunidades/Aceptar", detalleHtml);
+            Assert.Contains("La aceptación de paquetes todavía no está habilitada.", WebUtility.HtmlDecode(detalleHtml));
             var enlaceVolver = Enlaces(detalleHtml).Single(e =>
             {
                 var uri = new Uri(cliente.BaseAddress, e);
@@ -256,6 +258,41 @@ public class OportunidadesVistaTest
         {
             await app.StopAsync(CancellationToken.None);
         }
+    }
+
+    [Fact]
+    public async Task Aceptar_PostDirectoConAntiforgeryValido_EstaBloqueadoSinInvocarServicios()
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ConsultarAsync(7, null, 1, 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ListadoCandidatosDto());
+        // No se registra EnviosLogica, EF ni HERE: el POST bloqueado no debe resolverlos.
+        await using var app = CrearHost(logica.Object);
+        await app.StartAsync();
+        try
+        {
+            var direccion = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+                { BaseAddress = new Uri(direccion), Timeout = TimeSpan.FromSeconds(20) };
+            using var anonimo = await cliente.PostAsync("/Oportunidades/Aceptar", new FormUrlEncodedContent(new Dictionary<string, string>()));
+            Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            using var pagina = await cliente.GetAsync("/Oportunidades");
+            var html = await pagina.Content.ReadAsStringAsync();
+            var token = WebUtility.HtmlDecode(Regex.Match(html,
+                "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"").Groups[1].Value);
+            Assert.NotEmpty(token);
+            using var sinToken = await cliente.PostAsync("/Oportunidades/Aceptar",
+                new FormUrlEncodedContent(new Dictionary<string, string> { ["viajeId"] = "10", ["envioId"] = "25" }));
+            Assert.Equal(HttpStatusCode.BadRequest, sinToken.StatusCode);
+            using var respuesta = await cliente.PostAsync("/Oportunidades/Aceptar", new FormUrlEncodedContent(new Dictionary<string, string>
+                { ["viajeId"] = "10", ["envioId"] = "25", ["__RequestVerificationToken"] = token }));
+            Assert.Equal(HttpStatusCode.Conflict, respuesta.StatusCode);
+            Assert.Contains("deshabilitada", await respuesta.Content.ReadAsStringAsync());
+            logica.Verify(l => l.ConsultarAsync(7, null, 1, 10, It.IsAny<CancellationToken>()), Times.Once);
+            logica.VerifyNoOtherCalls();
+        }
+        finally { await app.StopAsync(); }
     }
 
     private static IEnumerable<string> Enlaces(string html) =>

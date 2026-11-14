@@ -86,6 +86,21 @@ public class OportunidadesController : Controller
         return View("~/Views/Panel/DetalleOportunidad.cshtml", modelo);
     }
 
+    [HttpPost("Aceptar")]
+    [ValidateAntiForgeryToken]
+    public IActionResult Aceptar(int viajeId, int envioId)
+    {
+        if (User.Identity?.IsAuthenticated != true) return Challenge();
+        var conductorId = ObtenerConductorId();
+        if (conductorId <= 0) return Forbid();
+        if (!ModelState.IsValid) return BadRequest("Los parámetros no son válidos.");
+        if (viajeId <= 0 || envioId <= 0) return NotFound();
+        // Bloqueo del servidor, incluso con POST directo y antiforgery válido.
+        // Pendiente compatibilidad, capacidad y asociación persistente a viaje/salida.
+        return StatusCode(StatusCodes.Status409Conflict,
+            "La aceptación está deshabilitada hasta validar compatibilidad, capacidad y asignación al viaje concreto.");
+    }
+
     private int ObtenerConductorId()
     {
         var identificador = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");

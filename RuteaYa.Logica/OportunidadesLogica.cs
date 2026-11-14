@@ -56,10 +56,9 @@ public class OportunidadesLogica : IOportunidadesLogica
         };
         if (seleccionado == null) return resultado;
 
-        // No hay una regla existente de exclusión de envíos propios. Incluimos todos
-        // los publicados como disponibles; no usamos el listado por dueño de EnviosLogica.
+        // Candidatos de otros usuarios, coherente con el detalle y la regla de asignación.
         var disponibles = _db.Envios.AsNoTracking()
-            .Where(e => e.Estado == EstadoEnvio.BuscandoConductor);
+            .Where(e => e.Estado == EstadoEnvio.BuscandoConductor && e.UsuarioId != conductorId);
         resultado.TotalCandidatos = await disponibles.CountAsync(cancellationToken);
         resultado.Pagina = Math.Min(pagina, Math.Max(1, resultado.TotalPaginas));
         if (resultado.TotalCandidatos == 0) return resultado;
@@ -89,7 +88,7 @@ public class OportunidadesLogica : IOportunidadesLogica
 
         // Revalidar al abrir: el estado pudo cambiar después de mostrar el listado.
         var envio = await _db.Envios.AsNoTracking()
-            .Where(e => e.Id == envioId && e.Estado == EstadoEnvio.BuscandoConductor)
+            .Where(e => e.Id == envioId && e.Estado == EstadoEnvio.BuscandoConductor && e.UsuarioId != conductorId)
             .Select(DatosEnvio)
             .SingleOrDefaultAsync(cancellationToken);
         if (envio == null) return null;

@@ -1,4 +1,85 @@
-@{ ViewData["Title"]="Nuevo envío"; ViewData["ActivePage"]="Envios"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
-<div class="page-heading"><div><span class="eyebrow">CREACIÓN</span><h1>Nuevo envío</h1><p>Publicá un paquete que necesita ser transportado.</p></div><a class="panel-button outline" href="/Panel/Envios">← Volver</a></div>
-<div class="panel-alert">Formulario de interfaz. El guardado todavía no está conectado con la API ni con SQL Server.</div>
-<div class="panel-card"><form class="panel-form" onsubmit="event.preventDefault();alert('La pantalla está lista visualmente. Falta conectar el formulario con la API.');"><div><h2>Información principal</h2><p>Completá los campos obligatorios.</p></div><div class="panel-form-grid"><div class="panel-field"><label for="origen">Origen / dirección de retiro *</label><input class="panel-input" id="origen" name="origen" type="text" placeholder="Calle, número, localidad" required /></div><div class="panel-field"><label for="destino">Destino / dirección de entrega *</label><input class="panel-input" id="destino" name="destino" type="text" placeholder="Calle, número, localidad" required /></div><div class="panel-field"><label for="fecha">Fecha límite *</label><input class="panel-input" id="fecha" name="fecha" type="date" placeholder="" required /></div><div class="panel-field"><label for="descripcion">Descripción del paquete *</label><input class="panel-input" id="descripcion" name="descripcion" type="text" placeholder="Ej. Documentación, repuesto" required /></div><div class="panel-field"><label for="peso">Peso estimado (kg) *</label><input class="panel-input" id="peso" name="peso" type="number" placeholder="Ej. 2.5" required /></div><div class="panel-field"><label for="monto">Monto ofrecido ($) *</label><input class="panel-input" id="monto" name="monto" type="number" placeholder="Ej. 4000" required /></div><div class="panel-field"><label for="tamano">Tamaño *</label><select id="tamano" class="panel-select" required><option value="">Seleccioná un tamaño</option><option>Pequeño</option><option>Mediano</option><option>Grande</option></select></div><div class="panel-field"><label for="referencia">Indicaciones adicionales</label><textarea class="panel-textarea" id="referencia" placeholder="Piso, horario, referencia..."></textarea></div></div><div class="panel-form-actions"><a class="panel-button outline" href="/Panel/Envios">Cancelar</a><button class="panel-button" type="submit">Publicar envío</button></div></form></div>
+@model RuteaYa.Logica.DTOs.CrearEnvioDto
+
+@{
+    ViewData["Title"] = "Nuevo envío";
+    ViewData["ActivePage"] = "Envios";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">CREACIÓN</span>
+        <h1>Nuevo envío</h1>
+        <p>Publicá un paquete que necesita ser transportado.</p>
+    </div>
+    <a class="panel-button outline" asp-controller="Envios" asp-action="Index">← Volver</a>
+</div>
+
+<div class="panel-card">
+    <form class="panel-form" asp-controller="Envios" asp-action="Crear" method="post">
+        @Html.AntiForgeryToken()
+
+        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+        <div>
+            <h2>Información principal</h2>
+            <p>Completá los campos obligatorios.</p>
+        </div>
+
+        <div class="panel-form-grid">
+            <div class="panel-field">
+                <label asp-for="OrigenDir">Origen / dirección de retiro *</label>
+                <input class="panel-input" asp-for="OrigenDir" type="text" placeholder="Calle, número, localidad" required />
+                <span asp-validation-for="OrigenDir" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="DestinoDir">Destino / dirección de entrega *</label>
+                <input class="panel-input" asp-for="DestinoDir" type="text" placeholder="Calle, número, localidad" required />
+                <span asp-validation-for="DestinoDir" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="FechaLimite">Fecha límite *</label>
+                <input class="panel-input" asp-for="FechaLimite" type="date" required />
+                <span asp-validation-for="FechaLimite" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="Descripcion">Descripción del paquete *</label>
+                <input class="panel-input" asp-for="Descripcion" type="text" placeholder="Ej. Documentación, repuesto" required />
+                <span asp-validation-for="Descripcion" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="PesoKg">Peso estimado (kg) *</label>
+                <input class="panel-input" asp-for="PesoKg" type="number" step="0.1" placeholder="Ej. 2.5" required />
+                <span asp-validation-for="PesoKg" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="Monto">Monto ofrecido ($) *</label>
+                <input class="panel-input" asp-for="Monto" type="number" step="0.01" placeholder="Ej. 4000" required />
+                <span asp-validation-for="Monto" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="Tamano">Tamaño *</label>
+                <select class="panel-select" asp-for="Tamano" asp-items="Html.GetEnumSelectList<RuteaYa.Entidades.TamanoEnvio>()" required>
+                    <option value="">Seleccioná un tamaño</option>
+                </select>
+                <span asp-validation-for="Tamano" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label for="referencia">Indicaciones adicionales</label>
+                <textarea class="panel-textarea" id="referencia" placeholder="Piso, horario, referencia..."></textarea>
+            </div>
+        </div>
+
+        <div class="panel-form-actions">
+            <a class="panel-button outline" asp-controller="Envios" asp-action="Index">Cancelar</a>
+            <button class="panel-button" type="submit">Publicar envío</button>
+        </div>
+    </form>
+</div>

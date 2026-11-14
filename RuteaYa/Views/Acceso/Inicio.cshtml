@@ -1,4 +1,6 @@
-﻿@{
+﻿@model RuteaYa.Web.Models.DashboardViewModel
+@using System.Globalization
+@{
     ViewData["Title"] = "Dashboard";
     Layout = null;
 
@@ -120,7 +122,7 @@
                         <span class="metric-icon blue">↗</span>
                         <span class="metric-label">Próximos viajes</span>
                     </div>
-                    <div class="metric-value">2</div>
+                    <div class="metric-value">@Model.ProximosViajes</div>
                     <div class="metric-footer">
                         <span class="metric-dot blue-dot"></span>
                         <span>Viajes programados</span>
@@ -132,7 +134,7 @@
                         <span class="metric-icon orange">▣</span>
                         <span class="metric-label">Envíos pendientes</span>
                     </div>
-                    <div class="metric-value">2</div>
+                    <div class="metric-value">@Model.EnviosPendientes</div>
                     <div class="metric-footer">
                         <span class="metric-dot orange-dot"></span>
                         <span>Requieren seguimiento</span>
@@ -144,7 +146,7 @@
                         <span class="metric-icon purple">◇</span>
                         <span class="metric-label">Oportunidades</span>
                     </div>
-                    <div class="metric-value">5</div>
+                    <div class="metric-value">@Model.OportunidadesDisponibles</div>
                     <div class="metric-footer">
                         <span class="metric-dot purple-dot"></span>
                         <span>Disponibles para vos</span>
@@ -156,7 +158,7 @@
                         <span class="metric-icon green">↗</span>
                         <span class="metric-label">Potencial del mes</span>
                     </div>
-                    <div class="metric-value">$84.500</div>
+                    <div class="metric-value">@Model.PotencialMensual.ToString("C0", new CultureInfo("es-AR"))</div>
                     <div class="metric-footer">
                         <span class="metric-dot green-dot"></span>
                         <span>Estimación de ingresos</span>
@@ -176,23 +178,25 @@
                         </a>
                     </div>
 
-                    <div class="list-item">
-                        <div class="route-marker"><span></span></div>
-                        <div class="list-content">
-                            <strong>Belgrano <span class="route-arrow">→</span> Lomas de Zamora</strong>
-                            <span class="list-description">Lun, Mié, Vie · 08:00 – 08:55</span>
+                    @if (Model.ViajesRecientes.Count == 0)
+                    {
+                        <div class="list-item">
+                            <div class="list-content">
+                                <span class="list-description">No tenés viajes activos todavía.</span>
+                            </div>
                         </div>
-                        <span class="badge badge-green">Activo</span>
-                    </div>
-
-                    <div class="list-item">
-                        <div class="route-marker"><span></span></div>
-                        <div class="list-content">
-                            <strong>Palermo <span class="route-arrow">→</span> San Isidro</strong>
-                            <span class="list-description">Vie · 18:30 – 19:20</span>
+                    }
+                    @foreach (var viaje in Model.ViajesRecientes)
+                    {
+                        <div class="list-item">
+                            <div class="route-marker"><span></span></div>
+                            <div class="list-content">
+                                <strong>@viaje.Origen <span class="route-arrow">→</span> @viaje.Destino</strong>
+                                <span class="list-description">@viaje.Dias · @viaje.HorarioSalida – @viaje.HorarioLlegada</span>
+                            </div>
+                            <span class="badge badge-green">@viaje.Estado</span>
                         </div>
-                        <span class="badge badge-green">Activo</span>
-                    </div>
+                    }
 
                     <a class="panel-action" asp-controller="Panel" asp-action="Viajes">
                         Gestionar mis viajes <span>→</span>
@@ -210,23 +214,25 @@
                         </a>
                     </div>
 
-                    <div class="list-item">
-                        <div class="shipment-icon">▣</div>
-                        <div class="list-content">
-                            <strong>Plaza Italia <span class="route-arrow">→</span> Obelisco</strong>
-                            <span class="list-description">Zapatillas · $4.000</span>
+                    @if (Model.EnviosPendientesLista.Count == 0)
+                    {
+                        <div class="list-item">
+                            <div class="list-content">
+                                <span class="list-description">No tenés envíos pendientes.</span>
+                            </div>
                         </div>
-                        <span class="badge badge-orange">Buscando conductor</span>
-                    </div>
-
-                    <div class="list-item">
-                        <div class="shipment-icon">▣</div>
-                        <div class="list-content">
-                            <strong>Recoleta <span class="route-arrow">→</span> Quilmes</strong>
-                            <span class="list-description">Documentos · $3.500</span>
+                    }
+                    @foreach (var envio in Model.EnviosPendientesLista)
+                    {
+                        <div class="list-item">
+                            <div class="shipment-icon">▣</div>
+                            <div class="list-content">
+                                <strong>@envio.Origen <span class="route-arrow">→</span> @envio.Destino</strong>
+                                <span class="list-description">@envio.Descripcion · @envio.Importe.ToString("C0", new CultureInfo("es-AR"))</span>
+                            </div>
+                            <span class="badge badge-@envio.EstadoCss">@envio.Estado</span>
                         </div>
-                        <span class="badge badge-blue">Conductor asignado</span>
-                    </div>
+                    }
 
                     <a class="panel-action" asp-controller="Panel" asp-action="Oportunidades">
                         Ver oportunidades <span>→</span>

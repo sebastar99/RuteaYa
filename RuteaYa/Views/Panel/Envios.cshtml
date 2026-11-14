@@ -1,4 +1,116 @@
+
+@*
 @{ ViewData["Title"]="Mis envíos"; ViewData["ActivePage"]="Envios"; Layout="~/Views/Shared/_PanelLayout.cshtml"; }
 <div class="page-heading"><div><span class="eyebrow">RUTEAYA / GESTIÓN</span><h1>Mis envíos</h1><p>Consultá el estado de tus publicaciones y seguí cada entrega.</p></div><a class="panel-button" href="/Panel/NuevoEnvio">＋ Nuevo envío</a></div>
 <div class="panel-stats"><div class="panel-stat "><span>Total de envíos</span><strong>3</strong></div><div class="panel-stat "><span>Buscando conductor</span><strong>1</strong></div><div class="panel-stat "><span>En curso</span><strong>1</strong></div><div class="panel-stat highlight"><span>Entregados</span><strong>1</strong></div></div>
-<div class="panel-card"><div class="panel-toolbar"><div><h2>Mis envíos registrados</h2><p>Contenido ilustrativo para validar la interfaz.</p></div><input class="panel-search" placeholder="Buscar..." data-filter="#listTable"/></div><div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Detalle</th><th>Información</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="listTable"><tr data-search="Plaza Italia → Obelisco Zapatillas · $4.000 Buscando conductor"><td><strong>Plaza Italia → Obelisco</strong></td><td>Zapatillas · $4.000</td><td><span class="panel-pill orange">Buscando conductor</span></td><td><a class="panel-button outline small" href="/Panel/DetalleEnvio">Ver detalle</a></td></tr><tr data-search="Recoleta → Quilmes Documentos · $3.500 Conductor asignado"><td><strong>Recoleta → Quilmes</strong></td><td>Documentos · $3.500</td><td><span class="panel-pill blue">Conductor asignado</span></td><td><a class="panel-button outline small" href="/Panel/DetalleEnvio">Ver detalle</a></td></tr><tr data-search="Avellaneda → Palermo Repuesto · $2.500 Entregado"><td><strong>Avellaneda → Palermo</strong></td><td>Repuesto · $2.500</td><td><span class="panel-pill green">Entregado</span></td><td><a class="panel-button outline small" href="/Panel/DetalleEnvio">Ver detalle</a></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Los datos son de demostración. Esta pantalla aún no consulta ni modifica la base de datos.</p></div>
+<div class="panel-card"><div class="panel-toolbar"><div><h2>Mis envíos registrados</h2><p>Contenido ilustrativo para validar la interfaz.</p></div><input class="panel-search" placeholder="Buscar..." data-filter="#listTable"/></div><div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Detalle</th><th>Información</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="listTable"><tr data-search="Plaza Italia → Obelisco Zapatillas · $4.000 Buscando conductor"><td><strong>Plaza Italia → Obelisco</strong></td><td>Zapatillas · $4.000</td><td><span class="panel-pill orange">Buscando conductor</span></td><td><a class="panel-button outline small" href="/Panel/DetalleEnvio">Ver detalle</a></td></tr><tr data-search="Recoleta → Quilmes Documentos · $3.500 Conductor asignado"><td><strong>Recoleta → Quilmes</strong></td><td>Documentos · $3.500</td><td><span class="panel-pill blue">Conductor asignado</span></td><td><a class="panel-button outline small" href="/Panel/DetalleEnvio">Ver detalle</a></td></tr><tr data-search="Avellaneda → Palermo Repuesto · $2.500 Entregado"><td><strong>Avellaneda → Palermo</strong></td><td>Repuesto · $2.500</td><td><span class="panel-pill green">Entregado</span></td><td><a class="panel-button outline small" href="/Panel/DetalleEnvio">Ver detalle</a></td></tr></tbody></table></div><p class="panel-note" style="margin-top:14px">Los datos son de demostración. Esta pantalla aún no consulta ni modifica la base de datos.</p></div>*@
+
+
+@model IEnumerable<RuteaYa.Logica.DTOs.EnvioDto>
+
+@{
+    ViewData["Title"] = "Mis envíos";
+    ViewData["ActivePage"] = "Envios";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+
+    var envios = Model ?? Enumerable.Empty<RuteaYa.Logica.DTOs.EnvioDto>();
+    var totalEnvios = envios.Count();
+    var buscandoConductor = envios.Count(e => e.Estado == RuteaYa.Entidades.EstadoEnvio.BuscandoConductor);
+    var enCurso = envios.Count(e => e.Estado == RuteaYa.Entidades.EstadoEnvio.ConductorAsignado
+                                || e.Estado == RuteaYa.Entidades.EstadoEnvio.Retirado
+                                || e.Estado == RuteaYa.Entidades.EstadoEnvio.EnCamino);
+    var entregados = envios.Count(e => e.Estado == RuteaYa.Entidades.EstadoEnvio.Entregado);
+}
+
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / GESTIÓN</span>
+        <h1>Mis envíos</h1>
+        <p>Consultá el estado de tus publicaciones y seguí cada entrega.</p>
+    </div>
+    <a class="panel-button" asp-controller="Envios" asp-action="Crear">＋ Nuevo envío</a>
+</div>
+
+<div class="panel-stats">
+    <div class="panel-stat">
+        <span>Total de envíos</span>
+        <strong>@totalEnvios</strong>
+    </div>
+    <div class="panel-stat">
+        <span>Buscando conductor</span>
+        <strong>@buscandoConductor</strong>
+    </div>
+    <div class="panel-stat">
+        <span>En curso</span>
+        <strong>@enCurso</strong>
+    </div>
+    <div class="panel-stat highlight">
+        <span>Entregados</span>
+        <strong>@entregados</strong>
+    </div>
+</div>
+
+<div class="panel-card">
+    <div class="panel-toolbar">
+        <div>
+            <h2>Mis envíos registrados</h2>
+            <p>Gestión en tiempo real de tus envíos cargados.</p>
+        </div>
+        <input class="panel-search" placeholder="Buscar..." data-filter="#listTable" />
+    </div>
+    <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead>
+                <tr>
+                    <th>Detalle</th>
+                    <th>Información</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="listTable">
+                @if (envios.Any())
+                {
+                    @foreach (var envio in envios)
+                    {
+                        var estadoTexto = envio.Estado switch
+                        {
+                            RuteaYa.Entidades.EstadoEnvio.BuscandoConductor => "Buscando conductor",
+                            RuteaYa.Entidades.EstadoEnvio.ConductorAsignado => "Conductor asignado",
+                            RuteaYa.Entidades.EstadoEnvio.Retirado => "Retirado",
+                            RuteaYa.Entidades.EstadoEnvio.EnCamino => "En camino",
+                            RuteaYa.Entidades.EstadoEnvio.Entregado => "Entregado",
+                            RuteaYa.Entidades.EstadoEnvio.Cancelado => "Cancelado",
+                            _ => envio.Estado.ToString()
+                        };
+
+                        var pillCss = envio.Estado switch
+                        {
+                            RuteaYa.Entidades.EstadoEnvio.BuscandoConductor => "orange",
+                            RuteaYa.Entidades.EstadoEnvio.ConductorAsignado => "blue",
+                            RuteaYa.Entidades.EstadoEnvio.Retirado => "blue",
+                            RuteaYa.Entidades.EstadoEnvio.EnCamino => "blue",
+                            RuteaYa.Entidades.EstadoEnvio.Entregado => "green",
+                            _ => ""
+                        };
+
+                        <tr data-search="@envio.OrigenDir → @envio.DestinoDir @envio.Descripcion · $@envio.Monto.ToString("N0") @estadoTexto">
+                            <td><strong>@envio.OrigenDir → @envio.DestinoDir</strong></td>
+                            <td>@envio.Descripcion · $@envio.Monto.ToString("N0")</td>
+                            <td><span class="panel-pill @pillCss">@estadoTexto</span></td>
+                            <td>
+                                <a class="panel-button outline small" asp-controller="Envios" asp-action="Detalle" asp-route-id="@envio.Id">Ver detalle</a>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="4" style="text-align:center; padding: 20px;">No tenés envíos registrados aún.</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -9,6 +9,7 @@ namespace RuteaYa.Logica.DTOs
     {
         public int Id { get; set; }
         public int UsuarioId { get; set; }
+        public int? ConductorId { get; set; }
         public string OrigenDir { get; set; } = string.Empty;
         public string DestinoDir { get; set; } = string.Empty;
         public DateTime FechaLimite { get; set; }

@@ -22,9 +22,19 @@ public class ViajesController : ControllerBase
 
     private int ObtenerUsuarioId()
     {
-        var identificador =
-            User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        // JwtBearer puede conservar la claim como NameIdentifier, sub,
+        // nameid o como el URI completo según MapInboundClaims y la versión
+        // del handler. El login de esta API emite NameIdentifier y sub, por
+        // eso aceptamos todas las variantes equivalentes.
+        var identificador = new[]
+        {
+            ClaimTypes.NameIdentifier,
+            JwtRegisteredClaimNames.Sub,
+            "sub",
+            "nameid"
+        }
+        .Select(User.FindFirstValue)
+        .FirstOrDefault(valor => !string.IsNullOrWhiteSpace(valor));
 
         return int.TryParse(identificador, out var id) && id > 0 ? id : 0;
     }
@@ -85,6 +95,11 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (dto == null)
+        {
+            return BadRequest(new { mensaje = "Los datos del viaje son obligatorios." });
+        }
            
         try {
             var resultado = await _viajesLogica.CrearViajeAsync(usuarioId, dto);
@@ -119,6 +134,16 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje no válido." });
+        }
+
+        if (dto == null)
+        {
+            return BadRequest(new { mensaje = "Los datos del viaje son obligatorios." });
+        }
             
         try {
             var resultado = await _viajesLogica.EditarViajeAsync(usuarioId, id, dto);
@@ -149,6 +174,11 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje no válido." });
+        }
             
         var resultado = await _viajesLogica.DesactivarViajeAsync(usuarioId, id);
 
@@ -169,6 +199,16 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
 
+        }
+
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje no válido." });
+        }
+
+        if (dto == null)
+        {
+            return BadRequest(new { mensaje = "Los datos de la parada son obligatorios." });
         }
             
         try {
@@ -201,6 +241,11 @@ public class ViajesController : ControllerBase
         {
             return Unauthorized();
         }
+
+        if (id <= 0 || paradaId <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje o parada no válido." });
+        }
            
         var resultado = await _viajesLogica.EliminarParadaAsync(usuarioId, id, paradaId);
 
@@ -222,7 +267,12 @@ public class ViajesController : ControllerBase
             return Unauthorized();
         }
             
-        if (dto.ParadasIds is null)
+        if (id <= 0)
+        {
+            return BadRequest(new { mensaje = "ID de viaje no válido." });
+        }
+
+        if (dto?.ParadasIds is null)
         {
             return BadRequest(new {mensaje = "La lista de paradas es obligatoria."});
         }

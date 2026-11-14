@@ -46,5 +46,7 @@ namespace RuteaYa.Web.Models
         public decimal Importe { get; set; }
 
         public string Estado { get; set; } = string.Empty;
+
+        public string EstadoCss { get; set; } = "blue";
     }
 }

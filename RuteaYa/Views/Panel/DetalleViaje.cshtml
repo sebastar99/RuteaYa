@@ -33,6 +33,20 @@
     </a>
 </div>
 
+@if (TempData["MensajeExito"] is string mensajeExito)
+{
+    <div class="panel-alert success" role="status">
+        @mensajeExito
+    </div>
+}
+
+@if (TempData["MensajeError"] is string mensajeError)
+{
+    <div class="panel-alert danger" role="alert">
+        @mensajeError
+    </div>
+}
+
 @if (ViewBag.Error is string error && !string.IsNullOrWhiteSpace(error))
 {
     <div class="panel-card" role="alert">
@@ -44,42 +58,10 @@ else
 {
     <div class="panel-card">
 
-        <div>
-            <span class="eyebrow">RECORRIDO</span>
-            <h2>@Model.Origen → @Model.Destino</h2>
-
-            @if (TempData["MensajeExito"] is string mensajeExito)
-            {
-                <div class="panel-card" role="status">
-                    @mensajeExito
-                </div>
-            }
-
-            @if (TempData["MensajeError"] is string mensajeError)
-            {
-                <div class="panel-card" role="alert">
-                    @mensajeError
-                </div>
-            }
-
-            <div class="panel-actions">
-                @if (Model.Activo)
-                {
-                    <a asp-controller="Panel" asp-action="EditarViaje"
-                    asp-route-id="@Model.Id" class="btn btn-primary">
-                        Editar viaje
-                    </a>
-
-                    <form asp-controller="Panel" asp-action="DesactivarViaje" asp-route-id="@Model.Id"
-                    method="post" onsubmit="return confirm('¿Querés desactivar este viaje?');">
-
-                        @Html.AntiForgeryToken()
-
-                        <button type="submit" class="btn btn-danger">
-                            Desactivar viaje
-                        </button>
-                    </form>
-                }
+        <div class="detail-head">
+            <div>
+                <span class="eyebrow">RECORRIDO</span>
+                <h2>@Model.Origen → @Model.Destino</h2>
             </div>
 
             @if (Model.Activo)
@@ -91,6 +73,26 @@ else
                 <span class="panel-pill blue">Inactivo</span>
             }
         </div>
+
+        @if (Model.Activo)
+        {
+            <div class="detail-actions">
+                <a asp-controller="Panel" asp-action="EditarViaje"
+                    asp-route-id="@Model.Id" class="panel-button">
+                    Editar viaje
+                </a>
+
+                <form asp-controller="Panel" asp-action="DesactivarViaje" asp-route-id="@Model.Id"
+                    method="post" onsubmit="return confirm('¿Querés desactivar este viaje?');">
+
+                    @Html.AntiForgeryToken()
+
+                    <button type="submit" class="panel-button danger">
+                        Desactivar viaje
+                    </button>
+                </form>
+            </div>
+        }
 
         <div class="panel-stats">
 
@@ -115,10 +117,12 @@ else
 
         </div>
 
+        <hr class="panel-divider" />
+
         <div class="panel-form-grid">
 
             <div class="panel-field">
-                <label>Dias de circulacion</label>
+                <label>Días de circulación</label>
                 <p>
                     @if (dias.Count > 0)
                     {
@@ -126,18 +130,18 @@ else
                     }
                     else
                     {
-                        <span>No hay dias registrados.</span>
+                        <span class="panel-muted">No hay días registrados.</span>
                     }
                 </p>
             </div>
 
             <div class="panel-field">
-                <label>Peso maximo</label>
+                <label>Peso máximo</label>
                 <p>@Model.PesoMax kg</p>
             </div>
 
             <div class="panel-field">
-                <label>Desvio maximo</label>
+                <label>Desvío máximo</label>
                 <p>@Model.DesvioMaxKm km</p>
             </div>
 
@@ -155,22 +159,22 @@ else
 
         @if (Model.Activo)
         {
-            <form asp-controller="Panel" asp-action="AgregarParada" method="post">
+            <form asp-controller="Panel" asp-action="AgregarParada" method="post" class="panel-form">
                 @Html.AntiForgeryToken()
 
                 <input type="hidden" name="viajeId" value="@Model.Id" />
 
                 <div class="panel-form-grid">
 
-                    <div>
-                        <label for="ubicacion">Ubicacion de la parada</label>
+                    <div class="panel-field">
+                        <label for="ubicacion">Ubicación de la parada</label>
 
                         <input type="text" id="ubicacion" name="ubicacion"  maxlength="150"
                             required class="panel-input" placeholder="Ej. Chivilcoy, Buenos Aires" 
                         />
                     </div>
 
-                    <div>
+                    <div class="panel-field">
                         <label for="orden">Orden de la parada</label>
 
                         <input type="number" id="orden" name="orden" min="1" max="100"
@@ -179,22 +183,26 @@ else
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary">
-                    Agregar parada
-                </button>
+                <div class="panel-form-actions">
+                    <button type="submit" class="panel-button">
+                        Agregar parada
+                    </button>
+                </div>
             </form>
 
-            <hr />
+            <hr class="panel-divider" />
         }
 
         @if (paradas.Count == 0)
         {
-            <p>Este viaje todavia no tiene paradas intermedias.</p>
+            <div class="panel-empty">
+                <p>Este viaje todavía no tiene paradas intermedias.</p>
+            </div>
         }
         else
         {
-            <div class="table-responsive">
-                <table class="table">
+            <div class="panel-table-wrap">
+                <table class="panel-table">
 
                     <thead>
                         <tr>
@@ -214,7 +222,7 @@ else
                         {
                             <tr>
                                 <td>@parada.Orden</td>
-                                <td>@parada.Ubicacion</td>
+                                <td><strong>@parada.Ubicacion</strong></td>
 
                                 @if (Model.Activo)
                                 {
@@ -227,7 +235,7 @@ else
                                             <input type="hidden" name="viajeId" value="@Model.Id" />
                                             <input type="hidden" name="paradaId" value="@parada.Id" />
 
-                                            <button type="submit" class="btn btn-danger">
+                                            <button type="submit" class="panel-button danger small">
                                                 Eliminar
                                             </button>
                                         </form>
@@ -244,15 +252,15 @@ else
 
             @if (Model.Activo && paradas.Count > 1)
             {
-                <hr />
+                <hr class="panel-divider" />
                 <h3>Reordenar paradas</h3>
 
-                <p>
-                    Modificar los numeros para establecer un nuevo orden
-                    para el recorrido. Cada parada debe tener un numero diferente.
+                <p class="panel-note">
+                    Modificá los números para establecer un nuevo orden
+                    para el recorrido. Cada parada debe tener un número diferente.
                 </p>
 
-                <form asp-controller="Panel" asp-action="ReordenarParadas" method="post">
+                <form asp-controller="Panel" asp-action="ReordenarParadas" method="post" class="panel-form">
 
                     @Html.AntiForgeryToken()
 
@@ -260,14 +268,15 @@ else
 
                     @foreach (var parada in paradas.OrderBy(p => p.Orden))
                     {
-                        <div class="panel-form-grid">
+                        <div class="reorder-row">
 
-                            <div>
-                                <label>@parada.Ubicacion</label>
+                            <div class="panel-field">
+                                <label>Parada</label>
+                                <p>@parada.Ubicacion</p>
                                 <input type="hidden" name="paradasIds"  value="@parada.Id" />
                             </div>
 
-                            <div>
+                            <div class="panel-field">
                                 <label>Nuevo orden</label>
                                 <input type="number" class="panel-input" name="ordenes" value="@parada.Orden"
                                     min="1" max="@paradas.Count" required />
@@ -276,9 +285,11 @@ else
                         </div>
                     }
 
-                    <button type="submit" class="btn btn-primary">
-                        Guardar nuevo orden
-                    </button>
+                    <div class="panel-form-actions">
+                        <button type="submit" class="panel-button">
+                            Guardar nuevo orden
+                        </button>
+                    </div>
 
                 </form>
             }

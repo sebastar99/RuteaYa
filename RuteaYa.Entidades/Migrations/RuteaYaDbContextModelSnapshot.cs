@@ -52,6 +52,9 @@ namespace RuteaYa.Entidades.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ConductorId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreadoEn")
                         .HasColumnType("datetime2");
 
@@ -113,6 +116,8 @@ namespace RuteaYa.Entidades.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ConductorId");
 
                     b.HasIndex("UsuarioId");
 
@@ -246,11 +251,18 @@ namespace RuteaYa.Entidades.Migrations
 
             modelBuilder.Entity("RuteaYa.Entidades.Envio", b =>
                 {
+                    b.HasOne("RuteaYa.Entidades.Usuario", "Conductor")
+                        .WithMany()
+                        .HasForeignKey("ConductorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("RuteaYa.Entidades.Usuario", "Usuario")
                         .WithMany()
                         .HasForeignKey("UsuarioId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Conductor");
 
                     b.Navigation("Usuario");
                 });

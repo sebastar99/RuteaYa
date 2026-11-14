@@ -1,8 +1,4 @@
 ﻿
-using System;
-using System.Collections.Generic;
-using System.Security.Claims;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
@@ -12,10 +8,15 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Moq;
 using RuteaYa.Web.Controllers;
 using RuteaYa.Web.Models;
 using RuteaYa.Web.Services;
+using System;
+using System.Collections.Generic;
+using System.Security.Claims;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace RuteaYa.Test
@@ -44,6 +45,9 @@ namespace RuteaYa.Test
                     CookieAuthenticationDefaults.AuthenticationScheme,
                     It.IsAny<AuthenticationProperties?>()))
                 .Returns(Task.CompletedTask);
+
+
+            var loggerMock = new Mock<ILogger<AccesoController>>();
 
             var servicios = new ServiceCollection();
 
@@ -76,7 +80,7 @@ namespace RuteaYa.Test
                 new RouteData(),
                 actionDescriptor);
 
-            return new AccesoController(servicio)
+            return new AccesoController(servicio, loggerMock.Object)
             {
                 ControllerContext =
                     new ControllerContext(actionContext)

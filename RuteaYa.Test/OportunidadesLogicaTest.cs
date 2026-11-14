@@ -55,19 +55,19 @@ public class OportunidadesLogicaTest
     }
 
     [Fact]
-    public async Task ConsultarAsync_ViajePropio_ListadoGlobalPorEstadoSinFiltrarPorDueno()
+    public async Task ConsultarAsync_ViajePropio_ListadoPorEstadoExcluyeEnviosPropios()
     {
         var consultas = new ConsultasEfSimuladas();
         consultas.Responder(Viajes());
         consultas.Responder(Cantidad(2));
-        consultas.Responder(Envios((25, 99), (24, 7)));
+        consultas.Responder(Envios((25, 99), (24, 8)));
         await using var db = consultas.CrearContexto();
 
         var resultado = await Logica(db).ConsultarAsync(7, 10);
 
         Assert.NotNull(resultado);
         Assert.Equal(10, resultado.ViajeSeleccionado!.Id);
-        Assert.Equal(new[] { 99, 7 }, resultado.Candidatos.Select(e => e.UsuarioId));
+        Assert.Equal(new[] { 99, 8 }, resultado.Candidatos.Select(e => e.UsuarioId));
         Assert.All(resultado.Candidatos, e => Assert.Equal(EstadoEnvio.BuscandoConductor, e.Estado));
         Assert.Equal(2, resultado.TotalCandidatos);
         Assert.True(resultado.EvaluacionPendiente);
@@ -78,7 +78,8 @@ public class OportunidadesLogicaTest
         foreach (var consulta in consultas.Consultas.Skip(1))
         {
             Assert.Matches(@"\[Estado\]\s*=\s*(?:CAST\(\s*)?0\b", consulta.Sql);
-            Assert.DoesNotMatch(@"\[UsuarioId\]\s*=", consulta.Sql);
+            Assert.Matches(@"\[UsuarioId\]\s*<>\s*@", consulta.Sql);
+            Assert.Contains(consulta.Parametros.Values, v => Equals(v, 7));
         }
         Assert.Equal(2.5m, resultado.Candidatos[0].PesoKg);
         Assert.Equal(4000m, resultado.Candidatos[0].Monto);
@@ -286,6 +287,20 @@ public class OportunidadesLogicaTest
         Assert.Equal(2, consultas.Consultas.Count);
         Assert.Matches(@"\[Estado\]\s*=\s*(?:CAST\(\s*)?0\b", consultas.Consultas[1].Sql);
         Assert.Empty(db.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task ObtenerDetalleAsync_EnvioPropio_ExcluidoPorSqlSinEvaluar()
+    {
+        var consultas = new ConsultasEfSimuladas();
+        consultas.Responder(Viajes());
+        consultas.Responder(Envios()); // WHERE excluye la publicación del conductor.
+        await using var db = consultas.CrearContexto();
+        var evaluacion = new Mock<IEvaluacionOportunidadServicio>(MockBehavior.Strict);
+        Assert.Null(await Logica(db, evaluacion.Object).ObtenerDetalleAsync(7, 10, 25));
+        Assert.Matches(@"\[UsuarioId\]\s*<>\s*@", consultas.Consultas[1].Sql);
+        Assert.Contains(consultas.Consultas[1].Parametros.Values, v => Equals(v, 7));
+        evaluacion.VerifyNoOtherCalls();
     }
 
     [Theory]
