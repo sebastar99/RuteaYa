@@ -1,0 +1,12 @@
+@model RuteaYa.Web.Models.ParadaViewModel
+<div class="panel-card" data-parada-viaje>
+    <input type="hidden" name="Paradas.Index" value="@Model.ClaveCampo" />
+    <input type="hidden" name="Paradas[@Model.ClaveCampo].Id" value="@Model.Id" />
+    <input type="hidden" name="Paradas[@Model.ClaveCampo].ClaveCampo" value="@Model.ClaveCampo" />
+    @if (Model.CampoDireccion != null) { <partial name="_CampoDireccionHere" model="Model.CampoDireccion" /> }
+    <div class="panel-form-actions">
+        <button type="button" class="panel-button outline small" data-mover-parada="-1">Subir parada</button>
+        <button type="button" class="panel-button outline small" data-mover-parada="1">Bajar parada</button>
+        <button type="button" class="panel-button outline small" data-quitar-parada>Quitar parada</button>
+    </div>
+</div>

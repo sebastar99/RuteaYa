@@ -104,16 +104,48 @@ public sealed class UbicacionesConfirmadasServicio(RuteaYaDbContext db,
         return new(token, ubicacion.VenceEnUtc);
     }
 
-    public async Task GuardarAsync(int usuarioId, IReadOnlyList<AsignacionUbicacionDto> asignaciones, CancellationToken ct = default)
+    public async Task<string> ObtenerDireccionAsync(int usuarioId, ContextoUbicacionDto contexto, string token, CancellationToken ct = default)
+    {
+        await ValidarRevisionAsync(usuarioId, contexto, ct);
+        return (await LeerComprobanteAsync(usuarioId, contexto, token, false, ct)).DireccionNormalizada;
+    }
+
+    private async Task<UbicacionConfirmada> LeerComprobanteAsync(int usuarioId, ContextoUbicacionDto contexto, string token, bool tracking, CancellationToken ct)
+    {
+        if (!TokenValido(token)) throw Error("comprobante_invalido");
+        var hash = Hash(token);
+        var query = tracking ? db.UbicacionesConfirmadas.AsQueryable() : db.UbicacionesConfirmadas.AsNoTracking();
+        var u = await query.SingleOrDefaultAsync(u => u.TokenHash == hash, ct);
+        if (u == null || u.UsuarioId != usuarioId || u.FormularioId != contexto.FormularioId || u.TipoRecurso != contexto.TipoRecurso ||
+            u.RecursoId != contexto.RecursoId || u.Campo != contexto.Campo || u.ClaveCampo != contexto.ClaveCampo || u.RevisionRecurso != contexto.RevisionRecurso)
+            throw Error("comprobante_no_disponible");
+        if (u.ConsumidaEnUtc.HasValue) throw Error("comprobante_consumido");
+        if (u.VenceEnUtc <= _reloj.GetUtcNow()) throw Error("comprobante_vencido");
+        return u;
+    }
+
+    public Task GuardarAsync(int usuarioId, IReadOnlyList<AsignacionUbicacionDto> asignaciones, CancellationToken ct = default) =>
+        GuardarInternoAsync(usuarioId, asignaciones, null, null, null, ct);
+
+    public Task GuardarViajeAsync(int usuarioId, Viaje viaje, ContextoUbicacionDto contexto,
+        IReadOnlyList<AsignacionUbicacionDto> asignaciones, Func<CancellationToken, Task>? prepararOrden = null, CancellationToken ct = default) =>
+        GuardarInternoAsync(usuarioId, asignaciones, viaje, contexto, prepararOrden, ct);
+
+    private async Task GuardarInternoAsync(int usuarioId, IReadOnlyList<AsignacionUbicacionDto> asignaciones, Viaje? raiz,
+        ContextoUbicacionDto? contexto, Func<CancellationToken, Task>? prepararOrden, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (asignaciones == null || asignaciones.Count is < 1 or > 52 || db.Database.CurrentTransaction != null) throw Error("guardado_invalido");
+        if (asignaciones == null || asignaciones.Count > 52 || asignaciones.Count == 0 && raiz == null || db.Database.CurrentTransaction != null) throw Error("guardado_invalido");
         if (db.ChangeTracker.Entries<UbicacionConfirmada>().Any(e => e.State != EntityState.Unchanged)) throw Error("snapshot_modificado");
-        var primera = asignaciones[0].Contexto;
+        var primera = contexto ?? asignaciones[0].Contexto;
+        if (raiz != null) {
+            if (primera.TipoRecurso != TipoRecursoUbicacion.Viaje) throw Error("contexto_invalido");
+            ValidarDestino(raiz.UsuarioId, raiz.Id, db.Entry(raiz).State, usuarioId, primera);
+        }
         var destinos = asignaciones.Select(a => (Destino: (object?)a.Viaje ?? (object?)a.Parada ?? a.Envio, a.Contexto.Campo)).ToArray();
         if (destinos.Distinct().Count() != destinos.Length) throw Error("destino_repetido");
         var raices = asignaciones.Select(a => (object?)a.Viaje ?? (object?)a.Parada?.Viaje ?? a.Envio).ToArray();
-        if (raices.Any(r => r == null) || raices.Any(r => !ReferenceEquals(r, raices[0]))) throw Error("recursos_mezclados");
+        if (raices.Any(r => r == null) || raices.Any(r => !ReferenceEquals(r, raiz ?? raices[0]))) throw Error("recursos_mezclados");
         if (asignaciones.Select(a => a.Token).Distinct().Count() != asignaciones.Count ||
             asignaciones.Select(a => (a.Contexto.Campo, a.Contexto.ClaveCampo)).Distinct().Count() != asignaciones.Count ||
             asignaciones.Any(a => a.Contexto.FormularioId != primera.FormularioId || a.Contexto.TipoRecurso != primera.TipoRecurso ||
@@ -128,25 +160,20 @@ public sealed class UbicacionesConfirmadasServicio(RuteaYaDbContext db,
         await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct);
         try
         {
+            await ValidarRevisionAsync(usuarioId, primera, ct);
+            if (prepararOrden != null) await prepararOrden(ct);
             var usadas = new List<UbicacionConfirmada>();
             foreach (var a in asignaciones)
             {
-                await ValidarRevisionAsync(usuarioId, a.Contexto, ct);
-                if (!TokenValido(a.Token)) throw Error("comprobante_invalido");
-                var hash = Hash(a.Token);
-                var u = await db.UbicacionesConfirmadas.SingleOrDefaultAsync(u => u.TokenHash == hash, ct);
-                if (u == null || u.UsuarioId != usuarioId || u.FormularioId != a.Contexto.FormularioId || u.TipoRecurso != a.Contexto.TipoRecurso ||
-                    u.RecursoId != a.Contexto.RecursoId || u.Campo != a.Contexto.Campo || u.ClaveCampo != a.Contexto.ClaveCampo ||
-                    u.RevisionRecurso != a.Contexto.RevisionRecurso) throw Error("comprobante_no_disponible");
-                if (u.ConsumidaEnUtc.HasValue) throw Error("comprobante_consumido");
-                if (u.VenceEnUtc <= _reloj.GetUtcNow()) throw Error("comprobante_vencido");
+                ValidarContexto(usuarioId, a.Contexto);
+                var u = await LeerComprobanteAsync(usuarioId, a.Contexto, a.Token, true, ct);
                 if (a.Parada is Parada parada && db.Entry(parada).State != EntityState.Added &&
                     !await db.Paradas.AsNoTracking().AnyAsync(p => p.Id == parada.Id && p.ViajeId == a.Contexto.RecursoId && p.Viaje!.UsuarioId == usuarioId, ct))
                     throw Error("parada_no_disponible");
                 Vincular(usuarioId, a, u);
                 u.ConsumidaEnUtc = _reloj.GetUtcNow(); u.Version = Guid.NewGuid(); usadas.Add(u);
             }
-            ValidarUnidadDeTrabajo(usuarioId, asignaciones, usadas);
+            ValidarUnidadDeTrabajo(usuarioId, asignaciones, usadas, raiz);
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
@@ -207,9 +234,9 @@ public sealed class UbicacionesConfirmadasServicio(RuteaYaDbContext db,
         if (propietario != usuarioId || (contexto.RecursoId.HasValue ? id != contexto.RecursoId : estado != EntityState.Added)) throw Error("destino_invalido");
     }
 
-    private void ValidarUnidadDeTrabajo(int usuarioId, IReadOnlyList<AsignacionUbicacionDto> asignaciones, List<UbicacionConfirmada> usadas)
+    private void ValidarUnidadDeTrabajo(int usuarioId, IReadOnlyList<AsignacionUbicacionDto> asignaciones, List<UbicacionConfirmada> usadas, Viaje? raiz = null)
     {
-        var viajes = asignaciones.Select(a => a.Viaje ?? a.Parada?.Viaje).Where(v => v != null).ToArray();
+        var viajes = asignaciones.Select(a => a.Viaje ?? a.Parada?.Viaje).Append(raiz).Where(v => v != null).ToArray();
         foreach (var entry in db.ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
         {
             bool permitido = entry.Entity switch {

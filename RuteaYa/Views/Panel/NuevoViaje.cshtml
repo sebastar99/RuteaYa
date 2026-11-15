@@ -22,7 +22,7 @@
 <div asp-validation-summary="ModelOnly" class="panel-alert"></div>
 
 <div class="panel-card">
-    <form asp-controller="Panel" asp-action="NuevoViaje" method="post" class="panel-form">
+    <form asp-controller="Panel" asp-action="NuevoViaje" method="post" class="panel-form" data-viaje-direcciones>
 
         @Html.AntiForgeryToken()
 
@@ -31,30 +31,8 @@
             <p>Completar los campos obligatorios.</p>
         </div>
 
+        <partial name="_DireccionesViaje" model="Model" />
         <div class="panel-form-grid">
-
-            <div class="panel-field">
-                <label asp-for="Origen">Origen *</label>
-                <input asp-for="Origen" class="panel-input" placeholder="Ej: Mataderos, CABA" />
-                <span asp-validation-for="Origen"></span>
-            </div>
-
-            <div class="panel-field">
-                <label asp-for="Destino">Destino *</label>
-                <input asp-for="Destino" class="panel-input" placeholder="Ej: Lomas de Zamora" />
-                <span asp-validation-for="Destino"></span>
-            </div>
-
-            <div class="panel-field">
-
-                <label asp-for="ParadasTexto">
-                    Paradas intermedias
-                </label>
-
-                <input asp-for="ParadasTexto" class="panel-input" placeholder="Ej: Lanus, Banfield (separadas por coma)" />
-                <span asp-validation-for="ParadasTexto"></span>
-
-            </div>
 
             <div class="panel-field">
                 <label asp-for="HoraSalida">Hora de salida *</label>
@@ -199,4 +177,8 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/here-http.js" asp-append-version="true"></script>
+    <script src="~/js/direcciones-here.js" asp-append-version="true"></script>
+    <script src="~/js/viajes-direcciones.js" asp-append-version="true"></script>
 }
+<link rel="stylesheet" href="~/css/direcciones-here.css" asp-append-version="true" />

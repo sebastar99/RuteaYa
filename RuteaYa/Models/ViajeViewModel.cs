@@ -4,6 +4,17 @@ namespace RuteaYa.Web.Models
 {
     public class ViajeViewModel
     {
+        public string? FormularioDirecciones { get; set; }
+        public string? OrigenComprobante { get; set; }
+        public string? DestinoComprobante { get; set; }
+        public bool OrigenConfirmado { get; set; }
+        public bool DestinoConfirmado { get; set; }
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public RuteaYa.Logica.DTOs.UbicacionesViajeDto? Ubicaciones { get; set; }
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public CampoDireccionViewModel? OrigenCampo { get; set; }
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public CampoDireccionViewModel? DestinoCampo { get; set; }
         public int Id { get; set; }
 
         [Required(ErrorMessage = "Ingresar el origen.")]
@@ -33,6 +44,7 @@ namespace RuteaYa.Web.Models
         [Range(0.01, 100000, ErrorMessage = "Ingresar un desvio valido.")]
         public decimal DesvioMaxKm { get; set; }
 
+        // Compatibilidad de modelos anteriores; los formularios y el gateway ya no leen ni dividen este campo.
         public string ParadasTexto { get; set; } = string.Empty;
 
         // Paradas recibidas desde la API.
@@ -45,6 +57,11 @@ namespace RuteaYa.Web.Models
 
     public class ParadaViewModel
     {
+        public string ClaveCampo { get; set; } = Guid.NewGuid().ToString("N");
+        public string? Comprobante { get; set; }
+        public bool Confirmada { get; set; }
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public CampoDireccionViewModel? CampoDireccion { get; set; }
         public int Id { get; set; }
 
         public string Ubicacion { get; set; } = string.Empty;

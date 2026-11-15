@@ -16,4 +16,7 @@ public interface IUbicacionesConfirmadasServicio
     Task<ComprobanteUbicacionDto> EmitirAsync(int usuarioId, ContextoUbicacionDto contexto,
         string tokenSeleccion, CancellationToken ct = default);
     Task GuardarAsync(int usuarioId, IReadOnlyList<AsignacionUbicacionDto> asignaciones, CancellationToken ct = default);
+    Task<string> ObtenerDireccionAsync(int usuarioId, ContextoUbicacionDto contexto, string token, CancellationToken ct = default);
+    Task GuardarViajeAsync(int usuarioId, Viaje viaje, ContextoUbicacionDto contexto,
+        IReadOnlyList<AsignacionUbicacionDto> asignaciones, Func<CancellationToken, Task>? prepararOrden = null, CancellationToken ct = default);
 }

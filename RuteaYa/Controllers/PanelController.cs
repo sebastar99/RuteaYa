@@ -14,11 +14,13 @@ namespace RuteaYa.Web.Controllers
     {
         private readonly RuteaYaDbContext _dbContext;
         private readonly IViajesApiServicio _viajesApiServicio;
+        private readonly FormulariosViajeServicio? _formulariosViaje;
 
-        public PanelController(RuteaYaDbContext dbContext, IViajesApiServicio viajesApiServicio)
+        public PanelController(RuteaYaDbContext dbContext, IViajesApiServicio viajesApiServicio, FormulariosViajeServicio? formulariosViaje = null)
         {
             _dbContext = dbContext;
             _viajesApiServicio = viajesApiServicio;
+            _formulariosViaje = formulariosViaje;
         }
 
         public IActionResult Envios() => RedirectToAction("Index", "Envios");
@@ -62,15 +64,24 @@ namespace RuteaYa.Web.Controllers
         }
 
         [HttpGet]
-        public IActionResult NuevoViaje()
+        public async Task<IActionResult> NuevoViaje()
         {
-            return View(new ViajeViewModel());
+            var usuario = ObtenerUsuarioId(); if (usuario <= 0) return Forbid();
+            var modelo = new ViajeViewModel();
+            try { if (_formulariosViaje != null) await _formulariosViaje.PrepararAsync(usuario, modelo, HttpContext.RequestAborted); }
+            catch (Exception e) when (e is InvalidOperationException or ArgumentException) { ModelState.AddModelError("", e.Message); }
+            return View(modelo);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> NuevoViaje(ViajeViewModel modelo)
         {
+            var actor = ObtenerUsuarioId(); if (actor <= 0) return Forbid();
+            if (modelo.Id != 0) return BadRequest("El formulario de alta no admite un viaje existente.");
+            try { _formulariosViaje?.PrepararGuardado(actor, modelo); }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException) { ModelState.AddModelError("", e.Message); }
+            RellenarCamposViaje(actor, modelo);
             if (modelo.DiasSemana == null || modelo.DiasSemana.Count == 0)
             {
                 ModelState.AddModelError(
@@ -163,12 +174,8 @@ namespace RuteaYa.Web.Controllers
 
             var modelo = resultado.Viaje;
 
-            modelo.ParadasTexto = string.Join(
-                ", ",
-                (modelo.Paradas ?? new List<ParadaViewModel>())
-                .OrderBy(p => p.Orden)
-                .Select(p => p.Ubicacion)
-            );
+            try { if (_formulariosViaje != null) await _formulariosViaje.PrepararAsync(usuarioId, modelo, HttpContext.RequestAborted); }
+            catch (Exception e) when (e is InvalidOperationException or ArgumentException) { ModelState.AddModelError("", e.Message); }
 
             return View(modelo);
         }
@@ -177,6 +184,11 @@ namespace RuteaYa.Web.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditarViaje(ViajeViewModel modelo)
         {
+            var actor = ObtenerUsuarioId(); if (actor <= 0) return Forbid();
+            if (modelo.Id <= 0) return NotFound();
+            try { _formulariosViaje?.PrepararGuardado(actor, modelo); }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException) { ModelState.AddModelError("", e.Message); }
+            RellenarCamposViaje(actor, modelo);
             if(modelo.DiasSemana == null || modelo.DiasSemana.Count == 0 ) 
             {
                 ModelState.AddModelError(
@@ -219,6 +231,12 @@ namespace RuteaYa.Web.Controllers
             TempData["MensajeExito"] = resultado.Mensaje;
 
             return RedirectToAction(nameof(DetalleViaje), new {id = modelo.Id});
+        }
+
+        private void RellenarCamposViaje(int usuario, ViajeViewModel modelo)
+        {
+            try { _formulariosViaje?.Rellenar(usuario, modelo); }
+            catch (ArgumentException e) { ModelState.AddModelError("", e.Message); }
         }
 
         [HttpPost]

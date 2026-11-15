@@ -1,5 +1,7 @@
 /* Reutilizable: URLs autorizadas por el consumidor, tokens opacos, ningún acceso directo a HERE. */
-document.querySelectorAll('[data-direccion-here]').forEach(root => {
+function inicializarDireccionHere(root) {
+    if (root.dataset.inicializada === 'true') return;
+    root.dataset.inicializada = 'true';
     const input = root.querySelector('[data-texto-direccion]');
     const list = root.querySelector('[data-sugerencias]');
     const status = root.querySelector('[data-estado-direccion]');
@@ -10,7 +12,7 @@ document.querySelectorAll('[data-direccion-here]').forEach(root => {
     const hidden = root.querySelector('[data-confirmacion-direccion]');
     let timer, controller, version = 0, resolved = '', active = -1;
     const changed = () => root.dispatchEvent(new CustomEvent('direccion:estado', { bubbles: true, detail: { confirmada: !!hidden.value } }));
-    function invalidate() { hidden.value = ''; changed(); }
+    function invalidate() { hidden.value = ''; root.dataset.conservarActual = 'false'; changed(); }
     function cancel() { clearTimeout(timer); controller?.abort(); version++; }
     async function request(url, fields, signal) {
         return window.RuteaYaHere.request(url, fields, signal, root.closest('form'));
@@ -100,8 +102,10 @@ document.querySelectorAll('[data-direccion-here]').forEach(root => {
         }
     });
     // No restaurar confirmaciones de un formulario recuperado de la caché del navegador.
-    window.addEventListener('pageshow', () => { cancel(); invalidate(); resolved = ''; detail.hidden = true; });
-});
+    window.addEventListener('pageshow', event => { if (event.persisted) { cancel(); invalidate(); resolved = ''; detail.hidden = true; } });
+}
+document.querySelectorAll('[data-direccion-here]').forEach(inicializarDireccionHere);
+window.RuteaYaDirecciones = { inicializar: inicializarDireccionHere };
 document.querySelectorAll('[data-recorrido-autocompletado]').forEach(form => {
     const button = form.querySelector('[data-calcular-direcciones]');
     const status = form.querySelector('[data-estado-calculo]');

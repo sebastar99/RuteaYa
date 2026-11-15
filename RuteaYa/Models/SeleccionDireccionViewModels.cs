@@ -18,6 +18,10 @@ public class EstadoSeleccionDireccion
 
 public class CampoDireccionViewModel
 {
+    public string? NombreTexto { get; set; }
+    public string? TokenInicial { get; set; }
+    public bool ConservarActual { get; set; }
+    public bool ConfirmadaPersistida { get; set; }
     public string IdHtml { get; set; } = "";
     public string Etiqueta { get; set; } = "";
     public string TextoInicial { get; set; } = "";
