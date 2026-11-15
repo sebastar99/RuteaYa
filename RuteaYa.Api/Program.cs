@@ -26,6 +26,8 @@ builder.Services.AddScoped<IPasswordHasher<Usuario>,
 
 builder.Services.AddScoped<IUsuariosLogica, UsuariosLogica>();
 builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
+// Validación y consumo sobre EF: no requiere un cliente ni una clave HERE en la API.
+builder.Services.AddScoped<IUbicacionesConfirmadasServicio, UbicacionesConfirmadasServicio>();
 builder.Services.AddScoped<ITokenServicio, TokenServicio>();
 
 // JWT

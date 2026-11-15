@@ -12,6 +12,8 @@ public class EstadoSeleccionDireccion
     // -1: position, >=0: índice de access. No se interpreta ausencia como selección.
     public int? Acceso { get; set; }
     public PuntoRutaDto? Navegacion { get; set; }
+    public DateTimeOffset? ConfirmadaEnUtc { get; set; }
+    public DateTimeOffset? VenceEnUtc { get; set; }
 }
 
 public class CampoDireccionViewModel

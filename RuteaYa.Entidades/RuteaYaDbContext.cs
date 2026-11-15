@@ -18,6 +18,46 @@ namespace RuteaYa.Entidades
         public DbSet<DiaViaje> DiasViaje => Set<DiaViaje>();
 
         public DbSet<Envio> Envios => Set<Envio>();
+        public DbSet<UbicacionConfirmada> UbicacionesConfirmadas => Set<UbicacionConfirmada>();
+
+        private void ValidarSnapshots()
+        {
+            ChangeTracker.DetectChanges();
+            foreach (var entrada in ChangeTracker.Entries<UbicacionConfirmada>())
+            {
+                if (entrada.State == EntityState.Deleted || entrada.State == EntityState.Modified &&
+                    entrada.Properties.Any(p => p.IsModified && p.Metadata.Name is not (nameof(UbicacionConfirmada.ConsumidaEnUtc) or nameof(UbicacionConfirmada.Version))))
+                    throw new InvalidOperationException("Las ubicaciones confirmadas son snapshots inmutables.");
+                if (entrada.State == EntityState.Modified)
+                {
+                    var u = entrada.Entity;
+                    var consumoAnterior = entrada.OriginalValues.GetValue<DateTimeOffset?>(nameof(UbicacionConfirmada.ConsumidaEnUtc));
+                    if (consumoAnterior.HasValue || !u.ConsumidaEnUtc.HasValue || u.Version == entrada.OriginalValues.GetValue<Guid>(nameof(UbicacionConfirmada.Version)) ||
+                        Database.CurrentTransaction == null || !TieneVinculoPendiente(u))
+                        throw new InvalidOperationException("Un comprobante se consume una sola vez, junto al guardado de su vínculo y dentro de una transacción.");
+                }
+            }
+        }
+
+        private bool TieneVinculoPendiente(UbicacionConfirmada u)
+        {
+            bool Pendiente(EntityState estado) => estado is EntityState.Added or EntityState.Modified;
+            return u.Campo switch
+            {
+                CampoUbicacion.OrigenViaje => ChangeTracker.Entries<Viaje>().Any(e => Pendiente(e.State) && e.Entity.UsuarioId == u.UsuarioId && e.Entity.OrigenUbicacionId == u.Id),
+                CampoUbicacion.DestinoViaje => ChangeTracker.Entries<Viaje>().Any(e => Pendiente(e.State) && e.Entity.UsuarioId == u.UsuarioId && e.Entity.DestinoUbicacionId == u.Id),
+                CampoUbicacion.Parada => ChangeTracker.Entries<Parada>().Any(e => Pendiente(e.State) && e.Entity.UbicacionConfirmadaId == u.Id && e.Entity.Viaje?.UsuarioId == u.UsuarioId),
+                CampoUbicacion.RetiroEnvio => ChangeTracker.Entries<Envio>().Any(e => Pendiente(e.State) && e.Entity.UsuarioId == u.UsuarioId && e.Entity.RetiroUbicacionId == u.Id),
+                CampoUbicacion.EntregaEnvio => ChangeTracker.Entries<Envio>().Any(e => Pendiente(e.State) && e.Entity.UsuarioId == u.UsuarioId && e.Entity.EntregaUbicacionId == u.Id),
+                _ => false
+            };
+        }
+
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        { ValidarSnapshots(); return base.SaveChanges(acceptAllChangesOnSuccess); }
+
+        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        { ValidarSnapshots(); return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken); }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -64,6 +104,8 @@ namespace RuteaYa.Entidades
 
                 entity.Property(v => v.PesoMax).HasPrecision(10, 2);
                 entity.Property(v => v.DesvioMaxKm).HasPrecision(10, 2);
+                entity.HasOne(v => v.OrigenUbicacion).WithMany().HasForeignKey(v => v.OrigenUbicacionId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(v => v.DestinoUbicacion).WithMany().HasForeignKey(v => v.DestinoUbicacionId).OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasMany(v => v.Paradas)
                     .WithOne(p => p.Viaje)
@@ -84,6 +126,7 @@ namespace RuteaYa.Entidades
 
                 entity.Property(p => p.Ubicacion).HasMaxLength(150).IsRequired();
                 entity.HasIndex(p => new { p.ViajeId, p.Orden }).IsUnique();
+                entity.HasOne(p => p.UbicacionConfirmada).WithMany().HasForeignKey(p => p.UbicacionConfirmadaId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<DiaViaje>(entity =>
@@ -126,6 +169,39 @@ namespace RuteaYa.Entidades
                     .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasIndex(e => e.ConductorId);
+                entity.HasOne(e => e.RetiroUbicacion).WithMany().HasForeignKey(e => e.RetiroUbicacionId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.EntregaUbicacion).WithMany().HasForeignKey(e => e.EntregaUbicacionId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<UbicacionConfirmada>(entity =>
+            {
+                entity.ToTable("UbicacionesConfirmadas", tabla =>
+                {
+                    tabla.HasCheckConstraint("CK_Ubicacion_Posicion", "[PosicionLatitud] BETWEEN -90 AND 90 AND [PosicionLongitud] BETWEEN -180 AND 180");
+                    tabla.HasCheckConstraint("CK_Ubicacion_Navegacion", "[NavegacionLatitud] BETWEEN -90 AND 90 AND [NavegacionLongitud] BETWEEN -180 AND 180");
+                    tabla.HasCheckConstraint("CK_Ubicacion_Acceso", "[AccesoElegido] >= -1");
+                    tabla.HasCheckConstraint("CK_Ubicacion_Ambito", "([TipoRecurso] = 1 AND [Campo] IN (1,2,3)) OR ([TipoRecurso] = 2 AND [Campo] IN (4,5))");
+                });
+                entity.HasKey(u => u.Id);
+                entity.Property(u => u.Id).ValueGeneratedNever();
+                entity.Property(u => u.TokenHash).HasMaxLength(64).IsUnicode(false).IsRequired();
+                entity.Property(u => u.SeleccionHash).HasMaxLength(64).IsUnicode(false).IsRequired();
+                entity.HasIndex(u => u.TokenHash).IsUnique();
+                entity.HasIndex(u => u.SeleccionHash).IsUnique();
+                entity.HasIndex(u => u.VenceEnUtc);
+                entity.Property(u => u.ClaveCampo).HasMaxLength(64).IsRequired();
+                entity.Property(u => u.RevisionRecurso).HasMaxLength(64).IsUnicode(false);
+                entity.Property(u => u.IdHere).HasMaxLength(512).IsRequired();
+                entity.Property(u => u.DireccionNormalizada).HasMaxLength(512).IsRequired();
+                entity.Property(u => u.TipoResultado).HasMaxLength(80).IsRequired();
+                entity.Property(u => u.TipoNumeroPuerta).HasMaxLength(80);
+                entity.Property(u => u.Proveedor).HasMaxLength(20).IsRequired();
+                entity.Property(u => u.PosicionLatitud).HasPrecision(18, 8);
+                entity.Property(u => u.PosicionLongitud).HasPrecision(18, 8);
+                entity.Property(u => u.NavegacionLatitud).HasPrecision(18, 8);
+                entity.Property(u => u.NavegacionLongitud).HasPrecision(18, 8);
+                entity.Property(u => u.Version).IsConcurrencyToken();
+                entity.HasOne<Usuario>().WithMany().HasForeignKey(u => u.UsuarioId).OnDelete(DeleteBehavior.Restrict);
             });
 
             

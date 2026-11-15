@@ -8,6 +8,10 @@ namespace RuteaYa.Entidades
     {
         public int Id { get; set; }
         public int UsuarioId { get; set; }
+        public Guid? RetiroUbicacionId { get; set; }
+        public UbicacionConfirmada? RetiroUbicacion { get; set; }
+        public Guid? EntregaUbicacionId { get; set; }
+        public UbicacionConfirmada? EntregaUbicacion { get; set; }
         public string OrigenDir { get; set; } = string.Empty;
         public decimal OrigenLat { get; set; }
         public decimal OrigenLng { get; set; }

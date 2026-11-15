@@ -45,6 +45,8 @@ public class SeleccionDireccionServicio(IBusquedaDireccionesServicio busqueda, I
         estado.Acceso = indice;
         estado.Navegacion = indice == -1 ? estado.Ubicacion.Posicion : estado.Ubicacion.Accesos[indice];
         estado.Confirmada = true;
+        estado.ConfirmadaEnUtc = _reloj.GetUtcNow();
+        estado.VenceEnUtc = entrada.Vence;
         estado.Token = Guardar("confirmada", entrada with { Estado = JsonSerializer.Serialize(estado) });
         return estado;
     }
