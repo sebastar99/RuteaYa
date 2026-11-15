@@ -7,7 +7,7 @@ public interface IOportunidadesLogica
     /// <summary>
     /// Lista viajes propios y, si se seleccionó uno, envíos BuscandoConductor.
     /// Devuelve null tanto para un viaje inexistente como para uno ajeno.
-    /// No evalúa compatibilidad ni reserva capacidad. Sin viaje no consulta envíos.
+    /// Evalúa compatibilidad sin reservar capacidad. Sin viaje no consulta envíos.
     /// </summary>
     Task<ListadoCandidatosDto?> ConsultarAsync(
         int conductorId,
@@ -23,4 +23,9 @@ public interface IOportunidadesLogica
     /// </summary>
     Task<DetalleCandidatoDto?> ObtenerDetalleAsync(
         int conductorId, int viajeId, int envioId, CancellationToken cancellationToken = default);
+
+    Task<int?> SeleccionarSalidaAsync(int conductorId, SeleccionSalidaDto seleccion, CancellationToken ct = default);
+    Task<ListadoCandidatosDto?> ConsultarSalidaAsync(int conductorId, int viajeId, int salidaId,
+        int pagina = 1, int tamanoPagina = 10, CancellationToken ct = default);
+    Task<DetalleCandidatoDto?> ObtenerDetalleSalidaAsync(int conductorId, int viajeId, int salidaId, int envioId, CancellationToken ct = default);
 }

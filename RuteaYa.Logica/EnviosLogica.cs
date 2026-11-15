@@ -62,6 +62,8 @@ namespace RuteaYa.Logica
             if (dto == null)
                 throw new ArgumentException("Los datos del envío son obligatorios.");
 
+            var horarios = HorariosEnvio.Convertir(dto);
+
             var datos = dto.Ubicaciones;
             if (datos?.Retiro == null || datos.Entrega == null || datos.Retiro.TipoRecurso != TipoRecursoUbicacion.Envio ||
                 datos.Entrega.TipoRecurso != TipoRecursoUbicacion.Envio || datos.Retiro.RecursoId.HasValue || datos.Entrega.RecursoId.HasValue ||
@@ -80,6 +82,9 @@ namespace RuteaYa.Logica
                 OrigenDir = origen,
                 DestinoDir = destino,
                 FechaLimite = dto.FechaLimite,
+                EntregaLimiteConOffset = horarios.Entrega,
+                RetiroDisponibleDesde = horarios.Retiro,
+                RetiroSinRestriccion = dto.RetiroSinRestriccion,
                 PesoKg = dto.PesoKg,
                 Tamano = dto.Tamano,
                 Descripcion = dto.Descripcion.Trim(),

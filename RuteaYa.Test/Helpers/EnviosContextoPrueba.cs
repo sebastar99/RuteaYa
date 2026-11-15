@@ -29,16 +29,17 @@ internal sealed class EnviosContextoPrueba : IDisposable
         foreach (var (nombre, tipo) in new[] {
             ("Id", typeof(int)), ("ConductorId", typeof(int)), ("CreadoEn", typeof(DateTime)),
             ("Descripcion", typeof(string)), ("DestinoDir", typeof(string)), ("DestinoLat", typeof(decimal)),
-            ("DestinoLng", typeof(decimal)), ("EntregaUbicacionId", typeof(Guid)), ("Estado", typeof(byte)), ("FechaLimite", typeof(DateTime)),
+            ("DestinoLng", typeof(decimal)), ("EntregaLimiteConOffset", typeof(DateTimeOffset)), ("EntregaUbicacionId", typeof(Guid)), ("Estado", typeof(byte)), ("FechaLimite", typeof(DateTime)),
             ("Monto", typeof(decimal)), ("OrigenDir", typeof(string)), ("OrigenLat", typeof(decimal)),
-            ("OrigenLng", typeof(decimal)), ("PesoKg", typeof(decimal)), ("RetiroUbicacionId", typeof(Guid)), ("RowVersion", typeof(byte[])),
+            ("OrigenLng", typeof(decimal)), ("PesoKg", typeof(decimal)), ("RetiroDisponibleDesde", typeof(DateTimeOffset)),
+            ("RetiroSinRestriccion", typeof(bool)), ("RetiroUbicacionId", typeof(Guid)), ("RowVersion", typeof(byte[])), ("SalidaViajeId", typeof(int)),
             ("Tamano", typeof(byte)), ("UsuarioId", typeof(int)) })
             tabla.Columns.Add(nombre, tipo);
         foreach (var f in filas)
             tabla.Rows.Add(f.Id, f.ConductorId.HasValue ? (object)f.ConductorId.Value : DBNull.Value,
-                new DateTime(2026, 11, 1), f.Descripcion, "Illia 2849", -34.6m, -58.38m, DBNull.Value, (byte)f.Estado,
+                new DateTime(2026, 11, 1), f.Descripcion, "Illia 2849", -34.6m, -58.38m, DBNull.Value, DBNull.Value, (byte)f.Estado,
                 DateTime.Today.AddDays(1), 4000m, "Edison 3436", -34.6037m, -58.3816m, 2.5m,
-                DBNull.Value, new byte[8], (byte)TamanoEnvio.Mediano, f.UsuarioId);
+                DBNull.Value, false, DBNull.Value, new byte[8], DBNull.Value, (byte)TamanoEnvio.Mediano, f.UsuarioId);
         return tabla;
     }
 

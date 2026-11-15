@@ -23,6 +23,23 @@ public class EnviosDireccionesIntegracionTest
     }
 
     [Fact]
+    public async Task Crear_PersisteHorariosExplicitosConOffsetSinConvertirLaFechaLegadaEnUnInstante()
+    {
+        await using var f = await Host.Crear(); var form = await Preparar(f);
+        var fecha = Valor(form.Datos, "FechaLimite");
+        form.Datos.Add(new("EntregaLimiteLocal", fecha + "T18:30"));
+        form.Datos.Add(new("OffsetUtcMinutos", "-180"));
+        form.Datos.Add(new("RetiroSinRestriccion", "true"));
+        using var respuesta = await f.Mvc.PostAsync("/Envios/Crear", new FormUrlEncodedContent(form.Datos));
+        Assert.Equal(HttpStatusCode.Redirect, respuesta.StatusCode);
+        await using var db = f.Db(); var envio = await db.Envios.SingleAsync();
+        Assert.Equal(TimeSpan.FromHours(-3), envio.EntregaLimiteConOffset!.Value.Offset);
+        Assert.Equal(new TimeSpan(18, 30, 0), envio.EntregaLimiteConOffset.Value.TimeOfDay);
+        Assert.Equal(envio.FechaLimite.Date, envio.EntregaLimiteConOffset.Value.Date);
+        Assert.True(envio.RetiroSinRestriccion); Assert.Null(envio.RetiroDisponibleDesde);
+    }
+
+    [Fact]
     public async Task FormularioAnteriorConTextoYFlagsLibres_NoPublica()
     {
         await using var f = await Host.Crear(); var html = await f.Mvc.GetStringAsync("/Envios/Crear");

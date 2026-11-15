@@ -18,6 +18,7 @@ namespace RuteaYa.Entidades
         public DbSet<DiaViaje> DiasViaje => Set<DiaViaje>();
 
         public DbSet<Envio> Envios => Set<Envio>();
+        public DbSet<SalidaViaje> SalidasViaje => Set<SalidaViaje>();
         public DbSet<UbicacionConfirmada> UbicacionesConfirmadas => Set<UbicacionConfirmada>();
 
         private void ValidarSnapshots()
@@ -143,6 +144,7 @@ namespace RuteaYa.Entidades
                 entity.ToTable("Envios");
 
                 entity.HasKey(e => e.Id);
+                entity.HasOne(e => e.SalidaViaje).WithMany().HasForeignKey(e => e.SalidaViajeId).OnDelete(DeleteBehavior.Restrict);
 
                 entity.Property(e => e.OrigenDir).HasMaxLength(200).IsRequired();
                 entity.Property(e => e.DestinoDir).HasMaxLength(200).IsRequired();
@@ -171,6 +173,15 @@ namespace RuteaYa.Entidades
                 entity.HasIndex(e => e.ConductorId);
                 entity.HasOne(e => e.RetiroUbicacion).WithMany().HasForeignKey(e => e.RetiroUbicacionId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(e => e.EntregaUbicacion).WithMany().HasForeignKey(e => e.EntregaUbicacionId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<SalidaViaje>(entity =>
+            {
+                entity.ToTable("SalidasViaje");
+                entity.HasKey(s => s.Id);
+                entity.HasIndex(s => new { s.ViajeId, s.Fecha }).IsUnique();
+                entity.HasOne(s => s.Viaje).WithMany().HasForeignKey(s => s.ViajeId).OnDelete(DeleteBehavior.Restrict);
+                entity.Property(s => s.Version).IsConcurrencyToken();
             });
 
             modelBuilder.Entity<UbicacionConfirmada>(entity =>

@@ -47,6 +47,21 @@
             </div>
 
             <div class="panel-field">
+                <label asp-for="EntregaLimiteLocal">Horario límite de entrega (opcional, en la fecha indicada)</label>
+                <input class="panel-input" asp-for="EntregaLimiteLocal" type="datetime-local" />
+            </div>
+            <div class="panel-field">
+                <label asp-for="RetiroDisponibleDesdeLocal">Disponible para retirar desde (opcional)</label>
+                <input class="panel-input" asp-for="RetiroDisponibleDesdeLocal" type="datetime-local" />
+                <label><input asp-for="RetiroSinRestriccion" /> El retiro no tiene restricción de horario</label>
+            </div>
+            <div class="panel-field">
+                <label asp-for="OffsetUtcMinutos">Offset UTC de estos horarios, en minutos</label>
+                <input class="panel-input" asp-for="OffsetUtcMinutos" type="number" min="-840" max="840" step="1" />
+                <small>Ingresalo explícitamente: UTC−03:00 = −180; UTC = 0. Sin horarios explícitos la compatibilidad temporal queda indeterminada.</small>
+            </div>
+
+            <div class="panel-field">
                 <label asp-for="Descripcion">Descripción del paquete *</label>
                 <input class="panel-input" asp-for="Descripcion" type="text" placeholder="Ej. Documentación, repuesto" required />
                 <span asp-validation-for="Descripcion" class="text-danger"></span>

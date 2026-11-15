@@ -67,6 +67,26 @@ else
     }
     else
     {
+        @if (TempData["ErrorSalida"] is string errorSalida) { <div class="panel-alert" role="alert">@errorSalida</div> }
+        <div class="panel-card">
+            <h2>Salida concreta</h2>
+            <p>La hora de salida es la publicada en tu viaje. Elegí una fecha de sus días habilitados.
+                Si ya existe, se selecciona la salida guardada sin modificar sus horarios.</p>
+            <form method="post" asp-controller="Oportunidades" asp-action="SeleccionarSalida" class="panel-form">
+                <input type="hidden" name="ViajeId" value="@listado.ViajeSeleccionado.Id" />
+                <div class="panel-form-grid">
+                    <div class="panel-field"><label for="Fecha">Fecha de salida</label><input class="panel-input" type="date" id="Fecha" name="Fecha" required /></div>
+                    <div class="panel-field"><label for="OffsetUtcMinutos">Offset UTC en minutos (para una salida nueva)</label><input class="panel-input" type="number" id="OffsetUtcMinutos" name="OffsetUtcMinutos" min="-840" max="840" step="1" /><small>Ingresalo explícitamente: UTC−03:00 = −180; UTC = 0. No se usa la zona del servidor.</small></div>
+                    <div class="panel-field"><label for="LlegadaMaximaLocal">Llegada máxima local (opcional, mismo offset)</label><input class="panel-input" type="datetime-local" id="LlegadaMaximaLocal" name="LlegadaMaximaLocal" /></div>
+                    <div class="panel-field"><label><input type="checkbox" name="LlegadaSinRestriccion" value="true" /> No tengo un límite máximo de llegada</label><small>Si no informás un límite ni marcás esta opción, queda desconocido.</small></div>
+                </div>
+                <button class="panel-button" type="submit">Seleccionar salida y evaluar</button>
+            </form>
+            @if (listado.ViajeSeleccionado.SalidaSeleccionada is { } salida)
+            {
+                <partial name="_SalidaOportunidad" model="salida" />
+            }
+        </div>
         <div class="panel-card">
             <h2>@listado.ViajeSeleccionado.Origen → @listado.ViajeSeleccionado.Destino</h2>
             <a class="panel-button outline" asp-controller="Recorridos" asp-action="Index"
@@ -113,6 +133,7 @@ else
                                 <td>
                                     <a class="panel-button outline small" asp-controller="Oportunidades" asp-action="Detalle"
                                        asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-envioId="@envio.Id"
+                                       asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada?.Id"
                                        asp-route-pagina="@listado.Pagina" asp-route-tamanoPagina="@listado.TamanoPagina">Ver detalle</a>
                                 </td>
                             </tr>
@@ -120,13 +141,14 @@ else
                         </tbody>
                     </table>
                 </div>
-                <p class="panel-note">La fecha se muestra tal como fue publicada, sin interpretar su zona horaria ni evaluar el vencimiento.
+                <p class="panel-note">Las fechas legadas sin offset siguen sin interpretación temporal; los horarios explícitos se evalúan en el motor.
                     Solo se listan envíos de otros usuarios que siguen buscando conductor; la selección de candidatos no confirma compatibilidad.</p>
                 <nav class="panel-form-actions" aria-label="Páginas de candidatos">
                     @if (listado.Pagina > 1)
                     {
                         <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
                            asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-pagina="@(listado.Pagina - 1)"
+                           asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada?.Id"
                            asp-route-tamanoPagina="@listado.TamanoPagina">Anterior</a>
                     }
                     <span>Página @listado.Pagina de @listado.TotalPaginas</span>
@@ -134,6 +156,7 @@ else
                     {
                         <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
                            asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-pagina="@(listado.Pagina + 1)"
+                           asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada?.Id"
                            asp-route-tamanoPagina="@listado.TamanoPagina">Siguiente</a>
                     }
                 </nav>

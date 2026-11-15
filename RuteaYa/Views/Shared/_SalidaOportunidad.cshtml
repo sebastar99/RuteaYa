@@ -1,0 +1,7 @@
+@model RuteaYa.Logica.DTOs.SalidaViajeDto
+<h3>Salida #@Model.Id: @Model.FechaHora.ToString("dd/MM/yyyy HH:mm zzz")</h3>
+<p>Disponibilidad: @(Model.Disponible ? "Disponible" : "No disponible").
+    Comprometidos: @Model.PaquetesComprometidos paquetes · @Model.PesoComprometidoKg.ToString("0.##") kg.</p>
+<p>Capacidad restante: @(Model.CuposDisponibles?.ToString() ?? "desconocida") cupos · @(Model.PesoDisponibleKg?.ToString("0.##") ?? "desconocido") kg.</p>
+<p>Límite de llegada: @(Model.LlegadaMaxima.Valor?.ToString("dd/MM/yyyy HH:mm zzz") ?? (Model.LlegadaMaxima.Estado == RuteaYa.Logica.DTOs.EstadoRestriccionTemporal.SinRestriccion ? "Sin restricción declarada" : "Desconocido")).</p>
+@if (Model.AdvertenciaCapacidad != null) { <p role="alert">@Model.AdvertenciaCapacidad</p> }

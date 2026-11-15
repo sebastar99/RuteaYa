@@ -19,6 +19,11 @@ namespace RuteaYa.Entidades
         public decimal DestinoLat { get; set; }
         public decimal DestinoLng { get; set; }
         public DateTime FechaLimite { get; set; }
+        public DateTimeOffset? EntregaLimiteConOffset { get; set; }
+        public DateTimeOffset? RetiroDisponibleDesde { get; set; }
+        public bool RetiroSinRestriccion { get; set; }
+        public int? SalidaViajeId { get; set; }
+        public SalidaViaje? SalidaViaje { get; set; }
         public decimal PesoKg { get; set; }
         public TamanoEnvio Tamano { get; set; }
         public string Descripcion { get; set; } = string.Empty;

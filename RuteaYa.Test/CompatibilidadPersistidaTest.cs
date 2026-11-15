@@ -11,6 +11,138 @@ namespace RuteaYa.Test;
 
 public class CompatibilidadPersistidaTest
 {
+    private static SeleccionSalidaDto Seleccion(int viajeId)
+    {
+        var fecha = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(2));
+        while (fecha.DayOfWeek != DayOfWeek.Monday) fecha = fecha.AddDays(1);
+        return new() { ViajeId = viajeId, Fecha = fecha, OffsetUtcMinutos = -180, LlegadaSinRestriccion = true };
+    }
+
+    [Fact]
+    public async Task Salida_CombinaFechaYHoraRecurrenteConOffsetExplicito_YReutilizaLaFechaSinModificarla()
+    {
+        using var f = new Fixture(false); await using var db = f.Db();
+        var servicio = new SalidasViajeServicio(db); var seleccion = Seleccion(f.ViajeId);
+        var id = (await servicio.SeleccionarAsync(7, seleccion))!.Value;
+        seleccion.OffsetUtcMinutos = null; seleccion.LlegadaSinRestriccion = false;
+        Assert.Equal(id, await servicio.SeleccionarAsync(7, seleccion));
+        Assert.Single(await db.SalidasViaje.ToListAsync());
+        var salida = (await servicio.ObtenerAsync(7, f.ViajeId, id))!;
+        Assert.Equal(seleccion.Fecha, DateOnly.FromDateTime(salida.FechaHora.DateTime));
+        Assert.Equal(TimeSpan.FromHours(8), salida.FechaHora.TimeOfDay);
+        Assert.Equal(TimeSpan.FromHours(-3), salida.FechaHora.Offset);
+        Assert.Equal(EstadoRestriccionTemporal.SinRestriccion, salida.LlegadaMaxima.Estado);
+        Assert.Equal(2, salida.CuposDisponibles); Assert.Equal(100m, salida.PesoDisponibleKg);
+        Assert.Null(await servicio.ObtenerAsync(8, f.ViajeId, id));
+    }
+
+    [Theory]
+    [InlineData("dia")]
+    [InlineData("inactivo")]
+    [InlineData("offset_ausente")]
+    [InlineData("offset_invalido")]
+    [InlineData("pasada")]
+    [InlineData("llegada")]
+    public async Task SeleccionSalida_RechazaDatosNoVerificablesSinPersistir(string caso)
+    {
+        using var f = new Fixture(false); await using var db = f.Db();
+        var servicio = new SalidasViajeServicio(db); var seleccion = Seleccion(f.ViajeId);
+        if (caso == "dia") seleccion.Fecha = seleccion.Fecha!.Value.AddDays(1);
+        if (caso == "inactivo") { (await db.Viajes.SingleAsync()).Activo = false; await db.SaveChangesAsync(); }
+        if (caso == "offset_ausente") seleccion.OffsetUtcMinutos = null;
+        if (caso == "offset_invalido") seleccion.OffsetUtcMinutos = 841;
+        if (caso == "pasada") { var fecha = seleccion.Fecha!.Value.AddYears(-4); while (fecha.DayOfWeek != DayOfWeek.Monday) fecha = fecha.AddDays(1); seleccion.Fecha = fecha; }
+        if (caso == "llegada") { seleccion.LlegadaSinRestriccion = false; seleccion.LlegadaMaximaLocal = seleccion.Fecha!.Value.ToDateTime(new TimeOnly(7, 59)); }
+        await Assert.ThrowsAsync<ArgumentException>(() => servicio.SeleccionarAsync(7, seleccion));
+        Assert.Empty(await db.SalidasViaje.ToListAsync());
+        Assert.Null(await servicio.SeleccionarAsync(8, seleccion));
+    }
+
+    [Fact]
+    public async Task Capacidad_DescuentaSoloLaSalida_YCanceladosNoOcupanPeroEntregadosSi()
+    {
+        using var f = new Fixture(false, pesoMax: 10); await using var db = f.Db();
+        var servicio = new SalidasViajeServicio(db); var seleccion = Seleccion(f.ViajeId);
+        var id = (await servicio.SeleccionarAsync(7, seleccion))!.Value;
+        seleccion.Fecha = seleccion.Fecha!.Value.AddDays(7);
+        var otra = (await servicio.SeleccionarAsync(7, seleccion))!.Value;
+        Envio Compromiso(int salida, decimal peso, EstadoEnvio estado) => new() { UsuarioId = 8, ConductorId = 7,
+            SalidaViajeId = salida, PesoKg = peso, Estado = estado };
+        db.Envios.AddRange(Compromiso(id, 3, EstadoEnvio.ConductorAsignado), Compromiso(id, 2, EstadoEnvio.Entregado),
+            Compromiso(id, 9, EstadoEnvio.Cancelado), Compromiso(otra, 8, EstadoEnvio.EnCamino));
+        await db.SaveChangesAsync();
+        var salida = (await servicio.ObtenerAsync(7, f.ViajeId, id))!;
+        Assert.Equal(2, salida.PaquetesComprometidos); Assert.Equal(5, salida.PesoComprometidoKg);
+        Assert.Equal(0, salida.CuposDisponibles); Assert.Equal(5m, salida.PesoDisponibleKg);
+        var distinta = (await servicio.ObtenerAsync(7, f.ViajeId, otra))!;
+        Assert.Equal(1, distinta.CuposDisponibles); Assert.Equal(2m, distinta.PesoDisponibleKg);
+        db.Envios.Add(new Envio { UsuarioId = 8, ConductorId = 7, PesoKg = 1, Estado = EstadoEnvio.Retirado });
+        await db.SaveChangesAsync();
+        var incierta = (await servicio.ObtenerAsync(7, f.ViajeId, id))!;
+        Assert.Null(incierta.CuposDisponibles); Assert.Null(incierta.PesoDisponibleKg); Assert.NotNull(incierta.AdvertenciaCapacidad);
+    }
+
+    [Theory]
+    [InlineData("compatible", EstadoCompatibilidad.Compatible)]
+    [InlineData("peso_comprometido", EstadoCompatibilidad.Incompatible)]
+    [InlineData("cupo_comprometido", EstadoCompatibilidad.Incompatible)]
+    [InlineData("llegada", EstadoCompatibilidad.Incompatible)]
+    [InlineData("horarios_ausentes", EstadoCompatibilidad.Indeterminado)]
+    public async Task SalidaPersistida_PermiteCompatibilidadRealEnListadoYDetalle(string caso, EstadoCompatibilidad esperado)
+    {
+        using var f = new Fixture(false, pesoMax: 10); await using var db = f.Db();
+        var seleccion = Seleccion(f.ViajeId);
+        if (caso == "llegada") { seleccion.LlegadaSinRestriccion = false; seleccion.LlegadaMaximaLocal = seleccion.Fecha!.Value.ToDateTime(new TimeOnly(8, 10)); }
+        var id = (await new SalidasViajeServicio(db).SeleccionarAsync(7, seleccion))!.Value;
+        var e = await db.Envios.SingleAsync(e => e.Id == f.EnvioId);
+        if (caso != "horarios_ausentes") {
+            e.FechaLimite = seleccion.Fecha!.Value.AddDays(1).ToDateTime(new TimeOnly(12, 0));
+            e.EntregaLimiteConOffset = new DateTimeOffset(e.FechaLimite, TimeSpan.FromHours(-3));
+            e.RetiroDisponibleDesde = new DateTimeOffset(seleccion.Fecha.Value.ToDateTime(new TimeOnly(7, 0)), TimeSpan.FromHours(-3));
+        }
+        if (caso is "peso_comprometido" or "cupo_comprometido") {
+            var cantidad = caso == "cupo_comprometido" ? 2 : 1;
+            for (var i = 0; i < cantidad; i++) db.Envios.Add(new Envio { UsuarioId = 8, ConductorId = 7, SalidaViajeId = id,
+                Estado = EstadoEnvio.ConductorAsignado, PesoKg = caso == "peso_comprometido" ? 8 : 1 });
+        }
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        var logica = Logica(db, new RutasPrueba(2));
+        var listado = await logica.ConsultarSalidaAsync(7, f.ViajeId, id);
+        var detalle = await logica.ObtenerDetalleSalidaAsync(7, f.ViajeId, id, f.EnvioId);
+        Assert.Equal(esperado, listado!.Evaluaciones[f.EnvioId].Estado);
+        Assert.Equal(esperado, detalle!.Evaluacion.Estado);
+        Assert.Equal(id, detalle.Viaje.SalidaSeleccionada!.Id);
+        if (caso == "compatible") Assert.Empty(detalle.Evaluacion.DatosPendientes);
+        if (caso == "peso_comprometido") Assert.Contains(MotivoCompatibilidad.PesoExcedido, detalle.Evaluacion.ResultadoMotor!.Motivos);
+        if (caso == "cupo_comprometido") Assert.Contains(MotivoCompatibilidad.SinCupo, detalle.Evaluacion.ResultadoMotor!.Motivos);
+        Assert.Null(await logica.ConsultarSalidaAsync(8, f.ViajeId, id));
+        Assert.Null(await logica.ObtenerDetalleSalidaAsync(7, f.ViajeId, id + 500, f.EnvioId));
+    }
+
+    [Fact]
+    public async Task Domingo_UsaElDiaSieteDelModeloRecurrente()
+    {
+        using var f = new Fixture(false); await using var db = f.Db();
+        var viaje = await db.Viajes.Include(v => v.Dias).SingleAsync();
+        viaje.Dias.Add(new DiaViaje { DiaSemana = 7 }); await db.SaveChangesAsync();
+        var seleccion = Seleccion(f.ViajeId); seleccion.Fecha = seleccion.Fecha!.Value.AddDays(6);
+        var servicio = new SalidasViajeServicio(db);
+        var id = (await servicio.SeleccionarAsync(7, seleccion))!.Value;
+        Assert.True((await servicio.ObtenerAsync(7, f.ViajeId, id))!.Disponible);
+    }
+
+    [Fact]
+    public async Task Salida_RevalidaDiaHorarioYEstadoDespuesDeCrear()
+    {
+        using var f = new Fixture(false); await using var db = f.Db(); var servicio = new SalidasViajeServicio(db);
+        var id = (await servicio.SeleccionarAsync(7, Seleccion(f.ViajeId)))!.Value;
+        var viaje = await db.Viajes.Include(v => v.Dias).SingleAsync();
+        viaje.HoraSalida = TimeSpan.FromHours(9); await db.SaveChangesAsync();
+        Assert.False((await servicio.ObtenerAsync(7, f.ViajeId, id))!.Disponible);
+        viaje.HoraSalida = TimeSpan.FromHours(8); viaje.Dias.Clear(); await db.SaveChangesAsync();
+        Assert.False((await servicio.ObtenerAsync(7, f.ViajeId, id))!.Disponible);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

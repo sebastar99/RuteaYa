@@ -18,6 +18,9 @@ public sealed class DatosConfirmadosOportunidadPersistidosServicio(RuteaYaDbCont
         if (envios.Count == 0 || viaje.UsuarioId <= 0) return resultado;
         var v = await db.Viajes.AsNoTracking().SingleOrDefaultAsync(v => v.Id == viaje.Id && v.UsuarioId == viaje.UsuarioId, ct);
         if (v == null || v.Origen != viaje.Origen || v.Destino != viaje.Destino || v.Activo != viaje.Activo || v.DesvioMaxKm != viaje.DesvioMaxKm) return resultado;
+        // El selector es exclusivamente del servidor y ya revalidó salida y compromisos en esta consulta.
+        var salida = viaje.SalidaSeleccionada;
+        if (salida != null && salida.ViajeId != v.Id) return resultado;
         var paradas = await db.Paradas.AsNoTracking().Where(p => p.ViajeId == v.Id).OrderBy(p => p.Orden).ToListAsync(ct);
         var ids = envios.Select(e => e.Id).Distinct().ToArray();
         var paquetes = await db.Envios.AsNoTracking().Where(e => ids.Contains(e.Id) && e.UsuarioId != v.UsuarioId && e.Estado == EstadoEnvio.BuscandoConductor).ToListAsync(ct);
@@ -57,10 +60,16 @@ public sealed class DatosConfirmadosOportunidadPersistidosServicio(RuteaYaDbCont
                 EntregaConfirmada = Leer(e.EntregaUbicacionId, e.UsuarioId, TipoRecursoUbicacion.Envio, e.Id, CampoUbicacion.EntregaEnvio, e.DestinoDir),
                 PesoMaximoPublicadoKg = v.PesoMax >= 0 ? v.PesoMax : null, CuposMaximosPublicados = v.CantMaxPaquetes >= 0 ? v.CantMaxPaquetes : null,
                 // Inactivo sí prueba indisponibilidad. Activo no prueba disponibilidad de una salida.
-                Disponible = v.Activo ? null : false
+                Disponible = !v.Activo ? false : salida?.Disponible,
+                SalidaProgramada = salida?.FechaHora, PesoDisponibleKg = salida?.PesoDisponibleKg, CuposDisponibles = salida?.CuposDisponibles,
+                LlegadaMaxima = salida?.LlegadaMaxima ?? RestriccionTemporalDto.Desconocida(),
+                DisponibleDesde = e.RetiroDisponibleDesde.HasValue ? RestriccionTemporalDto.Informada(e.RetiroDisponibleDesde.Value) :
+                    e.RetiroSinRestriccion ? RestriccionTemporalDto.SinRestriccion() : RestriccionTemporalDto.Desconocida()
             };
             // datetime2 no conserva zona ni Kind; no se interpreta como UTC ni fin de día por conveniencia.
-            if (e.FechaLimite != default && e.FechaLimite.Kind == DateTimeKind.Utc)
+            if (e.EntregaLimiteConOffset.HasValue && e.EntregaLimiteConOffset.Value.Date == e.FechaLimite.Date)
+                datos.FechaLimiteEntrega = RestriccionTemporalDto.Informada(e.EntregaLimiteConOffset.Value);
+            else if (!e.EntregaLimiteConOffset.HasValue && e.FechaLimite != default && e.FechaLimite.Kind == DateTimeKind.Utc)
                 datos.FechaLimiteEntrega = RestriccionTemporalDto.Informada(new DateTimeOffset(e.FechaLimite));
             resultado.Add(e.Id, datos);
         }

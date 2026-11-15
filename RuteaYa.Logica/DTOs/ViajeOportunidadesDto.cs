@@ -4,6 +4,7 @@ namespace RuteaYa.Logica.DTOs;
 public class ViajeOportunidadesDto
 {
     public int UsuarioId { get; set; }
+    public SalidaViajeDto? SalidaSeleccionada { get; set; }
     public int Id { get; set; }
     public string Origen { get; set; } = string.Empty;
     public string Destino { get; set; } = string.Empty;

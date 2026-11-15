@@ -15,6 +15,7 @@
     </div>
     <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
        asp-route-viajeId="@Model.ViajeId" asp-route-pagina="@Model.Pagina"
+       asp-route-salidaId="@Model.Detalle?.Viaje.SalidaSeleccionada?.Id"
        asp-route-tamanoPagina="@Model.TamanoPagina">Volver al listado</a>
 </div>
 
@@ -42,6 +43,7 @@ else if (Model.Detalle != null)
         <p>Estado del viaje: @(candidato.Viaje.Activo ? "Activo" : "Inactivo").
             Esto no confirma disponibilidad ni capacidad de una salida concreta.</p>
         <span class="panel-pill @color">@textoEstado</span>
+        @if (candidato.Viaje.SalidaSeleccionada is { } salida) { <partial name="_SalidaOportunidad" model="salida" /> }
     </div>
     <div class="panel-card">
         <h2>Envío #@envio.Id</h2>
