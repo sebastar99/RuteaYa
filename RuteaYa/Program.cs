@@ -29,13 +29,15 @@ builder.Services.AddHttpClient<MapasHereServicio>(client =>
     client.Timeout = TimeSpan.FromSeconds(30))
     .RemoveAllLoggers()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-builder.Services.AddHttpClient<IRutasServicio, RutasHereServicio>(client =>
+builder.Services.AddHttpClient<RutasHereServicio>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(30);
     })
     // La API Key viaja en la query según el contrato de HERE; no registrar la URL.
     .RemoveAllLoggers()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
+builder.Services.AddScoped<IRutasServicio>(sp => new RutasConsultaServicio(sp.GetRequiredService<RutasHereServicio>()));
 
 builder.Services.AddHttpClient<IGeocodificacionServicio, GeocodificacionHereServicio>(client =>
     {
@@ -52,7 +54,7 @@ builder.Services.AddDbContext<RuteaYaDbContext>(options =>
     options.UseSqlServer(connectionString));
 
 builder.Services.AddScoped<IOportunidadesLogica, OportunidadesLogica>();
-builder.Services.AddScoped<IDatosConfirmadosOportunidadServicio, DatosConfirmadosOportunidadActualesServicio>();
+builder.Services.AddScoped<IDatosConfirmadosOportunidadServicio, DatosConfirmadosOportunidadPersistidosServicio>();
 builder.Services.AddScoped<IEvaluacionOportunidadServicio, EvaluacionOportunidadServicio>();
 builder.Services.AddScoped<IDesviosServicio, DesviosServicio>();
 builder.Services.AddScoped<ICompatibilidadServicio, CompatibilidadServicio>();

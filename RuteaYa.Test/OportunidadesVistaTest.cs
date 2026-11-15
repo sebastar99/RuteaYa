@@ -22,6 +22,33 @@ namespace RuteaYa.Test;
 
 public class OportunidadesVistaTest
 {
+    [Fact]
+    public async Task ListadoYDetalle_ExponenDesvioRealYDatosPendientesSinPresentarCompatibilidadFalsa()
+    {
+        var viaje = new ViajeOportunidadesDto { Id = 10, Origen = "Origen", Destino = "Destino", Activo = true };
+        var envio = new EnvioDto { Id = 25, UsuarioId = 8, OrigenDir = "Retiro", DestinoDir = "Entrega", PesoKg = 2 };
+        var evaluacion = new EvaluacionOportunidadDto { DatosPendientes = new[] { DatoPendienteOportunidad.SalidaConcretaDesconocida },
+            ResultadoMotor = new ResultadoCompatibilidadDto { ViajeId = 10, EnvioId = 25, Estado = EstadoCompatibilidad.Indeterminado,
+                Motivos = new[] { MotivoCompatibilidad.DesvioAprobado }, InsercionSeleccionada = new() { Desvio = new() {
+                    DistanciaOriginalMetros = 10000, DistanciaConEnvioMetros = 11250, DistanciaAdicionalMetros = 1250,
+                    DuracionConEnvioSegundos = 1500, TiempoAdicionalSegundos = 300 } } } };
+        var logica = new Mock<IOportunidadesLogica>();
+        logica.Setup(l => l.ConsultarAsync(7, 10, 1, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new ListadoCandidatosDto {
+            Viajes = new[] { viaje }, ViajeSeleccionado = viaje, Candidatos = new[] { envio }, TotalCandidatos = 1,
+            Evaluaciones = new Dictionary<int, EvaluacionOportunidadDto> { [25] = evaluacion } });
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, It.IsAny<CancellationToken>())).ReturnsAsync(new DetalleCandidatoDto { Viaje = viaje, Envio = envio, Evaluacion = evaluacion });
+        await using var app = CrearHost(logica.Object); await app.StartAsync();
+        try {
+            var url = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient { BaseAddress = new Uri(url) }; cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            var listado = WebUtility.HtmlDecode(await cliente.GetStringAsync("/Oportunidades?viajeId=10"));
+            Assert.Contains("Indeterminado", listado); Assert.Contains("Adicional:", listado); Assert.Contains("Falta una salida concreta", listado);
+            var detalle = WebUtility.HtmlDecode(await cliente.GetStringAsync("/Oportunidades/Detalle?viajeId=10&envioId=25"));
+            Assert.Contains("Distancia adicional calculada", detalle); Assert.Contains("Datos pendientes para evaluar", detalle);
+            Assert.DoesNotContain("No se ejecutó el motor", detalle); Assert.DoesNotContain("Tomar este envío", detalle);
+        } finally { await app.StopAsync(); }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

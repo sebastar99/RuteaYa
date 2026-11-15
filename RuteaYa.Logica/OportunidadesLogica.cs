@@ -11,7 +11,7 @@ public class OportunidadesLogica : IOportunidadesLogica
     private readonly IEvaluacionOportunidadServicio _evaluacion;
 
     private static readonly Expression<Func<Viaje, ViajeOportunidadesDto>> DatosViaje = v =>
-        new ViajeOportunidadesDto { Id = v.Id, Origen = v.Origen, Destino = v.Destino, Activo = v.Activo, DesvioMaxKm = v.DesvioMaxKm };
+        new ViajeOportunidadesDto { Id = v.Id, Origen = v.Origen, Destino = v.Destino, Activo = v.Activo, DesvioMaxKm = v.DesvioMaxKm, UsuarioId = v.UsuarioId };
 
     private static readonly Expression<Func<Envio, EnvioDto>> DatosEnvio = e => new EnvioDto
     {
@@ -69,6 +69,7 @@ public class OportunidadesLogica : IOportunidadesLogica
             .Select(DatosEnvio)
             .ToListAsync(cancellationToken);
         resultado.Candidatos = candidatos.AsReadOnly();
+        resultado.Evaluaciones = await _evaluacion.EvaluarLoteAsync(seleccionado, resultado.Candidatos, cancellationToken);
         return resultado;
     }
 

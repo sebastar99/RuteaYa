@@ -164,7 +164,7 @@ public class OportunidadesControllerTest
     }
 
     [Fact]
-    public async Task Index_Cancelacion_SePropagaSinConvertirlaEnListadoVacio()
+    public async Task Index_Cancelacion_Responde499SinListadoVacio()
     {
         using var cancelacion = new CancellationTokenSource();
         cancelacion.Cancel();
@@ -172,8 +172,8 @@ public class OportunidadesControllerTest
         logica.Setup(l => l.ConsultarAsync(7, 10, 1, 10, cancelacion.Token))
             .Returns(Task.FromCanceled<ListadoCandidatosDto?>(cancelacion.Token));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => Controlador(logica).Index(10, cancellationToken: cancelacion.Token));
+        var resultado = Assert.IsType<StatusCodeResult>(await Controlador(logica).Index(10, cancellationToken: cancelacion.Token));
+        Assert.Equal(499, resultado.StatusCode);
     }
 
     [Fact]
@@ -295,7 +295,7 @@ public class OportunidadesControllerTest
     }
 
     [Fact]
-    public async Task Detalle_Cancelacion_SePropaga()
+    public async Task Detalle_Cancelacion_Responde499()
     {
         using var cancelacion = new CancellationTokenSource();
         cancelacion.Cancel();
@@ -303,8 +303,8 @@ public class OportunidadesControllerTest
         logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, cancelacion.Token))
             .Returns(Task.FromCanceled<DetalleCandidatoDto?>(cancelacion.Token));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            Controlador(logica).Detalle(10, 25, cancellationToken: cancelacion.Token));
+        var resultado = Assert.IsType<StatusCodeResult>(await Controlador(logica).Detalle(10, 25, cancellationToken: cancelacion.Token));
+        Assert.Equal(499, resultado.StatusCode);
     }
 
     [Theory]

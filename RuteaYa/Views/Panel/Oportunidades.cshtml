@@ -1,4 +1,6 @@
 @model RuteaYa.Web.Models.OportunidadesViewModel
+@using RuteaYa.Logica.DTOs
+@using RuteaYa.Web.Models
 @{
     ViewData["Title"] = "Oportunidades";
     ViewData["ActivePage"] = "Oportunidades";
@@ -10,14 +12,14 @@
     <div>
         <span class="eyebrow">RUTEAYA / GESTIÓN</span>
         <h1>Candidatos para tu viaje</h1>
-        <p>Envíos publicados que aún están pendientes de evaluación.</p>
+        <p>Evaluación de publicaciones disponibles con datos confirmados del servidor.</p>
     </div>
     <a class="panel-button outline" asp-controller="Panel" asp-action="Viajes">Mis viajes</a>
 </div>
 
 <div class="panel-alert" role="note">
-    Estos envíos no son oportunidades compatibles confirmadas. Todavía no se verificaron
-    coordenadas, salida concreta, capacidad disponible, desvíos ni restricciones temporales.
+    La evaluación distingue condiciones verificadas y datos pendientes. Un desvío aprobado
+    por sí solo no confirma salida, capacidad ni horarios. Las rutas son estimaciones de HERE.
     La aceptación está deshabilitada hasta validar compatibilidad, capacidad y asignación al viaje concreto.
 </div>
 
@@ -92,7 +94,22 @@ else
                                 <td>@envio.PesoKg.ToString("0.##") kg · @envio.TamanoTexto</td>
                                 <td>@(envio.FechaLimite == default ? "No informada" : envio.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</td>
                                 <td>@envio.Monto.ToString("C")</td>
-                                <td><span class="panel-pill orange">Pendiente de evaluación</span></td>
+                                <td>
+                                    @if (listado.Evaluaciones.TryGetValue(envio.Id, out var evaluacion))
+                                    {
+                                        var color = evaluacion.Estado == EstadoCompatibilidad.Incompatible ? "red" : evaluacion.Estado == EstadoCompatibilidad.Compatible ? "green" : "orange";
+                                        <span class="panel-pill @color">@(evaluacion.Estado == EstadoCompatibilidad.Indeterminado ? "Indeterminado" : evaluacion.Estado == EstadoCompatibilidad.Compatible ? "Compatible según evaluación" : "No compatible")</span>
+                                        @if (evaluacion.ResultadoMotor?.InsercionSeleccionada != null) {
+                                            var desvio = evaluacion.ResultadoMotor.InsercionSeleccionada.Desvio;
+                                            <p>Adicional: @((desvio.DistanciaAdicionalMetros / 1000m).ToString("0.###")) km · @((desvio.TiempoAdicionalSegundos / 60m).ToString("0.#")) min.</p>
+                                        }
+                                        <ul>
+                                            @foreach (var motivo in evaluacion.ResultadoMotor?.Motivos ?? Array.Empty<MotivoCompatibilidad>()) { <li>@MensajesEvaluacionOportunidad.Motivo(motivo)</li> }
+                                            @foreach (var pendiente in evaluacion.DatosPendientes) { <li>@MensajesEvaluacionOportunidad.DatoPendiente(pendiente)</li> }
+                                        </ul>
+                                    }
+                                    else { <span class="panel-pill orange">Pendiente de evaluación</span> }
+                                </td>
                                 <td>
                                     <a class="panel-button outline small" asp-controller="Oportunidades" asp-action="Detalle"
                                        asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-envioId="@envio.Id"

@@ -25,12 +25,13 @@ public class CompatibilidadServicio : ICompatibilidadServicio
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Validar(viaje, envio);
+        ArgumentNullException.ThrowIfNull(viaje);
+        Validar(viaje, envio, validarGeometria: !viaje.PermitirEvaluacionParcial);
 
         var motivos = new List<MotivoCompatibilidad>();
         if (!viaje.Activo)
             motivos.Add(MotivoCompatibilidad.ViajeInactivo);
-        if (!viaje.Disponible)
+        if (viaje.Disponible == false)
             motivos.Add(MotivoCompatibilidad.ViajeNoDisponible);
         if (envio.Estado != EstadoEnvio.BuscandoConductor)
             motivos.Add(MotivoCompatibilidad.EnvioNoDisponible);
@@ -38,12 +39,16 @@ public class CompatibilidadServicio : ICompatibilidadServicio
             motivos.Add(MotivoCompatibilidad.PesoExcedido);
         if (viaje.CuposDisponibles == 0)
             motivos.Add(MotivoCompatibilidad.SinCupo);
+        if (viaje.PesoMaximoPublicadoKg.HasValue && envio.PesoKg > viaje.PesoMaximoPublicadoKg)
+            motivos.Add(MotivoCompatibilidad.PesoMaximoPublicadoExcedido);
+        if (viaje.CuposMaximosPublicados == 0 && !motivos.Contains(MotivoCompatibilidad.SinCupo)) motivos.Add(MotivoCompatibilidad.SinCupo);
         if (viaje.SalidaProgramada.HasValue && envio.FechaLimiteEntrega.Estado == EstadoRestriccionTemporal.Informada &&
             viaje.SalidaProgramada.Value > envio.FechaLimiteEntrega.Valor!.Value)
             motivos.Add(MotivoCompatibilidad.SalidaPosteriorAlVencimiento);
 
         // Se resuelve el rechazo antes de agregar datos desconocidos o reglas pendientes.
         var incompatible = motivos.Count > 0;
+        if (!viaje.Disponible.HasValue) motivos.Add(MotivoCompatibilidad.DisponibilidadSalidaDesconocida);
         if (!viaje.PesoDisponibleKg.HasValue)
             motivos.Add(MotivoCompatibilidad.PesoDisponibleDesconocido);
         if (!viaje.CuposDisponibles.HasValue)
@@ -57,7 +62,7 @@ public class CompatibilidadServicio : ICompatibilidadServicio
             Motivos = motivos.AsReadOnly()
         };
 
-        if (incompatible || !viaje.PesoDisponibleKg.HasValue || !viaje.CuposDisponibles.HasValue)
+        if (incompatible || !viaje.PermitirEvaluacionParcial && (!viaje.PesoDisponibleKg.HasValue || !viaje.CuposDisponibles.HasValue))
         {
             AgregarRestriccionesDesconocidas(viaje, envio, motivos);
             motivos.Add(MotivoCompatibilidad.DesvioNoEvaluado);
@@ -65,6 +70,7 @@ public class CompatibilidadServicio : ICompatibilidadServicio
             return resultado;
         }
 
+        if (viaje.PermitirEvaluacionParcial) ValidarGeometria(viaje, envio);
         var cantidadSegmentos = viaje.RecorridoBase.Count - 1;
         decimal limiteMetros = viaje.DesvioMaxKm * 1000m;
         InsercionCompatibilidadDto? mejorCompatible = null;
@@ -132,6 +138,9 @@ public class CompatibilidadServicio : ICompatibilidadServicio
         {
             motivos.Add(MotivoCompatibilidad.DesvioAprobado);
             resultado.Estado = mejor?.EstadoTemporal ?? EstadoCompatibilidad.Incompatible;
+            if (resultado.Estado == EstadoCompatibilidad.Compatible &&
+                (!viaje.Disponible.HasValue || !viaje.PesoDisponibleKg.HasValue || !viaje.CuposDisponibles.HasValue))
+                resultado.Estado = EstadoCompatibilidad.Indeterminado;
             // Si todas fallaron, los motivos pueden corresponder a distintas inserciones.
             motivos.AddRange(mejor?.MotivosTemporales ?? rechazosTemporales);
         }
@@ -223,7 +232,7 @@ public class CompatibilidadServicio : ICompatibilidadServicio
                 actual.SegmentoRetiro, actual.SegmentoEntrega)) < 0;
     }
 
-    private static void Validar(ViajeCompatibilidadDto viaje, EnvioCompatibilidadDto envio)
+    private static void Validar(ViajeCompatibilidadDto viaje, EnvioCompatibilidadDto envio, bool validarGeometria)
     {
         ArgumentNullException.ThrowIfNull(viaje);
         ArgumentNullException.ThrowIfNull(envio);
@@ -237,17 +246,14 @@ public class CompatibilidadServicio : ICompatibilidadServicio
         if (viaje.ViajeId <= 0 || envio.EnvioId <= 0)
             throw new ArgumentException("Los identificadores del viaje y del envío deben ser positivos.");
 
-        if (viaje.RecorridoBase == null || viaje.RecorridoBase.Count < 2)
-            throw new ArgumentException("El recorrido base debe incluir al menos origen y destino.", nameof(viaje));
-        foreach (var punto in viaje.RecorridoBase)
-            ValidarPunto(punto, nameof(viaje));
-        ValidarPunto(envio.Retiro, nameof(envio));
-        ValidarPunto(envio.Entrega, nameof(envio));
+        if (validarGeometria) ValidarGeometria(viaje, envio);
 
         if (envio.PesoKg <= 0)
             throw new ArgumentException("El peso del envío debe ser mayor que cero.", nameof(envio));
         if (viaje.PesoDisponibleKg < 0 || viaje.CuposDisponibles < 0)
             throw new ArgumentException("La capacidad conocida no puede ser negativa.", nameof(viaje));
+        if (viaje.PesoMaximoPublicadoKg < 0 || viaje.CuposMaximosPublicados < 0)
+            throw new ArgumentException("Los máximos publicados no pueden ser negativos.", nameof(viaje));
         if (viaje.DesvioMaxKm < 0 || viaje.DesvioMaxKm > decimal.MaxValue / 1000m)
             throw new ArgumentException("El desvío máximo debe ser no negativo y convertible a metros.", nameof(viaje));
         if (!Enum.IsDefined(envio.Estado))
@@ -270,5 +276,13 @@ public class CompatibilidadServicio : ICompatibilidadServicio
             punto.Longitud < -180 || punto.Longitud > 180)
             throw new ArgumentException(
                 "Cada punto debe tener latitud entre -90 y 90 y longitud entre -180 y 180.", parametro);
+    }
+
+    private static void ValidarGeometria(ViajeCompatibilidadDto viaje, EnvioCompatibilidadDto envio)
+    {
+        if (viaje.RecorridoBase == null || viaje.RecorridoBase.Count < 2)
+            throw new ArgumentException("El recorrido base debe incluir al menos origen y destino.", nameof(viaje));
+        foreach (var punto in viaje.RecorridoBase) ValidarPunto(punto, nameof(viaje));
+        ValidarPunto(envio.Retiro, nameof(envio)); ValidarPunto(envio.Entrega, nameof(envio));
     }
 }

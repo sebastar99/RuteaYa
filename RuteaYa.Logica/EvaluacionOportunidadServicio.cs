@@ -24,6 +24,24 @@ public class EvaluacionOportunidadServicio : IEvaluacionOportunidadServicio
         if (viaje.Id <= 0 || envio.Id <= 0) throw new ArgumentException("Los identificadores deben ser positivos.");
 
         var datos = await _datos.ObtenerAsync(viaje, envio, cancellationToken);
+        return await EvaluarConDatosAsync(viaje, envio, datos, cancellationToken);
+    }
+
+    public async Task<IReadOnlyDictionary<int, EvaluacionOportunidadDto>> EvaluarLoteAsync(ViajeOportunidadesDto viaje,
+        IReadOnlyList<EnvioDto> envios, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (envios.Count == 0) return new Dictionary<int, EvaluacionOportunidadDto>();
+        var datos = await _datos.ObtenerLoteAsync(viaje, envios, ct);
+        var resultado = new Dictionary<int, EvaluacionOportunidadDto>();
+        foreach (var envio in envios)
+            resultado.Add(envio.Id, await EvaluarConDatosAsync(viaje, envio, datos.GetValueOrDefault(envio.Id), ct));
+        return resultado;
+    }
+
+    private async Task<EvaluacionOportunidadDto> EvaluarConDatosAsync(ViajeOportunidadesDto viaje, EnvioDto envio,
+        DatosConfirmadosOportunidadDto? datos, CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         if (datos == null)
             return new EvaluacionOportunidadDto { DatosPendientes = new[] { DatoPendienteOportunidad.FuenteDeDatosNoDisponible } };
@@ -31,28 +49,38 @@ public class EvaluacionOportunidadServicio : IEvaluacionOportunidadServicio
             throw new InvalidOperationException("Los datos confirmados no corresponden al candidato consultado.");
 
         var pendientes = RequisitosPendientes(viaje, envio, datos);
-        if (pendientes.Count > 0)
+        var coordenadas = !pendientes.Any(p => p is DatoPendienteOportunidad.RecorridoSinCoordenadasConfirmadas or
+            DatoPendienteOportunidad.RetiroSinCoordenadasConfirmadas or DatoPendienteOportunidad.EntregaSinCoordenadasConfirmadas);
+        var rechazoPrevio = !viaje.Activo || datos.Disponible == false || envio.Estado != RuteaYa.Entidades.EstadoEnvio.BuscandoConductor ||
+            datos.PesoMaximoPublicadoKg.HasValue && envio.PesoKg > datos.PesoMaximoPublicadoKg || datos.CuposMaximosPublicados == 0 ||
+            datos.PesoDisponibleKg.HasValue && envio.PesoKg > datos.PesoDisponibleKg || datos.CuposDisponibles == 0;
+        var parcial = datos.PermitirEvaluacionParcial && (coordenadas || rechazoPrevio) &&
+            !pendientes.Any(p => p is DatoPendienteOportunidad.CapacidadRestanteInvalida or DatoPendienteOportunidad.PesoEnvioInvalido or
+                DatoPendienteOportunidad.DesvioMaximoInvalido or DatoPendienteOportunidad.RestriccionesTemporalesInconsistentes);
+        if (pendientes.Count > 0 && !parcial)
             return new EvaluacionOportunidadDto { DatosPendientes = pendientes.AsReadOnly() };
 
         var viajeMotor = new ViajeCompatibilidadDto
         {
-            ViajeId = viaje.Id, Activo = viaje.Activo, Disponible = datos.Disponible!.Value,
+            ViajeId = viaje.Id, Activo = viaje.Activo, Disponible = datos.Disponible,
+            PermitirEvaluacionParcial = parcial, PesoMaximoPublicadoKg = datos.PesoMaximoPublicadoKg, CuposMaximosPublicados = datos.CuposMaximosPublicados,
             DesvioMaxKm = viaje.DesvioMaxKm, PesoDisponibleKg = datos.PesoDisponibleKg,
             CuposDisponibles = datos.CuposDisponibles, SalidaProgramada = datos.SalidaProgramada,
             LlegadaMaxima = datos.LlegadaMaxima,
-            RecorridoBase = datos.RecorridoConfirmado!.Select(Copiar).ToArray()
+            RecorridoBase = datos.RecorridoConfirmado?.Select(Copiar).ToArray() ?? Array.Empty<PuntoRutaDto>()
         };
         var envioMotor = new EnvioCompatibilidadDto
         {
             EnvioId = envio.Id, PesoKg = envio.PesoKg, Estado = envio.Estado,
-            Retiro = Copiar(datos.RetiroConfirmado!), Entrega = Copiar(datos.EntregaConfirmada!),
+            Retiro = datos.RetiroConfirmado == null ? null! : Copiar(datos.RetiroConfirmado),
+            Entrega = datos.EntregaConfirmada == null ? null! : Copiar(datos.EntregaConfirmada),
             DisponibleDesde = datos.DisponibleDesde, FechaLimiteEntrega = datos.FechaLimiteEntrega
         };
         var resultado = await _motor.EvaluarAsync(viajeMotor, envioMotor, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         if (resultado == null || resultado.ViajeId != viaje.Id || resultado.EnvioId != envio.Id)
             throw new InvalidOperationException("El motor no devolvió una evaluación válida para el candidato.");
-        return new EvaluacionOportunidadDto { ResultadoMotor = resultado };
+        return new EvaluacionOportunidadDto { ResultadoMotor = resultado, DatosPendientes = pendientes.AsReadOnly() };
     }
 
     private static List<DatoPendienteOportunidad> RequisitosPendientes(

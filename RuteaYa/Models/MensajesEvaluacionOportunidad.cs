@@ -47,6 +47,8 @@ public static class MensajesEvaluacionOportunidad
         MotivoCompatibilidad.LlegadaMaximaDesconocida => "El límite de llegada es desconocido.",
         MotivoCompatibilidad.DisponibilidadRetiroDesconocida => "La disponibilidad temporal del retiro es desconocida.",
         MotivoCompatibilidad.VencimientoEntregaDesconocido => "El vencimiento de entrega es desconocido.",
+        MotivoCompatibilidad.DisponibilidadSalidaDesconocida => "No se conoce la disponibilidad de una salida concreta.",
+        MotivoCompatibilidad.PesoMaximoPublicadoExcedido => "El paquete supera incluso el peso máximo publicado del viaje.",
         _ => "La evaluación requiere revisar sus condiciones."
     };
 }

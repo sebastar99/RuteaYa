@@ -9,6 +9,9 @@ public class DatosConfirmadosOportunidadDto
 {
     public int ViajeId { get; set; }
     public int EnvioId { get; set; }
+    public bool PermitirEvaluacionParcial { get; set; }
+    public decimal? PesoMaximoPublicadoKg { get; set; }
+    public int? CuposMaximosPublicados { get; set; }
     public IReadOnlyList<PuntoRutaDto>? RecorridoConfirmado { get; set; }
     public PuntoRutaDto? RetiroConfirmado { get; set; }
     public PuntoRutaDto? EntregaConfirmada { get; set; }

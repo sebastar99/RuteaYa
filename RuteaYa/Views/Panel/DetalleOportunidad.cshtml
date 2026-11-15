@@ -27,7 +27,7 @@ else if (Model.Detalle != null)
     var candidato = Model.Detalle;
     var envio = candidato.Envio;
     var evaluacion = candidato.Evaluacion;
-    var textoEstado = !evaluacion.MotorEjecutado ? "Pendiente de evaluación" : evaluacion.Estado switch
+    var textoEstado = !evaluacion.MotorEjecutado ? "Indeterminado: Pendiente de evaluación" : evaluacion.Estado switch
     {
         EstadoCompatibilidad.Compatible => "Compatible según la evaluación",
         EstadoCompatibilidad.Incompatible => "No compatible",
@@ -63,10 +63,11 @@ else if (Model.Detalle != null)
             La disponibilidad por estado se verificó al consultar; no representa una reserva.</p>
     </div>
     <div class="panel-card">
-        @if (!evaluacion.MotorEjecutado)
+        @if (!evaluacion.MotorEjecutado || evaluacion.DatosPendientes.Count > 0)
         {
             <h2>Datos pendientes para evaluar</h2>
-            <p>No se ejecutó el motor ni se consultaron rutas para este candidato.</p>
+            @if (!evaluacion.MotorEjecutado) { <p>No se ejecutó el motor ni se consultaron rutas para este candidato.</p> }
+            else { <p>Se evaluaron las condiciones verificables; estos datos siguen pendientes para una decisión completa.</p> }
             @if (evaluacion.DatosPendientes.Count == 0)
             {
                 <p>La evaluación aún no está preparada.</p>
@@ -81,7 +82,7 @@ else if (Model.Detalle != null)
                 </ul>
             }
         }
-        else
+        @if (evaluacion.MotorEjecutado)
         {
             var resultado = evaluacion.ResultadoMotor!;
             <h2>Resultado del motor de compatibilidad</h2>

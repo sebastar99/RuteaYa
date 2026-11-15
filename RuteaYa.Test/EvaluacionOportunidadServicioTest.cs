@@ -381,6 +381,6 @@ public class EvaluacionOportunidadServicioTest
         };
 
         Assert.Equal(EstadoCompatibilidad.Indeterminado, evaluacion.Estado);
-        Assert.False(evaluacion.MotorEjecutado);
+        Assert.True(evaluacion.MotorEjecutado);
     }
 }

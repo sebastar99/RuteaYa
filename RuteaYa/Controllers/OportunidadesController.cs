@@ -44,13 +44,14 @@ public class OportunidadesController : Controller
         {
             return BadRequest("La página debe ser positiva y el tamaño de página debe estar entre 1 y 50.");
         }
-        catch (Exception error) when (error is DbException or TimeoutException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
+        catch (Exception error) when (error is DbException or TimeoutException or HttpRequestException or InvalidOperationException)
         {
             // No mostrar mensajes del proveedor, conexiones ni datos internos.
             Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             return View(Vista, new OportunidadesViewModel
             {
-                Error = "No se pudieron cargar los candidatos. Intentá nuevamente más tarde."
+                Error = "No se pudieron cargar o evaluar los candidatos. Revisá la disponibilidad de datos y del servicio de rutas e intentá nuevamente."
             });
         }
     }
@@ -78,6 +79,7 @@ public class OportunidadesController : Controller
                 conductorId, viajeId, envioId, cancellationToken);
             if (modelo.Detalle == null) return NotFound();
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
         catch (Exception error) when (error is DbException or TimeoutException or HttpRequestException or InvalidOperationException)
         {
             Response.StatusCode = StatusCodes.Status503ServiceUnavailable;

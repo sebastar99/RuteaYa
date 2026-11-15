@@ -12,7 +12,7 @@ namespace RuteaYa.Test;
 public class OportunidadesLogicaTest
 {
     private static OportunidadesLogica Logica(RuteaYaDbContext db, IEvaluacionOportunidadServicio? evaluacion = null) =>
-        new(db, evaluacion ?? new Mock<IEvaluacionOportunidadServicio>(MockBehavior.Strict).Object);
+        new(db, evaluacion ?? new EvaluacionOportunidadServicio(new DatosConfirmadosOportunidadActualesServicio(), new Mock<ICompatibilidadServicio>(MockBehavior.Strict).Object));
 
     private static DataTable Viajes(bool incluirViaje = true)
     {
@@ -22,7 +22,8 @@ public class OportunidadesLogicaTest
         tabla.Columns.Add("Destino", typeof(string));
         tabla.Columns.Add("Activo", typeof(bool));
         tabla.Columns.Add("DesvioMaxKm", typeof(decimal));
-        if (incluirViaje) tabla.Rows.Add(10, "Morón", "Luján", true, 2m);
+        tabla.Columns.Add("UsuarioId", typeof(int));
+        if (incluirViaje) tabla.Rows.Add(10, "Morón", "Luján", true, 2m, 7);
         return tabla;
     }
 

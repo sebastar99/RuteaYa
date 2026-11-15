@@ -5,7 +5,8 @@ public class EvaluacionOportunidadDto
     public IReadOnlyList<DatoPendienteOportunidad> DatosPendientes { get; set; } = Array.Empty<DatoPendienteOportunidad>();
     public ResultadoCompatibilidadDto? ResultadoMotor { get; set; }
 
-    // Un payload incompleto no se convierte en Compatible aunque contenga un resultado.
-    public bool MotorEjecutado => DatosPendientes.Count == 0 && ResultadoMotor != null;
-    public EstadoCompatibilidad Estado => MotorEjecutado ? ResultadoMotor!.Estado : EstadoCompatibilidad.Indeterminado;
+    public bool MotorEjecutado => ResultadoMotor != null;
+    // Un rechazo probado prevalece; datos pendientes nunca convierten un resultado en Compatible.
+    public EstadoCompatibilidad Estado => ResultadoMotor == null || ResultadoMotor.Estado == EstadoCompatibilidad.Compatible && DatosPendientes.Count > 0
+        ? EstadoCompatibilidad.Indeterminado : ResultadoMotor.Estado;
 }
