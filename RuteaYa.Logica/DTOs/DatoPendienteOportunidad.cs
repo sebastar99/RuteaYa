@@ -16,5 +16,6 @@ public enum DatoPendienteOportunidad
     CapacidadRestanteInvalida,
     PesoEnvioInvalido,
     DesvioMaximoInvalido,
-    RestriccionesTemporalesInconsistentes
+    RestriccionesTemporalesInconsistentes,
+    RecorridoConCompromisosNoVerificable
 }

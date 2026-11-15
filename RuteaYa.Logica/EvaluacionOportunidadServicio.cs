@@ -55,6 +55,7 @@ public class EvaluacionOportunidadServicio : IEvaluacionOportunidadServicio
             datos.PesoMaximoPublicadoKg.HasValue && envio.PesoKg > datos.PesoMaximoPublicadoKg || datos.CuposMaximosPublicados == 0 ||
             datos.PesoDisponibleKg.HasValue && envio.PesoKg > datos.PesoDisponibleKg || datos.CuposDisponibles == 0;
         var parcial = datos.PermitirEvaluacionParcial && (coordenadas || rechazoPrevio) &&
+            (rechazoPrevio || !pendientes.Contains(DatoPendienteOportunidad.RecorridoConCompromisosNoVerificable)) &&
             !pendientes.Any(p => p is DatoPendienteOportunidad.CapacidadRestanteInvalida or DatoPendienteOportunidad.PesoEnvioInvalido or
                 DatoPendienteOportunidad.DesvioMaximoInvalido or DatoPendienteOportunidad.RestriccionesTemporalesInconsistentes);
         if (pendientes.Count > 0 && !parcial)
@@ -87,6 +88,10 @@ public class EvaluacionOportunidadServicio : IEvaluacionOportunidadServicio
         ViajeOportunidadesDto viaje, EnvioDto envio, DatosConfirmadosOportunidadDto datos)
     {
         var faltantes = new List<DatoPendienteOportunidad>();
+        // No se conserva el orden de inserción de los paquetes ya asignados. No se
+        // evalúa el candidato aislado como si esos compromisos no existieran.
+        if (viaje.SalidaSeleccionada?.PaquetesComprometidos > 0)
+            faltantes.Add(DatoPendienteOportunidad.RecorridoConCompromisosNoVerificable);
         if (datos.RecorridoConfirmado == null || datos.RecorridoConfirmado.Count < 2 || !datos.RecorridoConfirmado.All(PuntoValido))
             faltantes.Add(DatoPendienteOportunidad.RecorridoSinCoordenadasConfirmadas);
         if (!PuntoValido(datos.RetiroConfirmado)) faltantes.Add(DatoPendienteOportunidad.RetiroSinCoordenadasConfirmadas);

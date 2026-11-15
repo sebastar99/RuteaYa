@@ -20,8 +20,10 @@
 <div class="panel-alert" role="note">
     La evaluación distingue condiciones verificadas y datos pendientes. Un desvío aprobado
     por sí solo no confirma salida, capacidad ni horarios. Las rutas son estimaciones de HERE.
-    La aceptación está deshabilitada hasta validar compatibilidad, capacidad y asignación al viaje concreto.
+    Podés aceptar desde el detalle cuando la compatibilidad esté confirmada para la salida seleccionada.
 </div>
+
+@if (TempData["ErrorAceptacion"] is string errorAceptacion) { <div class="panel-alert danger" role="alert">@errorAceptacion</div> }
 
 @if (Model.Error != null)
 {

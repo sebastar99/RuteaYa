@@ -15,11 +15,13 @@ public class OportunidadesController : Controller
 {
     private const string Vista = "~/Views/Panel/Oportunidades.cshtml";
     private readonly IOportunidadesLogica _oportunidades;
+    private readonly EnviosLogica? _envios;
 
-    public OportunidadesController(IOportunidadesLogica oportunidades)
+    public OportunidadesController(IOportunidadesLogica oportunidades, EnviosLogica? envios = null)
     {
         ArgumentNullException.ThrowIfNull(oportunidades);
         _oportunidades = oportunidades;
+        _envios = envios;
     }
 
     [HttpGet("")]
@@ -115,17 +117,43 @@ public class OportunidadesController : Controller
 
     [HttpPost("Aceptar")]
     [ValidateAntiForgeryToken]
-    public IActionResult Aceptar(int viajeId, int envioId)
+    public async Task<IActionResult> Aceptar(int viajeId, int envioId, int? salidaId = null, CancellationToken cancellationToken = default)
     {
         if (User.Identity?.IsAuthenticated != true) return Challenge();
         var conductorId = ObtenerConductorId();
         if (conductorId <= 0) return Forbid();
         if (!ModelState.IsValid) return BadRequest("Los parámetros no son válidos.");
         if (viajeId <= 0 || envioId <= 0) return NotFound();
-        // Bloqueo del servidor, incluso con POST directo y antiforgery válido.
-        // Pendiente compatibilidad, capacidad y asociación persistente a viaje/salida.
-        return StatusCode(StatusCodes.Status409Conflict,
-            "La aceptación está deshabilitada hasta validar compatibilidad, capacidad y asignación al viaje concreto.");
+        if (!salidaId.HasValue || salidaId <= 0) return BadRequest("Seleccioná una salida concreta antes de aceptar.");
+        if (_envios == null) return StatusCode(503, "No se pudo preparar la aceptación.");
+        try
+        {
+            var resultado = await _envios.AceptarSalidaAsync(conductorId, viajeId, salidaId.Value, envioId, cancellationToken);
+            if (resultado.Estado == EstadoAceptacion.NoEncontrado) return NotFound();
+            if (resultado.Exito)
+            {
+                TempData["Exito"] = resultado.Estado == EstadoAceptacion.YaAceptado
+                    ? $"El envío #{envioId} ya estaba asignado a esta salida. Podés consultarlo en tus transportes."
+                    : $"El envío #{envioId} quedó asignado correctamente a tu salida.";
+                return RedirectToAction("Index", "Transportes");
+            }
+            var mensaje = resultado.Estado switch
+            {
+                EstadoAceptacion.EnvioNoDisponible => "El envío ya fue asignado o dejó de estar disponible.",
+                EstadoAceptacion.SalidaNoValida => "La salida ya no es válida, futura o disponible. Revisá el viaje y la fecha.",
+                EstadoAceptacion.CapacidadInsuficiente => "No hay capacidad suficiente de peso o cupos para aceptar este envío.",
+                EstadoAceptacion.Incompatible => "El envío no es compatible con esta salida.",
+                EstadoAceptacion.DatosPendientes => "No se puede aceptar: quedan datos pendientes para confirmar la compatibilidad.",
+                _ => "Hubo un conflicto de concurrencia al confirmar. Recargá los datos y volvé a intentar."
+            };
+            var motivos = (resultado.Evaluacion?.DatosPendientes ?? Array.Empty<DatoPendienteOportunidad>()).Select(MensajesEvaluacionOportunidad.DatoPendiente)
+                .Concat((resultado.Evaluacion?.ResultadoMotor?.Motivos ?? Array.Empty<MotivoCompatibilidad>()).Select(MensajesEvaluacionOportunidad.Motivo));
+            TempData["ErrorAceptacion"] = string.Join(" ", new[] { mensaje }.Concat(motivos));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
+        catch (Exception e) when (e is HttpRequestException or TimeoutException or InvalidOperationException or Microsoft.EntityFrameworkCore.DbUpdateException or DbException)
+        { TempData["ErrorAceptacion"] = "No se pudo confirmar la asignación. Revisá la disponibilidad del servicio y recargá antes de reintentar."; }
+        return RedirectToAction(nameof(Index), new { viajeId, salidaId });
     }
 
     private int ObtenerConductorId()

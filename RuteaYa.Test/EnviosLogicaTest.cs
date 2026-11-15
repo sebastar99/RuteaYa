@@ -143,7 +143,7 @@ public class EnviosLogicaTest
     }
 
     [Fact]
-    public async Task AceptarAsync_ConductorValidoYViajeActivo_AsignaConductorYEstado()
+    public async Task AceptarAsync_LegadoSinSalida_NoPuedeAsignar()
     {
         using var contexto = new EnviosContextoPrueba();
         var consultas = contexto.Consultas;
@@ -151,26 +151,23 @@ public class EnviosLogicaTest
         consultas.Responder(TablaEnvios((25, 7, null, (byte)EstadoEnvio.BuscandoConductor, "Test")));
         var db = contexto.Db;
 
-        var resultado = await new EnviosLogica(db, null!).AceptarAsync(conductorId: 8, viajeId: 10, envioId: 25);
-
-        Assert.True(resultado);
-        Assert.Equal(2, consultas.Consultas.Count);
-        Assert.Equal(1, contexto.Guardados);
-        Assert.Equal(8, db.Envios.Local.Single().ConductorId);
-        Assert.Equal(EstadoEnvio.ConductorAsignado, db.Envios.Local.Single().Estado);
+        await Assert.ThrowsAsync<ArgumentException>(() => new EnviosLogica(db, null!).AceptarAsync(conductorId: 8, viajeId: 10, envioId: 25));
+        Assert.Empty(consultas.Consultas);
+        Assert.Equal(0, contexto.Guardados);
+        Assert.Empty(db.Envios.Local);
     }
 
     [Fact]
-    public async Task AceptarAsync_IntentarTransportarEnvioPropio_LanzaExcepcion()
+    public async Task ActualizarEstadoAsync_NoPermiteAsignarSinCompatibilidad()
     {
         var consultas = new ConsultasEfSimuladas();
-        consultas.Responder(TablaViajes(10, 7, true));
         consultas.Responder(TablaEnvios((25, 7, null, (byte)EstadoEnvio.BuscandoConductor, "Test")));
         await using var db = consultas.CrearContexto();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new EnviosLogica(db, null!).AceptarAsync(conductorId: 7, viajeId: 10, envioId: 25));
-
-        Assert.Equal(2, consultas.Consultas.Count);
+        await Assert.ThrowsAsync<ArgumentException>(() => new EnviosLogica(db, null!).ActualizarEstadoAsync(7, 25, EstadoEnvio.ConductorAsignado));
+        Assert.Single(consultas.Consultas);
+        Assert.Equal(EstadoEnvio.BuscandoConductor, db.Envios.Local.Single().Estado);
+        Assert.Null(db.Envios.Local.Single().ConductorId);
     }
 
     [Fact]

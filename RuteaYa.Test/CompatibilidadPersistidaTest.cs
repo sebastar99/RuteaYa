@@ -299,7 +299,7 @@ public class CompatibilidadPersistidaTest
                 DuracionSegundos = puntos.Count == cantidadBase ? 1000 : 1200 });
         }
     }
-    private sealed class Contador : DbCommandInterceptor
+    internal sealed class Contador : DbCommandInterceptor
     {
         public int Consultas;
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
@@ -312,13 +312,16 @@ public class CompatibilidadPersistidaTest
             foreach (var p in new[] { "PosicionLatitud", "PosicionLongitud", "NavegacionLatitud", "NavegacionLongitud" }) b.Entity<UbicacionConfirmada>().Property<decimal>(p).HasConversion<double>();
         }
     }
-    private sealed class Fixture : IDisposable
+    internal sealed class Fixture : IDisposable
     {
-        private SqliteConnection _conexion = new("Data Source=:memory:"); public Contador Contador = new();
+        private SqliteConnection _conexion; public Contador Contador = new();
         public int ViajeId, EnvioId, EnvioPropioId, EnvioNoDisponibleId, CantidadBase;
         public RuteaYaDbContext Db() => new DbPrueba(new DbContextOptionsBuilder<RuteaYaDbContext>().UseSqlite(_conexion).AddInterceptors(Contador).Options);
-        public Fixture(bool paradas, int cantidadEnvios = 1, string? defecto = null, decimal pesoMax = 100, bool snapshotAntiguo = false)
+        public RuteaYaDbContext DbIndependiente(params IInterceptor[] interceptores) => new DbPrueba(new DbContextOptionsBuilder<RuteaYaDbContext>()
+            .UseSqlite(_conexion.ConnectionString).AddInterceptors(interceptores).Options);
+        public Fixture(bool paradas, int cantidadEnvios = 1, string? defecto = null, decimal pesoMax = 100, bool snapshotAntiguo = false, string? conexion = null)
         {
+            _conexion = new SqliteConnection(conexion ?? "Data Source=:memory:");
             _conexion.Open(); using var db = Db(); db.Database.EnsureCreated();
             db.Usuarios.AddRange(new Usuario { Id = 7, Nombre = "Conductor", Apellido = "Test", Email = "conductor@test.invalid", PasswordHash = "ficticio" },
                 new Usuario { Id = 8, Nombre = "Remitente", Apellido = "Test", Email = "remitente@test.invalid", PasswordHash = "ficticio" }); db.SaveChanges();

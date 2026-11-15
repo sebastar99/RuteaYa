@@ -21,6 +21,7 @@ public static class MensajesEvaluacionOportunidad
         DatoPendienteOportunidad.PesoEnvioInvalido => "El peso publicado del envío es inválido y debe revisarse.",
         DatoPendienteOportunidad.DesvioMaximoInvalido => "El límite de desvío del viaje es inválido y debe revisarse.",
         DatoPendienteOportunidad.RestriccionesTemporalesInconsistentes => "Las fechas confirmadas son inconsistentes entre sí o con la publicación; deben revisarse.",
+        DatoPendienteOportunidad.RecorridoConCompromisosNoVerificable => "La salida ya tiene paquetes comprometidos y no hay un recorrido combinado confirmado. No se puede aceptar otro paquete con estos datos.",
         _ => "Faltan datos válidos y confirmados para evaluar."
     };
 

@@ -122,5 +122,16 @@ else if (Model.Detalle != null)
                 no una garantía de llegada ni una reserva. HERE Routing usa actualmente departureTime=any.</p>
         }
     </div>
-    <div class="panel-alert" role="note">La aceptación de paquetes todavía no está habilitada.</div>
+    @if (evaluacion.Estado == EstadoCompatibilidad.Compatible && evaluacion.MotorEjecutado && evaluacion.DatosPendientes.Count == 0 &&
+        candidato.Viaje.SalidaSeleccionada is { Disponible: true } salidaAceptable)
+    {
+        <form method="post" asp-controller="Oportunidades" asp-action="Aceptar" class="panel-form-actions">
+            <input type="hidden" name="viajeId" value="@candidato.Viaje.Id" />
+            <input type="hidden" name="salidaId" value="@salidaAceptable.Id" />
+            <input type="hidden" name="envioId" value="@envio.Id" />
+            <button class="panel-button" type="submit">Aceptar envío</button>
+        </form>
+        <p class="panel-note">Al aceptar se volverán a validar la compatibilidad y la capacidad en el servidor.</p>
+    }
+    else { <div class="panel-alert" role="note">No se puede aceptar hasta confirmar compatibilidad y una salida disponible.</div> }
 }

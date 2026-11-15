@@ -8,14 +8,17 @@ using System.Linq;
 
 namespace RuteaYa.Logica
 {
-    public class EnviosLogica
+    public partial class EnviosLogica
     {
         private readonly RuteaYaDbContext _db;
         private readonly IUbicacionesConfirmadasServicio _ubicaciones;
+        private readonly IOportunidadesLogica? _oportunidades;
 
-        public EnviosLogica(RuteaYaDbContext db, IGeocodificacionServicio geocodificacion, IUbicacionesConfirmadasServicio? ubicaciones = null)
+        public EnviosLogica(RuteaYaDbContext db, IGeocodificacionServicio geocodificacion, IUbicacionesConfirmadasServicio? ubicaciones = null,
+            IOportunidadesLogica? oportunidades = null)
         {
             _db = db;
+            _oportunidades = oportunidades;
             // El parámetro anterior se conserva para los consumidores existentes. Crear ya no geocodifica.
             _ubicaciones = ubicaciones ?? new UbicacionesConfirmadasServicio(db);
         }
@@ -154,43 +157,9 @@ namespace RuteaYa.Logica
             return true;
         }
 
-        // El conductor toma un envío que busca conductor, usando uno de sus viajes activos.
-        public async Task<bool> AceptarAsync(int conductorId, int viajeId, int envioId)
-        {
-            if (conductorId <= 0)
-                throw new ArgumentException("Usuario no válido.");
-
-            if (viajeId <= 0 || envioId <= 0)
-                throw new ArgumentException("Los identificadores no son válidos.");
-
-            var viajeActivo = await _db.Viajes.AsNoTracking().AnyAsync(
-                v => v.Id == viajeId && v.UsuarioId == conductorId && v.Activo);
-
-            if (!viajeActivo)
-                throw new ArgumentException("El viaje seleccionado no existe o no está activo.");
-
-            var envio = await _db.Envios.FirstOrDefaultAsync(e => e.Id == envioId);
-
-            if (envio == null || envio.Estado != EstadoEnvio.BuscandoConductor)
-                throw new ArgumentException("El envío ya no está disponible.");
-
-            if (envio.UsuarioId == conductorId)
-                throw new ArgumentException("No podés transportar tus propios envíos.");
-
-            envio.Estado = EstadoEnvio.ConductorAsignado;
-            envio.ConductorId = conductorId;
-
-            try
-            {
-                await _db.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                throw new ArgumentException("El envío fue tomado por otro conductor.");
-            }
-
-            return true;
-        }
+        // Firma legada: no tiene salida concreta y no puede autorizar una asignación.
+        public Task<bool> AceptarAsync(int conductorId, int viajeId, int envioId) =>
+            throw new ArgumentException("Seleccioná una salida concreta y aceptá desde Oportunidades.");
 
         // El conductor asignado avanza el envío: Retirado, EnCamino o Entregado.
         public async Task<bool> ActualizarEstadoConductorAsync(int conductorId, int envioId, EstadoEnvio nuevoEstado)
@@ -246,7 +215,6 @@ namespace RuteaYa.Logica
 
         private static bool TransicionValida(EstadoEnvio actual, EstadoEnvio nuevo) => (actual, nuevo) switch
         {
-            (EstadoEnvio.BuscandoConductor, EstadoEnvio.ConductorAsignado) => true,
             (EstadoEnvio.ConductorAsignado, EstadoEnvio.Retirado) => true,
             (EstadoEnvio.Retirado, EstadoEnvio.EnCamino) => true,
             (EstadoEnvio.EnCamino, EstadoEnvio.Entregado) => true,

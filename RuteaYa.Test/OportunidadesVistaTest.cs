@@ -215,7 +215,7 @@ public class OportunidadesVistaTest
             Assert.DoesNotContain("Caballito", detalleHtml);
             Assert.DoesNotContain("Tomar este envío", detalleHtml);
             Assert.DoesNotContain("/Oportunidades/Aceptar", detalleHtml);
-            Assert.Contains("La aceptación de paquetes todavía no está habilitada.", WebUtility.HtmlDecode(detalleHtml));
+            Assert.Contains("No se puede aceptar hasta confirmar compatibilidad", WebUtility.HtmlDecode(detalleHtml));
             var enlaceVolver = Enlaces(detalleHtml).Single(e =>
             {
                 var uri = new Uri(cliente.BaseAddress, e);
@@ -328,7 +328,7 @@ public class OportunidadesVistaTest
     }
 
     [Fact]
-    public async Task Aceptar_PostDirectoConAntiforgeryValido_EstaBloqueadoSinInvocarServicios()
+    public async Task Aceptar_PostDirectoSinSalida_ExigeAutenticacionAntiforgeryYSalida()
     {
         var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
         logica.Setup(l => l.ConsultarAsync(7, null, 1, 10, It.IsAny<CancellationToken>()))
@@ -354,8 +354,8 @@ public class OportunidadesVistaTest
             Assert.Equal(HttpStatusCode.BadRequest, sinToken.StatusCode);
             using var respuesta = await cliente.PostAsync("/Oportunidades/Aceptar", new FormUrlEncodedContent(new Dictionary<string, string>
                 { ["viajeId"] = "10", ["envioId"] = "25", ["__RequestVerificationToken"] = token }));
-            Assert.Equal(HttpStatusCode.Conflict, respuesta.StatusCode);
-            Assert.Contains("deshabilitada", await respuesta.Content.ReadAsStringAsync());
+            Assert.Equal(HttpStatusCode.BadRequest, respuesta.StatusCode);
+            Assert.Contains("salida concreta", await respuesta.Content.ReadAsStringAsync());
             logica.Verify(l => l.ConsultarAsync(7, null, 1, 10, It.IsAny<CancellationToken>()), Times.Once);
             logica.VerifyNoOtherCalls();
         }
@@ -366,7 +366,7 @@ public class OportunidadesVistaTest
         Regex.Matches(html, "href=\"([^\"]+)\"")
             .Select(m => WebUtility.HtmlDecode(m.Groups[1].Value));
 
-    private static WebApplication CrearHost(IOportunidadesLogica logica)
+    internal static WebApplication CrearHost(IOportunidadesLogica logica, EnviosLogica? envios = null)
     {
         // Host exclusivo de prueba: solo loopback, autenticación ficticia y lógica simulada.
         // No ejecuta Program.cs ni carga User Secrets, EF, la API propia o servicios HERE.
@@ -380,6 +380,7 @@ public class OportunidadesVistaTest
         builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
         builder.Services.AddControllersWithViews().AddApplicationPart(typeof(OportunidadesController).Assembly);
         builder.Services.AddSingleton(logica);
+        if (envios != null) builder.Services.AddSingleton(envios);
         builder.Services.AddAuthentication("Prueba")
             .AddScheme<AuthenticationSchemeOptions, UsuarioPruebaHandler>("Prueba", _ => { });
         builder.Services.AddAuthorization();
