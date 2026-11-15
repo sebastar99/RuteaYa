@@ -8,8 +8,8 @@
 2. Iniciá sesión con un usuario que tenga un viaje propio. Desde Oportunidades,
    seleccioná ese viaje y abrí **Previsualizar recorrido del viaje**. También
    se puede acceder a `/Recorridos/{viajeId}`.
-3. Pulsá **Elegir ubicaciones con autocompletado HERE**. Esto prepara la sesión
-   en memoria, sin consultar HERE ni modificar el viaje.
+3. Los campos aparecen directamente al abrir la previsualización. La sesión se
+   prepara en memoria, sin consultar HERE ni modificar el viaje. No hay botón de activación.
 4. Editá el campo de origen, parada o destino. A partir de **3 caracteres**, tras
    **300 ms** sin escribir, se solicitan hasta cinco sugerencias. Agregá localidad
    y país para desambiguar: no se inventa un centro de búsqueda ni se limita el país.
@@ -24,9 +24,8 @@
    dirección normalizada, identificador HERE y punto de navegación elegido;
    los marcadores usan la dirección elegida, no el texto original del viaje.
 
-La búsqueda clásica por dirección completa sigue disponible mediante **Buscar
-ubicaciones del viaje**. Los dos flujos usan sesiones distintas; sus selecciones
-no se intercambian.
+Se conservan los endpoints anteriores para compatibilidad, pero la pantalla usa
+autocompletado directo. Las selecciones de sesiones distintas no se intercambian.
 
 Cambiar el texto o el acceso invalida la confirmación visible. El componente
 cancela búsquedas/selecciones anteriores con `AbortController` y descarta respuestas
@@ -100,7 +99,7 @@ posteriormente origen, destino, paradas, retiro o entrega, se necesita:
 1. Renderizar `Views/Shared/_CampoDireccionHere.cshtml` con un
    `CampoDireccionViewModel` por campo: `IdHtml` único, etiqueta, texto inicial,
    nombre del hidden de token y tres URLs autorizadas para sugerir, resolver y confirmar.
-2. Incluir una vez `~/css/direcciones-here.css` y `~/js/direcciones-here.js`. No usa
+2. Incluir una vez `~/css/direcciones-here.css`, `~/js/here-http.js` y luego `~/js/direcciones-here.js`. No usa
    npm, paquetes NuGet nuevos, jQuery ni SDK HERE en el navegador.
 3. Ubicarlo dentro de un formulario con antiforgery. El script toma el token del
    formulario y lo envía en el header `RequestVerificationToken` para los POST.
@@ -137,13 +136,15 @@ por HERE para que el usuario lo revise.
 - `RecorridosVistaTest`: Razor con tres componentes, auth/claims, antiforgery,
   errores, lookup y confirmación, datos agregados libremente ignorados, tokens
   incompletos/cruzados, ruta en orden, XSS escapado y viaje editado/ajeno.
-- La suite completa pasó con **652 tests aprobados, cero fallos y cero omitidos**.
-  Las respuestas HERE son simuladas, sin SQL real ni migraciones. Los hosts MVC
+- Las respuestas HERE de los tests son simuladas, sin SQL real ni migraciones. Los hosts MVC
   solo hacen HTTP en loopback y no ejecutan Program.cs de la aplicación.
 
-Los tests de Razor no ejecutan JavaScript en un navegador. La prueba visual con una
-cuenta HERE real, incluyendo debounce y navegación por teclado, queda para ejecución
-manual mediante los pasos anteriores. No se hicieron llamadas HERE reales en esta etapa.
+Además de Razor, hay una regresión en Edge headless que ejecuta el JavaScript real
+contra MVC en loopback con HERE simulado: debounce, aborto de búsqueda, teclado,
+confirmación, cálculo AJAX, fallo de CDN y errores claros sin recargas. El trazado
+se verifica también con una API Leaflet simulada y el JSON del endpoint de cálculo.
+La sonda manual de endpoints HERE reales es independiente de los tests: ver
+[diagnóstico y límites de persistencia](here-diagnostico-y-limites-persistencia.md).
 
 ## Referencias oficiales consultadas
 

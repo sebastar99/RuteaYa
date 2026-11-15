@@ -18,11 +18,114 @@ using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
 using RuteaYa.Web.Controllers;
 using RuteaYa.Web.Services;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using System.Runtime.CompilerServices;
 
 namespace RuteaYa.Test;
 
 public class RecorridosVistaTest
 {
+    [Theory]
+    [InlineData(401, "here_401")]
+    [InlineData(403, "here_403")]
+    [InlineData(429, "here_429")]
+    [InlineData(500, "here_500")]
+    [InlineData(404, "here_404")]
+    [InlineData(0, "here_timeout")]
+    [InlineData(-1, "error_interno")]
+    [InlineData(-2, "cancelacion_inesperada")]
+    [InlineData(-3, "here_no_configurado")]
+    [InlineData(-4, "here_respuesta_invalida")]
+    public async Task Direcciones_FallosDiferenciados_NoFiltranDetalles(int estado, string codigo)
+    {
+        var viajes = new Mock<IViajesLogica>();
+        viajes.Setup(v => v.ObtenerPorIdAsync(7, 10)).ReturnsAsync(new ViajeDto { Id = 10, UsuarioId = 7, Origen = "Origen", Destino = "Destino" });
+        var busqueda = new Mock<IBusquedaDireccionesServicio>();
+        Exception fallo = estado switch { 0 => new TimeoutException("secreto-no-exponer"), -1 => new NullReferenceException("secreto-no-exponer"),
+            -2 => new OperationCanceledException("secreto-no-exponer"), -3 => new HereNoConfiguradoException(), -4 => new InvalidOperationException("secreto-no-exponer"),
+            _ => new HttpRequestException("https://here/?apiKey=secreto-no-exponer", null, (HttpStatusCode)estado) };
+        busqueda.Setup(b => b.SugerirAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(fallo);
+        using var http = new HttpClient(new Handler(_ => throw new Exception("No debe consultar HERE")));
+        await using var app = CrearHost(viajes.Object, Mock.Of<IGeocodificacionServicio>(), Mock.Of<IRutasGeometriaServicio>(),
+            new MapasHereServicio(http, Options.Create(new HereRoutingOpciones())), busqueda.Object);
+        await app.StartAsync();
+        try
+        {
+            var direccion = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient { BaseAddress = new Uri(direccion) };
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            var html = await cliente.GetStringAsync("/Recorridos/10");
+            var sesion = Valor(html, "Sesion");
+            using var respuesta = await cliente.GetAsync($"/Recorridos/10/Direcciones/Sugerencias?sesion={sesion}&ubicacion=0&texto=calle");
+            Assert.Equal(estado == 0 ? 504 : estado is -1 or -2 ? 500 : 503, (int)respuesta.StatusCode);
+            var cuerpo = await respuesta.Content.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(cuerpo);
+            Assert.Equal(codigo, json.RootElement.GetProperty("codigo").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("referencia").GetString()));
+            Assert.DoesNotContain("secreto-no-exponer", cuerpo);
+            Assert.DoesNotContain("https://here", cuerpo);
+        }
+        finally { await app.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task CancelacionNormal_SeManejaEnFronteraMvcSinPaginaDeError()
+    {
+        using var cache = new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
+        var recorridos = new PrevisualizacionRecorridoServicio(Mock.Of<IViajesLogica>(), Mock.Of<IGeocodificacionServicio>(), Mock.Of<IRutasGeometriaServicio>(), cache);
+        using var http = new HttpClient(new Handler(_ => throw new Exception("No debe consultar")));
+        var controller = new RecorridosController(recorridos, new MapasHereServicio(http, Options.Create(new HereRoutingOpciones())));
+        using var cts = new CancellationTokenSource(); cts.Cancel();
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext {
+            RequestAborted = cts.Token, User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, "7") }, "Prueba")) } };
+        var resultado = Assert.IsType<StatusCodeResult>(await controller.Index(10, null, cts.Token));
+        Assert.Equal(499, resultado.StatusCode);
+    }
+
+    [EdgeFact]
+    public async Task NavegadorReal_DebounceCancelacionTecladoCalculoYErroresSinRecarga()
+    {
+        var viajes = new Mock<IViajesLogica>();
+        viajes.Setup(v => v.ObtenerPorIdAsync(7, 10)).ReturnsAsync(new ViajeDto { Id = 10, UsuarioId = 7, Origen = "Origen", Destino = "Destino" });
+        var canceladas = 0;
+        var busqueda = new Mock<IBusquedaDireccionesServicio>(MockBehavior.Strict);
+        busqueda.Setup(b => b.SugerirAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(async (string texto, CancellationToken ct) => {
+            if (texto.StartsWith("cancelar")) {
+                try { await Task.Delay(3000, ct); }
+                catch (OperationCanceledException) { Interlocked.Increment(ref canceladas); throw; }
+            }
+            if (texto == "permiso") throw new HttpRequestException("No exponer credencial", null, HttpStatusCode.Forbidden);
+            return (IReadOnlyList<SugerenciaDireccionDto>)new[] { new SugerenciaDireccionDto { IdHere = "here:af:" + texto[^1], Nombre = "Calle " + texto[^1], Direccion = "Calle, Morón", Localidad = "Morón" } };
+        });
+        busqueda.Setup(b => b.ResolverAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((string id, CancellationToken _) =>
+            new ResultadoGeocodificacionDto { IdHere = id, DireccionNormalizada = "Dirección " + id[^1], TipoResultado = "houseNumber",
+                Posicion = new() { Latitud = -34, Longitud = -58 }, Accesos = new() { new() { Latitud = -35, Longitud = -59 } } });
+        var llamadasRutas = 0;
+        var rutas = new Mock<IRutasGeometriaServicio>();
+        rutas.Setup(r => r.CalcularGeometriaAsync(It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IReadOnlyList<PuntoRutaDto> puntos, CancellationToken ct) => {
+                Interlocked.Increment(ref llamadasRutas); await Task.Delay(200, ct);
+                return new ResultadoRutaGeometriaDto { Totales = new() { DistanciaMetros = 3210, DuracionSegundos = 123 },
+                    Secciones = new() { new() { puntos[0], puntos[1] } } };
+            });
+        using var http = new HttpClient(new Handler(r => r.RequestUri!.AbsolutePath == "/v3/copyright"
+            ? Json("""{"resources":{"base":{"styles":{"explore.day":[]}}},"copyrights":{}}""")
+            : throw new Exception("No se permite HERE real")));
+        await using var app = CrearHost(viajes.Object, Mock.Of<IGeocodificacionServicio>(), rutas.Object,
+            new MapasHereServicio(http, Options.Create(new HereRoutingOpciones { ApiKey = "simulada-para-mapa" })), busqueda.Object, navegador: true);
+        await app.StartAsync();
+        try {
+            var direccion = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            var resultado = await Helpers.EdgeNavegador.EjecutarAsync(direccion + "/Recorridos/10");
+            Assert.Equal("OK", resultado);
+            Assert.Equal(1, llamadasRutas);
+            Assert.True(canceladas > 0, "La petición de búsqueda anterior debe cancelarse en el servidor.");
+            Assert.DoesNotContain(busqueda.Invocations.Where(i => i.Method.Name == nameof(IBusquedaDireccionesServicio.SugerirAsync)), i => Equals(i.Arguments[0], "ca"));
+        }
+        finally { await app.StopAsync(); }
+    }
+
     [Fact]
     public async Task FlujoMvc_AutorizaValidaAntiforgeryYConfirmaAntesDeMostrarGeometria()
     {
@@ -133,8 +236,12 @@ public class RecorridosVistaTest
         await app.StopAsync();
     }
 
-    [Fact]
-    public async Task AutocompletadoMvc_RenderizaComponenteYVerificaLookupConfirmacionYAutorizacion()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(403)]
+    [InlineData(429)]
+    [InlineData(504)]
+    public async Task AutocompletadoMvc_RenderizaComponenteYVerificaLookupConfirmacionYAutorizacion(int falloRouting)
     {
         var viaje = new ViajeDto { Id = 10, UsuarioId = 7, Origen = "Origen publicado", Destino = "Destino publicado",
             Paradas = new() { new() { Id = 1, Orden = 1, Ubicacion = "Parada publicada" } } };
@@ -165,6 +272,10 @@ public class RecorridosVistaTest
                 Assert.Equal(new[] { -34m, -45m, -36m }, p.Select(x => x.Latitud)))
             .ReturnsAsync(new ResultadoRutaGeometriaDto { Totales = new() { DistanciaMetros = 3210, DuracionSegundos = 123 },
                 Secciones = new() { new() { new() { Latitud = -34, Longitud = -58 }, new() { Latitud = -35, Longitud = -58 } } } });
+        if (falloRouting != 0)
+            rutas.Setup(r => r.CalcularGeometriaAsync(It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(falloRouting == 504 ? new TimeoutException("No exponer secreto") :
+                    new HttpRequestException("No exponer secreto", null, (HttpStatusCode)falloRouting));
         using var handler = new Handler(_ => throw new Exception("No debe consultar mapa ni HERE real"));
         using var http = new HttpClient(handler);
         await using var app = CrearHost(viajes.Object, geo.Object, rutas.Object,
@@ -186,10 +297,8 @@ public class RecorridosVistaTest
             var csrf = Valor(await inicial.Content.ReadAsStringAsync(), "__RequestVerificationToken");
             Task<HttpResponseMessage> Post(string url, params (string Clave, string Valor)[] campos) => cliente.PostAsync(url,
                 Form(campos.Append(("__RequestVerificationToken", csrf)).ToArray()));
-            using var inicio = await Post("/Recorridos/10/Autocompletar");
-            Assert.Equal(HttpStatusCode.Redirect, inicio.StatusCode);
-            using var pagina = await cliente.GetAsync(inicio.Headers.Location);
-            var html = await pagina.Content.ReadAsStringAsync();
+            var html = await inicial.Content.ReadAsStringAsync();
+            Assert.DoesNotContain("Elegir ubicaciones con autocompletado HERE", html);
             csrf = Valor(html, "__RequestVerificationToken");
             var sesion = Valor(html, "Sesion");
             Assert.Equal(3, Regex.Matches(html, "data-direccion-here").Count);
@@ -227,9 +336,9 @@ public class RecorridosVistaTest
                 using var sinCsrf = await cliente.PostAsync(resolver, Form(("token", token)));
                 Assert.Equal(HttpStatusCode.BadRequest, sinCsrf.StatusCode);
                 using var idLibre = await Post(resolver, ("token", "here:af:id-libre"));
-                Assert.Equal(HttpStatusCode.BadRequest, idLibre.StatusCode);
+                Assert.Equal(HttpStatusCode.Conflict, idLibre.StatusCode);
                 using var pendiente = await Post(confirmar, ("token", token), ("acceso", "-1"), ("confirmada", "true"));
-                Assert.Equal(HttpStatusCode.BadRequest, pendiente.StatusCode);
+                Assert.Equal(HttpStatusCode.Conflict, pendiente.StatusCode);
                 using var resuelta = await Post(resolver, ("token", token));
                 using var datos = JsonDocument.Parse(await resuelta.Content.ReadAsStringAsync());
                 Assert.False(datos.RootElement.GetProperty("confirmada").GetBoolean());
@@ -249,15 +358,30 @@ public class RecorridosVistaTest
             Assert.Equal(HttpStatusCode.BadRequest, incompleto.StatusCode);
             using var sinConfirmacion = await Post("/Recorridos/10/ConfirmarDirecciones", ("Sesion", sesion),
                 ("Confirmaciones[0]", primerResuelto!), ("Confirmaciones[1]", confirmaciones[1]), ("Confirmaciones[2]", confirmaciones[2]));
-            Assert.Equal(HttpStatusCode.BadRequest, sinConfirmacion.StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, sinConfirmacion.StatusCode);
             using var cruzadas = await Post("/Recorridos/10/ConfirmarDirecciones", ("Sesion", sesion),
                 ("Confirmaciones[0]", confirmaciones[1]), ("Confirmaciones[1]", confirmaciones[0]), ("Confirmaciones[2]", confirmaciones[2]));
-            Assert.Equal(HttpStatusCode.BadRequest, cruzadas.StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, cruzadas.StatusCode);
             rutas.VerifyNoOtherCalls();
+            cliente.DefaultRequestHeaders.Accept.ParseAdd("application/json");
             using var calcular = await Post("/Recorridos/10/ConfirmarDirecciones", ("Sesion", sesion),
                 ("Confirmaciones[0]", confirmaciones[0]), ("Confirmaciones[1]", confirmaciones[1]), ("Confirmaciones[2]", confirmaciones[2]));
-            Assert.Equal(HttpStatusCode.Redirect, calcular.StatusCode);
-            using var resultado = await cliente.GetAsync(calcular.Headers.Location);
+            if (falloRouting != 0)
+            {
+                Assert.Equal(falloRouting == 504 ? 504 : 503, (int)calcular.StatusCode);
+                var error = await calcular.Content.ReadAsStringAsync();
+                Assert.Contains(falloRouting == 504 ? "here_timeout" : $"here_{falloRouting}", error);
+                Assert.DoesNotContain("secreto", error);
+                using var reintento = await cliente.GetAsync($"/Recorridos/10?sesion={sesion}");
+                Assert.DoesNotContain("id=\"datos-recorrido\"", await reintento.Content.ReadAsStringAsync());
+                return;
+            }
+            Assert.Equal(HttpStatusCode.OK, calcular.StatusCode);
+            using var calculado = JsonDocument.Parse(await calcular.Content.ReadAsStringAsync());
+            Assert.Equal(-45m, calculado.RootElement.GetProperty("puntos")[1][0].GetDecimal());
+            Assert.Equal(3210, calculado.RootElement.GetProperty("distanciaMetros").GetInt64());
+            Assert.Contains("/Tesela/0/0/0", calculado.RootElement.GetProperty("teselas").GetString());
+            using var resultado = await cliente.GetAsync($"/Recorridos/10?sesion={sesion}");
             var resultadoHtml = await resultado.Content.ReadAsStringAsync();
             Assert.Contains("Identificador HERE: here:af:0", resultadoHtml);
             Assert.DoesNotContain("<script>alert", resultadoHtml);
@@ -273,7 +397,7 @@ public class RecorridosVistaTest
             cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
             viaje.Origen = "Viaje editado";
             using var cambiado = await cliente.GetAsync(urls[0] + "&texto=calle");
-            Assert.Equal(HttpStatusCode.NotFound, cambiado.StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, cambiado.StatusCode);
         }
         finally { await app.StopAsync(); }
     }
@@ -286,7 +410,8 @@ public class RecorridosVistaTest
         { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 
     private static WebApplication CrearHost(IViajesLogica viajes, IGeocodificacionServicio geo,
-        IRutasGeometriaServicio rutas, MapasHereServicio mapas, IBusquedaDireccionesServicio? busqueda = null)
+        IRutasGeometriaServicio rutas, MapasHereServicio mapas, IBusquedaDireccionesServicio? busqueda = null, bool navegador = false,
+        [CallerFilePath] string archivo = "")
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             { ApplicationName = typeof(RecorridosController).Assembly.GetName().Name, EnvironmentName = "Testing" });
@@ -308,6 +433,24 @@ public class RecorridosVistaTest
         builder.Services.AddAuthentication("Prueba").AddScheme<AuthenticationSchemeOptions, UsuarioHandler>("Prueba", _ => { });
         builder.Services.AddAuthorization();
         var app = builder.Build();
+        if (navegador)
+        {
+            app.Use(async (context, next) => {
+                context.Request.Headers["X-Usuario-Prueba"] = "7";
+                if (context.Request.Path != "/Recorridos/10" || context.Request.Method != "GET") { await next(); return; }
+                var original = context.Response.Body;
+                await using var buffer = new MemoryStream(); context.Response.Body = buffer;
+                await next(); buffer.Position = 0;
+                var html = await new StreamReader(buffer).ReadToEndAsync();
+                // Prueba offline: CDN bloqueado y ningún acceso a HERE. Ejecuta JS propio sobre Razor real.
+                html = Regex.Replace(html, "https://unpkg.com/[^\"]+", "/pruebas/cdn-no-disponible");
+                html = html.Replace("</body>", "<script src=\"/pruebas/browser.js\"></script></body>");
+                context.Response.Body = original; context.Response.ContentLength = null;
+                await context.Response.WriteAsync(html);
+            });
+            app.MapGet("/js/{nombre}", (string nombre) => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "..", "RuteaYa", "wwwroot", "js", Path.GetFileName(nombre))), "application/javascript"));
+            app.MapGet("/pruebas/browser.js", () => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "Fixtures", "direcciones-browser.js")), "application/javascript"));
+        }
         app.UseRouting(); app.UseAuthentication(); app.UseAuthorization();
         app.MapControllerRoute("default", "{controller=Acceso}/{action=Login}/{id?}");
         return app;

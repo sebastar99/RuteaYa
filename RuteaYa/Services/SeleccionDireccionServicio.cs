@@ -61,7 +61,7 @@ public class SeleccionDireccionServicio(IBusquedaDireccionesServicio busqueda, I
     private string Guardar(string etapa, Entrada entrada)
     {
         var restante = entrada.Vence - _reloj.GetUtcNow();
-        if (restante <= TimeSpan.Zero) throw new ArgumentException("La selección venció. Buscá nuevamente.");
+        if (restante <= TimeSpan.Zero) throw new SeleccionTemporalNoDisponibleException("La selección venció. Buscá nuevamente.");
         var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         cache.Set($"direccion:{etapa}:{token}", entrada, restante);
         return token;
@@ -73,7 +73,7 @@ public class SeleccionDireccionServicio(IBusquedaDireccionesServicio busqueda, I
         if (string.IsNullOrEmpty(token) || token.Length != 64 ||
             !cache.TryGetValue<Entrada>($"direccion:{etapa}:{token}", out var entrada) || entrada == null ||
             entrada.UsuarioId != usuarioId || entrada.Ambito != ambito || entrada.Vence <= _reloj.GetUtcNow())
-            throw new ArgumentException("La selección no está disponible o venció. Buscá nuevamente.");
+            throw new SeleccionTemporalNoDisponibleException("La selección no está disponible o venció. Volvé a elegir la dirección.");
         return entrada;
     }
 

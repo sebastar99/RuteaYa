@@ -8,14 +8,30 @@ document.querySelectorAll('[data-ubicacion]').forEach(fieldset => {
     }));
 });
 
-(async function () {
+window.RuteaYaRecorridos = (() => {
+    let map, controller, version = 0;
+    async function dibujar(data) {
     const container = document.getElementById('mapa-recorrido');
-    if (!container) return;
     const status = document.getElementById('estado-mapa');
-    if (typeof L === 'undefined') { status.textContent = 'No se pudo cargar Leaflet. Revisá la conexión y recargá.'; return; }
-    const data = JSON.parse(document.getElementById('datos-recorrido').textContent);
-    const point = p => [p.Latitud, p.Longitud];
-    const map = L.map(container, { minZoom: 0, maxZoom: 18 });
+    if (!container || !Array.isArray(data?.secciones) || !data.secciones.length ||
+        data.secciones.some(s => !Array.isArray(s) || s.length < 2) || !Array.isArray(data.puntos) || data.puntos.length < 2)
+        throw new Error('El servidor devolvió un recorrido incompleto. No se puede dibujar la ruta.');
+    const current = ++version;
+    controller?.abort(); controller = new AbortController();
+    document.getElementById('resultado-recorrido').hidden = false;
+    const summary = document.querySelector('[data-resumen-recorrido]');
+    const metrics = document.createElement('p'), list = document.createElement('ol');
+    metrics.textContent = `${(data.distanciaMetros / 1000).toLocaleString('es-AR')} km · ${(data.duracionSegundos / 60).toLocaleString('es-AR', { maximumFractionDigits: 1 })} minutos estimados. Automóvil, sin tráfico en tiempo real.`;
+    data.etiquetas.forEach((label, i) => { const li = document.createElement('li'); li.textContent = `${label} · HERE ${data.identificadores[i] || 'sin identificador'} · navegación ${data.puntos[i].join(', ')}`; list.append(li); });
+    summary.replaceChildren(metrics, list);
+    if (map) { map.remove(); map = null; }
+    if (typeof L === 'undefined') { status.textContent = 'La ruta se calculó, pero no se pudo cargar Leaflet para dibujarla. Revisá la conexión a los recursos del mapa.'; return; }
+    try {
+    const point = p => {
+        if (!Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite)) throw new Error('Coordenadas de mapa inválidas.');
+        return p;
+    };
+    map = L.map(container, { minZoom: 0, maxZoom: 18 });
     const layers = data.secciones.map(section => L.polyline(section.map(point), { color: '#1765ba', weight: 5 }).addTo(map));
     data.puntos.forEach((p, i) => {
         const label = document.createElement('span');
@@ -30,10 +46,14 @@ document.querySelectorAll('[data-ubicacion]').forEach(fieldset => {
     const bounds = L.featureGroup(layers).getBounds();
     data.puntos.concat(data.posiciones).forEach(p => bounds.extend(point(p)));
     map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+    } catch (error) {
+        status.textContent = `La ruta se calculó pero no se pudo dibujar: ${error.message}`;
+        return;
+    }
+    status.textContent = 'Geometría calculada. Cargando fondo de mapa…';
     try {
-        const response = await fetch(container.dataset.atribuciones, { credentials: 'same-origin', cache: 'no-store' });
-        if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error();
-        const notices = await response.json();
+        const notices = await window.RuteaYaHere.request(data.atribuciones || container.dataset.atribuciones, null, controller.signal);
+        if (current !== version) return;
         // Comparar intervalos normalizados permite navegar a ambos lados del antimeridiano.
         const spans = (west, east) => {
             if (Math.abs(east - west) >= 360) return [[-180, 180]];
@@ -63,11 +83,24 @@ document.querySelectorAll('[data-ubicacion]').forEach(fieldset => {
         attribution();
         map.on('moveend zoomend', attribution);
         // URL generada por MVC; se sustituyen únicamente los segmentos numéricos de teselas.
-        const template = container.dataset.teselas.replace('/Tesela/0/0/0', '/Tesela/{z}/{x}/{y}');
+        const template = (data.teselas || container.dataset.teselas).replace('/Tesela/0/0/0', '/Tesela/{z}/{x}/{y}');
         L.tileLayer(template, { maxZoom: 18, noWrap: true }).on('tileerror', () => {
+            if (current !== version) return;
             status.textContent = 'No se pudieron cargar algunas teselas. Revisá HERE Raster Tile API v3 o renová la sesión.';
         }).addTo(map);
-    } catch {
-        status.textContent = 'El fondo de mapa no está disponible: no se pudieron obtener sus atribuciones. La geometría mostrada proviene de HERE Routing.';
+        status.textContent = 'Ruta dibujada. Fondo cartográfico de HERE.';
+    } catch (error) {
+        if (current === version && error.name !== 'AbortError')
+            status.textContent = `La geometría está dibujada, pero el fondo no está disponible. ${window.RuteaYaHere.message(error)}`;
     }
+    }
+    return { dibujar };
 })();
+const datosRecorrido = document.getElementById('datos-recorrido');
+if (datosRecorrido) {
+    try {
+        window.RuteaYaRecorridos.dibujar(JSON.parse(datosRecorrido.textContent)).catch(error => {
+            document.getElementById('estado-mapa').textContent = window.RuteaYaHere.message(error);
+        });
+    } catch (error) { document.getElementById('estado-mapa').textContent = `No se pudo leer el recorrido: ${error.message}`; }
+}

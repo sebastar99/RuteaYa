@@ -3,11 +3,38 @@ using System.Text;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using RuteaYa.Web.Services;
+using Microsoft.Extensions.Logging;
 
 namespace RuteaYa.Test;
 
 public class BusquedaDireccionesHereServicioTest
 {
+    [Fact]
+    public async Task DiagnosticoSeguro_RegistraServicioYHttpSinUrlClaveCuerpoNiExcepcion()
+    {
+        using var handler = new Handler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
+            { Content = new StringContent("apiKey=" + Key) }));
+        using var client = new HttpClient(handler);
+        var logger = new LoggerPrueba();
+        var servicio = new BusquedaDireccionesHereServicio(client, Options.Create(new HereRoutingOpciones { ApiKey = Key }), logger);
+        await Assert.ThrowsAsync<HttpRequestException>(() => servicio.SugerirAsync("calle prueba"));
+        var mensaje = Assert.Single(logger.Mensajes);
+        Assert.Contains("autocomplete", mensaje);
+        Assert.Contains("403", mensaje);
+        Assert.DoesNotContain(Key, mensaje);
+        Assert.DoesNotContain("https://", mensaje);
+        Assert.All(logger.Excepciones, e => Assert.Null(e));
+    }
+
+    private sealed class LoggerPrueba : ILogger<BusquedaDireccionesHereServicio>
+    {
+        public List<string> Mensajes = new(); public List<Exception?> Excepciones = new();
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        { Mensajes.Add(formatter(state, exception)); Excepciones.Add(exception); }
+    }
+
     private const string Key = "ficticia-para-pruebas+&";
     private const string Id = "here:af:street:prueba+/&?";
     private const string Sugerencias = """
@@ -105,8 +132,8 @@ public class BusquedaDireccionesHereServicioTest
         using var handler = new Handler((_, _) => throw new Exception("No debe consultar"));
         using var client = new HttpClient(handler);
         var servicio = new BusquedaDireccionesHereServicio(client, Options.Create(new HereRoutingOpciones()));
-        if (lookup) await Assert.ThrowsAsync<InvalidOperationException>(() => servicio.ResolverAsync(Id));
-        else await Assert.ThrowsAsync<InvalidOperationException>(() => servicio.SugerirAsync("Rivadavia"));
+        if (lookup) await Assert.ThrowsAsync<HereNoConfiguradoException>(() => servicio.ResolverAsync(Id));
+        else await Assert.ThrowsAsync<HereNoConfiguradoException>(() => servicio.SugerirAsync("Rivadavia"));
         Assert.Equal(0, handler.Llamadas);
     }
 

@@ -16,12 +16,8 @@
 <div class="panel-card">
     <p>Confirmá cada ubicación y su punto de navegación. Incluso un único candidato requiere selección explícita.</p>
     <p>La selección dura diez minutos en este servidor. No se guardan coordenadas en el viaje ni se evalúa o acepta un envío.</p>
-    <form asp-controller="Recorridos" asp-action="Buscar" asp-route-viajeId="@Model.ViajeId" method="post">
-        <button class="panel-button" type="submit">Buscar ubicaciones del viaje</button>
-    </form>
-    <form asp-controller="Recorridos" asp-action="Autocompletar" asp-route-viajeId="@Model.ViajeId" method="post">
-        <button class="panel-button" type="submit">Elegir ubicaciones con autocompletado HERE</button>
-    </form>
+    <p>Escribí directamente en origen, paradas o destino para buscar sugerencias.</p>
+    <a asp-controller="Recorridos" asp-action="Index" asp-route-viajeId="@Model.ViajeId">Renovar previsualización</a>
 </div>
 @if (Model.Error != null)
 {
@@ -44,7 +40,9 @@
                 })" />
             </div>
         }
-        <button class="panel-button" type="submit" data-calcular-direcciones disabled>Calcular recorrido con ubicaciones confirmadas</button>
+        <button class="panel-button" type="button" data-calcular-direcciones disabled>Calcular recorrido con ubicaciones confirmadas</button>
+        <p role="status" aria-live="polite" data-estado-calculo>Confirmá las ubicaciones para calcular.</p>
+        <noscript>El autocompletado y el cálculo interactivo requieren JavaScript habilitado.</noscript>
     </form>
 }
 @if (!Model.UsaAutocompletado && Model.Ubicaciones.Count > 0 && Model.Ruta == null)
@@ -88,10 +86,11 @@
         <button class="panel-button" type="submit" disabled="@(Model.Ubicaciones.Any(u => u.Candidatos.Count == 0))">Confirmar ubicaciones y calcular recorrido</button>
     </form>
 }
-@if (Model.Ruta != null)
-{
-    <div class="panel-card">
+    <section class="panel-card" id="resultado-recorrido" hidden="@(Model.Ruta == null)">
         <h2>Recorrido calculado por HERE</h2>
+        <div data-resumen-recorrido>
+        @if (Model.Ruta != null)
+        {
         <p>@((Model.Ruta.Totales.DistanciaMetros / 1000m).ToString("0.###")) km ·
             @((Model.Ruta.Totales.DuracionSegundos / 60m).ToString("0.#")) minutos estimados.</p>
         <p>Automóvil, paradas en orden, sin tráfico en tiempo real ni fecha de salida (departureTime=any).</p>
@@ -110,20 +109,26 @@
                 }
             }
         </ol>
+        }
+        </div>
         <div id="mapa-recorrido" role="region" aria-label="Mapa interactivo del recorrido"
              data-teselas="@Url.Action("Tesela", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion, z = 0, x = 0, y = 0 })"
              data-atribuciones="@Url.Action("Atribuciones", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion })"></div>
         <p id="estado-mapa" role="status"></p>
         <details><summary>Avisos de los proveedores del mapa</summary><div id="avisos-mapa"></div></details>
-    </div>
-    <script id="datos-recorrido" type="application/json">@Html.Raw(JsonSerializer.Serialize(new
-        { secciones = Model.Ruta.Secciones, puntos = Model.PuntosConfirmados,
-          posiciones = Model.CandidatosConfirmados.Select(c => c.Posicion),
-          etiquetas = Model.Ubicaciones.Select((u, i) => u.Etiqueta + ": " + Model.CandidatosConfirmados[i].DireccionNormalizada) }))</script>
+    </section>
+@if (Model.Ruta != null)
+{
+    <script id="datos-recorrido" type="application/json">@Html.Raw(JsonSerializer.Serialize(
+        RuteaYa.Web.Models.MapaRecorridoViewModel.Crear(Model,
+            Url.Action("Tesela", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion, z = 0, x = 0, y = 0 }),
+            Url.Action("Atribuciones", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion })),
+        new JsonSerializerOptions(JsonSerializerDefaults.Web)))</script>
 }
 @section Scripts {
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+    <script src="~/js/here-http.js" asp-append-version="true"></script>
     <script src="~/js/recorridos.js" asp-append-version="true"></script>
     <script src="~/js/direcciones-here.js" asp-append-version="true"></script>
 }

@@ -41,8 +41,7 @@ public class RutasHereServicio : IRutasServicio, IRutasGeometriaServicio
         var coordenadas = ValidarYFormatear(puntos);
         var apiKey = _opciones.Value.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException(
-                "No se configuró HereRouting:ApiKey. Usá User Secrets o variables de entorno.");
+            throw new HereNoConfiguradoException();
 
         var parametros = new List<string>
         {
@@ -90,7 +89,7 @@ public class RutasHereServicio : IRutasServicio, IRutasGeometriaServicio
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            throw new OperationCanceledException("Se canceló la consulta a HERE Routing.", cancellationToken);
+            throw;
         }
         catch (OperationCanceledException)
         {

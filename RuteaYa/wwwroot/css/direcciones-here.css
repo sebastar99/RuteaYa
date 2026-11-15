@@ -4,3 +4,10 @@
 .campo-direccion-here li button { display: block; width: 100%; text-align: left; padding: .7rem; background: #f5f8fc; border: 1px solid #cbd5e1; cursor: pointer; }
 .campo-direccion-here button:focus-visible { outline: 3px solid #1765ba; }
 .campo-direccion-here [data-confirmar-direccion] { margin-top: .7rem; }
+.campo-direccion-here { position: relative; }
+.direccion-buscador { position: relative; }
+.campo-direccion-here ul { position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin: 0; background: white; }
+.campo-direccion-here ul:empty { display: none; }
+.campo-direccion-here ul:not(:empty) { max-height: 16rem; overflow-y: auto; box-shadow: 0 4px 12px #0002; }
+.campo-direccion-here [aria-selected=true] button { background: #dbeafe; border-color: #1765ba; }
+form[aria-busy=true] { opacity: .8; }

@@ -61,18 +61,19 @@ public class MapasHereServicio(HttpClient cliente, IOptions<HereRoutingOpciones>
     private async Task<HttpResponseMessage> SolicitarAsync(string recurso, CancellationToken ct)
     {
         var key = opciones.Value.ApiKey;
-        if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("No se configuró HERE.");
+        if (string.IsNullOrWhiteSpace(key)) throw new HereNoConfiguradoException();
         try
         {
             var respuesta = await cliente.GetAsync("https://maps.hereapi.com/v3/" + recurso +
                 (recurso.Contains('?') ? "&" : "?") + "apiKey=" + Uri.EscapeDataString(key), ct);
             if (respuesta.IsSuccessStatusCode) return respuesta;
+            var estado = respuesta.StatusCode;
             respuesta.Dispose();
-            throw new HttpRequestException("No se pudo consultar el mapa de HERE.");
+            throw new HttpRequestException("No se pudo consultar el mapa de HERE.", null, estado);
         }
-        catch (HttpRequestException) { throw new HttpRequestException("No se pudo consultar el mapa de HERE."); }
+        catch (HttpRequestException e) { throw new HttpRequestException("No se pudo consultar el mapa de HERE.", null, e.StatusCode); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new TimeoutException("Se agotó el tiempo de espera del mapa de HERE."); }
-        catch (OperationCanceledException) { throw new OperationCanceledException("Consulta cancelada.", ct); }
+        catch (OperationCanceledException) { throw; }
     }
 }

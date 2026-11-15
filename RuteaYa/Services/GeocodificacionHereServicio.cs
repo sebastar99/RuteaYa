@@ -40,7 +40,7 @@ public class GeocodificacionHereServicio : IGeocodificacionServicio
 
         var apiKey = _opciones.Value.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException("No se configuró HereRouting:ApiKey para geocodificación.");
+            throw new HereNoConfiguradoException();
 
         // No limitar a un candidato ni filtrar tipos: podría ocultar ambigüedad o baja precisión.
         var url = "https://geocode.search.hereapi.com/v1/geocode?q=" + Uri.EscapeDataString(direccion.Trim()) +
@@ -78,7 +78,7 @@ public class GeocodificacionHereServicio : IGeocodificacionServicio
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            throw new OperationCanceledException("Se canceló la geocodificación.", cancellationToken);
+            throw;
         }
         catch (OperationCanceledException)
         {

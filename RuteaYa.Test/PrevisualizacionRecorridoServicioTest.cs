@@ -77,8 +77,8 @@ public class PrevisualizacionRecorridoServicioTest
         var modelo = await f.Servicio.BuscarAsync(7, 10);
         f.Viajes.Setup(v => v.ObtenerPorIdAsync(8, 10)).ReturnsAsync(new ViajeDto { Id = 10, UsuarioId = 8 });
         f.Viajes.Setup(v => v.ObtenerPorIdAsync(7, 11)).ReturnsAsync(new ViajeDto { Id = 11, UsuarioId = 7 });
-        await Assert.ThrowsAsync<ArgumentException>(() => f.Servicio.ConfirmarAsync(8, 10, Formulario(modelo!.Sesion!)));
-        await Assert.ThrowsAsync<ArgumentException>(() => f.Servicio.ConfirmarAsync(7, 11, Formulario(modelo!.Sesion!)));
+        await Assert.ThrowsAsync<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ConfirmarAsync(8, 10, Formulario(modelo!.Sesion!)));
+        await Assert.ThrowsAsync<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ConfirmarAsync(7, 11, Formulario(modelo!.Sesion!)));
         f.Rutas.VerifyNoOtherCalls();
     }
 
@@ -91,7 +91,7 @@ public class PrevisualizacionRecorridoServicioTest
         var modelo = await f.Servicio.BuscarAsync(7, 10);
         if (editar) f.Viaje.Paradas[0].Ubicacion = "Dirección cambiada";
         else f.Reloj.Ahora = f.Reloj.Ahora.AddMinutes(11);
-        await Assert.ThrowsAsync<ArgumentException>(() => f.Servicio.ConfirmarAsync(7, 10, Formulario(modelo!.Sesion!)));
+        await Assert.ThrowsAsync<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ConfirmarAsync(7, 10, Formulario(modelo!.Sesion!)));
         f.Rutas.VerifyNoOtherCalls();
     }
 

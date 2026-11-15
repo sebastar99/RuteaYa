@@ -17,7 +17,7 @@ public class SeleccionDireccionServicioTest
         Assert.False(seleccion.Confirmada);
         Assert.Null(seleccion.Acceso);
         Assert.Null(seleccion.Navegacion);
-        Assert.Throws<ArgumentException>(() => f.Servicio.ObtenerConfirmada(7, "origen", seleccion.Token));
+        Assert.Throws<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ObtenerConfirmada(7, "origen", seleccion.Token));
         var confirmada = f.Servicio.Confirmar(7, "origen", seleccion.Token, 1);
         Assert.True(confirmada.Confirmada);
         Assert.Equal("here:af:prueba", confirmada.Ubicacion.IdHere);
@@ -55,14 +55,14 @@ public class SeleccionDireccionServicioTest
     {
         using var f = new Fixture();
         var s = Assert.Single(await f.Servicio.SugerirAsync(7, "origen", "calle"));
-        await Assert.ThrowsAsync<ArgumentException>(() => f.Servicio.ResolverAsync(8, "origen", s.Token));
-        await Assert.ThrowsAsync<ArgumentException>(() => f.Servicio.ResolverAsync(7, "destino", s.Token));
-        Assert.Throws<ArgumentException>(() => f.Servicio.Confirmar(7, "origen", s.Token, -1));
+        await Assert.ThrowsAsync<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ResolverAsync(8, "origen", s.Token));
+        await Assert.ThrowsAsync<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ResolverAsync(7, "destino", s.Token));
+        Assert.Throws<SeleccionTemporalNoDisponibleException>(() => f.Servicio.Confirmar(7, "origen", s.Token, -1));
         var r = await f.Servicio.ResolverAsync(7, "origen", s.Token);
         var c = f.Servicio.Confirmar(7, "origen", r.Token, -1);
-        Assert.Throws<ArgumentException>(() => f.Servicio.ObtenerConfirmada(8, "origen", c.Token));
-        Assert.Throws<ArgumentException>(() => f.Servicio.ObtenerConfirmada(7, "retiro", c.Token));
-        await Assert.ThrowsAsync<ArgumentException>(() => f.Servicio.ResolverAsync(7, "origen", "here:af:id-enviado-libremente"));
+        Assert.Throws<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ObtenerConfirmada(8, "origen", c.Token));
+        Assert.Throws<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ObtenerConfirmada(7, "retiro", c.Token));
+        await Assert.ThrowsAsync<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ResolverAsync(7, "origen", "here:af:id-enviado-libremente"));
     }
 
     [Fact]
@@ -74,9 +74,9 @@ public class SeleccionDireccionServicioTest
         var r = await f.Servicio.ResolverAsync(7, "origen", s.Token);
         var c = f.Servicio.Confirmar(7, "origen", r.Token, -1);
         f.Reloj.Ahora = f.Reloj.Ahora.AddMinutes(2);
-        Assert.Throws<ArgumentException>(() => f.Servicio.ObtenerConfirmada(7, "origen", c.Token));
-        Assert.Throws<ArgumentException>(() => f.Servicio.Confirmar(7, "origen", r.Token, -1));
-        await Assert.ThrowsAsync<ArgumentException>(() => f.Servicio.ResolverAsync(7, "origen", s.Token));
+        Assert.Throws<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ObtenerConfirmada(7, "origen", c.Token));
+        Assert.Throws<SeleccionTemporalNoDisponibleException>(() => f.Servicio.Confirmar(7, "origen", r.Token, -1));
+        await Assert.ThrowsAsync<SeleccionTemporalNoDisponibleException>(() => f.Servicio.ResolverAsync(7, "origen", s.Token));
     }
 
     [Fact]

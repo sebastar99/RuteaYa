@@ -6,7 +6,8 @@ using RuteaYa.Logica.DTOs;
 namespace RuteaYa.Web.Services;
 
 /// <summary>HERE Geocoding & Search v7: autocomplete y lookup, nunca autosuggest ni coordenadas locales.</summary>
-public class BusquedaDireccionesHereServicio(HttpClient cliente, IOptions<HereRoutingOpciones> opciones)
+public class BusquedaDireccionesHereServicio(HttpClient cliente, IOptions<HereRoutingOpciones> opciones,
+    ILogger<BusquedaDireccionesHereServicio>? logger = null)
     : IBusquedaDireccionesServicio
 {
     public async Task<IReadOnlyList<SugerenciaDireccionDto>> SugerirAsync(string texto, CancellationToken cancellationToken = default)
@@ -48,7 +49,7 @@ public class BusquedaDireccionesHereServicio(HttpClient cliente, IOptions<HereRo
     private async Task<T> ConsultarAsync<T>(string endpoint, string query, Func<JsonElement, T> convertir, CancellationToken ct)
     {
         var key = opciones.Value.ApiKey;
-        if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("No se configuró HERE para buscar direcciones.");
+        if (string.IsNullOrWhiteSpace(key)) throw new HereNoConfiguradoException();
         try
         {
             // Host fijo para cada endpoint. No registrar URL, cuerpo ni excepción interna.
@@ -61,12 +62,19 @@ public class BusquedaDireccionesHereServicio(HttpClient cliente, IOptions<HereRo
             return convertir(json.RootElement);
         }
         catch (HttpRequestException e)
-        { throw new HttpRequestException("No se pudo consultar HERE para buscar direcciones.", null, e.StatusCode); }
+        {
+            logger?.LogWarning("HERE {Servicio} falló. HTTP {Estado}. Sin URL ni cuerpo remoto.", endpoint, (int?)e.StatusCode);
+            throw new HttpRequestException("No se pudo consultar HERE para buscar direcciones.", null, e.StatusCode);
+        }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        { throw new OperationCanceledException("Búsqueda de dirección cancelada.", ct); }
-        catch (OperationCanceledException) { throw new TimeoutException("Se agotó el tiempo de búsqueda de direcciones."); }
+        { throw; } // Cancelación normal: no fabricar una segunda excepción. La frontera MVC la maneja.
+        catch (OperationCanceledException)
+        {
+            logger?.LogWarning("HERE {Servicio}: timeout sin cancelación del navegador.", endpoint);
+            throw new TimeoutException("Se agotó el tiempo de búsqueda de direcciones.");
+        }
         catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or OverflowException)
-        { throw Invalida(); }
+        { logger?.LogWarning("HERE {Servicio}: respuesta inválida. Tipo {Tipo}.", endpoint, e.GetType().Name); throw Invalida(); }
     }
 
     private static bool IdValido(string? id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 512 &&

@@ -29,7 +29,7 @@ public class PrevisualizacionRecorridoServicio(
         if (sesion.Huella != Huella(viaje))
         {
             cache.Remove(Clave(token));
-            throw new ArgumentException("El viaje cambió. Buscá nuevamente sus ubicaciones.");
+            throw new SeleccionTemporalNoDisponibleException("El viaje cambió. Renová la previsualización antes de continuar.");
         }
         return JsonSerializer.Deserialize<PrevisualizacionRecorridoViewModel>(sesion.Modelo)!;
     }
@@ -133,7 +133,7 @@ public class PrevisualizacionRecorridoServicio(
         if (string.IsNullOrEmpty(token) || token.Length != 64 ||
             !cache.TryGetValue<Sesion>(Clave(token), out var sesion) || sesion == null ||
             sesion.UsuarioId != usuarioId || sesion.ViajeId != viajeId || sesion.Vence <= _reloj.GetUtcNow())
-            throw new ArgumentException("La previsualización venció o no está disponible. Buscá nuevamente las ubicaciones.");
+            throw new SeleccionTemporalNoDisponibleException("La previsualización venció o no está disponible. Renová la previsualización.");
         return sesion;
     }
 
