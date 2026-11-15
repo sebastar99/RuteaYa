@@ -9,6 +9,7 @@ using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
 using RuteaYa.Test.Helpers;
 using RuteaYa.Web.Controllers;
+using RuteaYa.Web.Models;
 
 namespace RuteaYa.Test;
 
@@ -104,26 +105,26 @@ public class EnviosControllerTest
     }
 
     [Fact]
-    public void Crear_Get_DevuelveVistaFormulario()
+    public async Task Crear_Get_DevuelveVistaFormulario()
     {
         using var contexto = new EnviosContextoPrueba();
-        var vista = Assert.IsType<ViewResult>(Controlador(contexto).Crear());
+        var vista = Assert.IsType<ViewResult>(await Controlador(contexto).Crear());
         Assert.Equal("~/Views/Panel/NuevoEnvio.cshtml", vista.ViewName);
     }
 
     [Fact]
-    public async Task Crear_PostValido_RedirigeAIndexConMensajeExito()
+    public async Task Crear_PostConTextoPeroSinFormularioVerificado_NoPublicaNiGeocodifica()
     {
         using var contexto = new EnviosContextoPrueba();
         var geo = new Mock<IGeocodificacionServicio>(MockBehavior.Strict);
         geo.Setup(g => g.GeocodificarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { new ResultadoGeocodificacionDto { Posicion = new() { Latitud = -34, Longitud = -58 } } });
         var controlador = Controlador(contexto, geo: geo.Object);
-        var resultado = Assert.IsType<RedirectToActionResult>(await controlador.Crear(DtoValido()));
-        Assert.Equal("Index", resultado.ActionName);
-        Assert.True(controlador.TempData.ContainsKey("Exito"));
-        Assert.Equal(1, contexto.Guardados);
-        Assert.Equal(7, contexto.Db.Envios.Local.Single().UsuarioId);
+        Assert.IsType<ViewResult>(await controlador.Crear(DtoValido()));
+        Assert.False(controlador.ModelState.IsValid);
+        Assert.False(controlador.TempData.ContainsKey("Exito"));
+        Assert.Equal(0, contexto.Guardados);
+        geo.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -132,14 +133,14 @@ public class EnviosControllerTest
         using var contexto = new EnviosContextoPrueba();
         var controlador = Controlador(contexto);
         controlador.ModelState.AddModelError("Descripcion", "Campo requerido");
-        var dto = new CrearEnvioDto();
+        var dto = new CrearEnvioViewModel();
         Assert.Same(dto, Assert.IsType<ViewResult>(await controlador.Crear(dto)).Model);
         Assert.Empty(contexto.Consultas.Consultas);
         Assert.Equal(0, contexto.Guardados);
     }
 
     [Fact]
-    public async Task Crear_FallaProveedor_NoExponeErrorInternoNiGuarda()
+    public async Task Crear_SinFormulario_NoConsultaProveedorNiExponeDatos()
     {
         using var contexto = new EnviosContextoPrueba();
         var geo = new Mock<IGeocodificacionServicio>(MockBehavior.Strict);
@@ -147,10 +148,11 @@ public class EnviosControllerTest
             .ThrowsAsync(new HttpRequestException("URL y credencial ficticia que no deben verse"));
         var controlador = Controlador(contexto, geo: geo.Object);
         Assert.IsType<ViewResult>(await controlador.Crear(DtoValido()));
-        Assert.Equal(503, controlador.Response.StatusCode);
+        Assert.Equal(200, controlador.Response.StatusCode);
         Assert.DoesNotContain("credencial", controlador.ModelState[string.Empty]!.Errors.Single().ErrorMessage);
         Assert.Equal(0, contexto.Guardados);
         Assert.Empty(contexto.Db.ChangeTracker.Entries());
+        geo.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -190,7 +192,7 @@ public class EnviosControllerTest
         Assert.Equal(0, contexto.Guardados);
     }
 
-    private static CrearEnvioDto DtoValido() => new() { OrigenDir = "Origen", DestinoDir = "Destino",
+    private static CrearEnvioViewModel DtoValido() => new() { OrigenDir = "Origen", DestinoDir = "Destino",
         Descripcion = "Test", PesoKg = 1, Monto = 100, FechaLimite = DateTime.Today.AddDays(1) };
 
     private sealed class ErrorBaseDatosSimulado() : DbException("error interno simulado");

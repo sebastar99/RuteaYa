@@ -6,8 +6,8 @@ using RuteaYa.Web.Services;
 
 namespace RuteaYa.Web.Controllers;
 
-[Authorize, Route("DireccionesViaje/{formulario}"), ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public class DireccionesViajeController(FormulariosViajeServicio formularios, ILogger<DireccionesViajeController> logger) : Controller
+[Authorize, Route("DireccionesViaje/{formulario}", Order = 0), Route("DireccionesEnvio/{formulario}", Order = 1), ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+public class DireccionesViajeController(FormulariosDireccionesServicio formularios, ILogger<DireccionesViajeController> logger) : Controller
 {
     private int Usuario => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out var id) ? id : 0;
     [HttpGet("Sugerencias")]
@@ -26,7 +26,7 @@ public class DireccionesViajeController(FormulariosViajeServicio formularios, IL
         catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested) { return StatusCode(499); }
         catch (Exception e) when (e is ArgumentException or ComprobanteUbicacionException) { return StatusCode(409, new { mensaje = e.Message }); }
         catch (Exception e) {
-            logger.LogWarning("Direcciones de Viaje: tipo {Tipo}, HTTP {Estado}, referencia {Referencia}. Sin URL ni datos remotos.", e.GetType().Name, (int?)(e as HttpRequestException)?.StatusCode, HttpContext.TraceIdentifier);
+            logger.LogWarning("Direcciones: tipo {Tipo}, HTTP {Estado}, referencia {Referencia}. Sin URL ni datos remotos.", e.GetType().Name, (int?)(e as HttpRequestException)?.StatusCode, HttpContext.TraceIdentifier);
             var mensaje = e switch {
                 HttpRequestException http => MensajesHerePublicos.Http((int?)http.StatusCode),
                 TimeoutException => "HERE no respondió a tiempo. Reintentá la búsqueda.",

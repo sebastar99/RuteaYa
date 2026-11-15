@@ -7,8 +7,8 @@ using RuteaYa.Web.Models;
 
 namespace RuteaYa.Web.Services;
 
-/// <summary>Estado servidor de los campos; el guardado de Viajes continúa pasando por la API.</summary>
-public sealed class FormulariosViajeServicio(IViajesApiServicio api, IUbicacionesConfirmadasServicio persistencia,
+/// <summary>Estado servidor común. Viajes guarda por su API; Envíos conserva MVC → Lógica → EF.</summary>
+public sealed class FormulariosDireccionesServicio(IViajesApiServicio api, IUbicacionesConfirmadasServicio persistencia,
     SeleccionDireccionServicio selecciones, IMemoryCache cache, TimeProvider? reloj = null)
 {
     private readonly TimeProvider _reloj = reloj ?? TimeProvider.System;
@@ -20,14 +20,15 @@ public sealed class FormulariosViajeServicio(IViajesApiServicio api, IUbicacione
     }
     private sealed class Formulario(int usuario, int? viaje, DateTimeOffset vence)
     {
+        public TipoRecursoUbicacion Tipo = TipoRecursoUbicacion.Viaje;
         public int Usuario = usuario; public int? Viaje = viaje; public DateTimeOffset Vence = vence;
         public Dictionary<string, Campo> Campos = new();
     }
     private Formulario Leer(int usuario, string token)
     {
-        if (usuario <= 0 || token?.Length != 64 || !cache.TryGetValue<Formulario>("form-viaje:" + token, out var f) ||
+        if (usuario <= 0 || token?.Length != 64 || !cache.TryGetValue<Formulario>("form-direcciones:" + token, out var f) ||
             f == null || f.Usuario != usuario || f.Vence <= _reloj.GetUtcNow())
-            throw new SeleccionTemporalNoDisponibleException("El formulario venció o no está disponible. Volvé a abrir Crear/Editar viaje.");
+            throw new SeleccionTemporalNoDisponibleException("El formulario venció o no está disponible. Volvé a abrir la pantalla de creación o edición.");
         return f;
     }
     private async Task<ContextoUbicacionDto> Contexto(Formulario f, CampoUbicacion tipo, string clave, Guid? formulario, CancellationToken ct, int? paradaId = null)
@@ -50,12 +51,13 @@ public sealed class FormulariosViajeServicio(IViajesApiServicio api, IUbicacione
             f.Campos.Add(p.ClaveCampo, new(await Contexto(f, CampoUbicacion.Parada, p.ClaveCampo, origen.FormularioId, ct, p.Id), p.Ubicacion, p.Confirmada, p.Id));
         }
         modelo.FormularioDirecciones = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        cache.Set("form-viaje:" + modelo.FormularioDirecciones, f, TimeSpan.FromMinutes(10));
+        cache.Set("form-direcciones:" + modelo.FormularioDirecciones, f, TimeSpan.FromMinutes(10));
         Rellenar(usuario, modelo);
     }
     public async Task<ParadaViewModel> AgregarParadaAsync(int usuario, string token, CancellationToken ct)
     {
         var f = Leer(usuario, token);
+        if (f.Tipo != TipoRecursoUbicacion.Viaje) throw new ArgumentException("Este formulario no admite paradas.");
         if (f.Campos.Count >= 52) throw new ArgumentException("El formulario admite hasta 50 paradas. Si agotaste los campos, volvé a abrirlo.");
         var clave = Guid.NewGuid().ToString("N");
         var contexto = await Contexto(f, CampoUbicacion.Parada, clave, f.Campos["origen"].Contexto.FormularioId, ct);
@@ -85,6 +87,7 @@ public sealed class FormulariosViajeServicio(IViajesApiServicio api, IUbicacione
     public void PrepararGuardado(int usuario, ViajeViewModel modelo)
     {
         var f = Leer(usuario, modelo.FormularioDirecciones!);
+        if (f.Tipo != TipoRecursoUbicacion.Viaje) throw new ArgumentException("El formulario no corresponde a Viajes.");
         if (f.Viaje != (modelo.Id > 0 ? modelo.Id : null)) throw new ArgumentException("El formulario no corresponde al viaje.");
         CampoViajeUbicacionDto Entrada(string clave, string texto, string? token, int paradaId = 0)
         {
@@ -104,6 +107,7 @@ public sealed class FormulariosViajeServicio(IViajesApiServicio api, IUbicacione
     public void Rellenar(int usuario, ViajeViewModel modelo)
     {
         var f = Leer(usuario, modelo.FormularioDirecciones!);
+        if (f.Tipo != TipoRecursoUbicacion.Viaje) throw new ArgumentException("El formulario no corresponde a Viajes.");
         modelo.OrigenCampo = CampoVisual(f, modelo.FormularioDirecciones!, "origen", "Origen", "OrigenComprobante", "Origen", modelo.OrigenComprobante);
         modelo.DestinoCampo = CampoVisual(f, modelo.FormularioDirecciones!, "destino", "Destino", "DestinoComprobante", "Destino", modelo.DestinoComprobante);
         foreach (var p in modelo.Paradas)
@@ -112,13 +116,47 @@ public sealed class FormulariosViajeServicio(IViajesApiServicio api, IUbicacione
     private static CampoDireccionViewModel CampoVisual(Formulario f, string token, string clave, string texto, string comprobante, string etiqueta, string? publicado)
     {
         if (!f.Campos.TryGetValue(clave, out var c)) throw new ArgumentException("El campo no pertenece al formulario.");
-        var prefijo = "/DireccionesViaje/" + token + "/";
-        return new() { IdHtml = "viaje-" + clave, Etiqueta = etiqueta, NombreTexto = texto, NombreToken = comprobante,
+        var prefijo = (f.Tipo == TipoRecursoUbicacion.Viaje ? "/DireccionesViaje/" : "/DireccionesEnvio/") + token + "/";
+        return new() { IdHtml = (f.Tipo == TipoRecursoUbicacion.Viaje ? "viaje-" : "envio-") + clave, Etiqueta = etiqueta, NombreTexto = texto, NombreToken = comprobante,
             TextoInicial = publicado != null && publicado == c.Token ? c.Canonica! : c.Original,
             TokenInicial = publicado != null && publicado == c.Token ? c.Token : null,
             ConservarActual = f.Viaje.HasValue && c.Token == null && (clave is "origen" or "destino" || c.ParadaId > 0),
             ConfirmadaPersistida = c.Confirmada,
             UrlSugerencias = prefijo + "Sugerencias?campo=" + clave, UrlResolver = prefijo + "Resolver?campo=" + clave,
             UrlConfirmar = prefijo + "Confirmar?campo=" + clave };
+    }
+
+    public async Task PrepararEnvioAsync(int usuario, CrearEnvioViewModel modelo, CancellationToken ct = default)
+    {
+        var f = new Formulario(usuario, null, _reloj.GetUtcNow().AddMinutes(10)) { Tipo = TipoRecursoUbicacion.Envio };
+        var retiro = await persistencia.CrearContextoAsync(usuario, TipoRecursoUbicacion.Envio, null, CampoUbicacion.RetiroEnvio, "RetiroEnvio", ct: ct);
+        var entrega = await persistencia.CrearContextoAsync(usuario, TipoRecursoUbicacion.Envio, null, CampoUbicacion.EntregaEnvio, "EntregaEnvio", retiro.FormularioId, ct);
+        f.Campos.Add("retiro", new(retiro, "", false)); f.Campos.Add("entrega", new(entrega, "", false));
+        modelo.FormularioDirecciones = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        cache.Set("form-direcciones:" + modelo.FormularioDirecciones, f, TimeSpan.FromMinutes(10));
+        RellenarEnvio(usuario, modelo);
+    }
+    public void PrepararGuardadoEnvio(int usuario, CrearEnvioViewModel modelo)
+    {
+        modelo.Ubicaciones = null; // jamás utilizar el contexto o los flags ligados libremente por MVC.
+        var f = Leer(usuario, modelo.FormularioDirecciones!);
+        if (f.Tipo != TipoRecursoUbicacion.Envio) throw new ArgumentException("El formulario no corresponde a Crear Envío.");
+        Campo Verificar(string clave, string texto, string? token) {
+            var campo = ObtenerCampo(usuario, modelo.FormularioDirecciones!, clave);
+            if (string.IsNullOrEmpty(token) || campo.Token != token || campo.Canonica != texto || campo.Vence <= _reloj.GetUtcNow())
+                throw new ArgumentException("Elegí y confirmá las direcciones de retiro y entrega.");
+            return campo;
+        }
+        var retiro = Verificar("retiro", modelo.OrigenDir, modelo.RetiroComprobante);
+        var entrega = Verificar("entrega", modelo.DestinoDir, modelo.EntregaComprobante);
+        modelo.Ubicaciones = new() { Retiro = retiro.Contexto, Entrega = entrega.Contexto,
+            ComprobanteRetiro = modelo.RetiroComprobante!, ComprobanteEntrega = modelo.EntregaComprobante! };
+    }
+    public void RellenarEnvio(int usuario, CrearEnvioViewModel modelo)
+    {
+        var f = Leer(usuario, modelo.FormularioDirecciones!);
+        if (f.Tipo != TipoRecursoUbicacion.Envio) throw new ArgumentException("El formulario no corresponde a Crear Envío.");
+        modelo.RetiroCampo = CampoVisual(f, modelo.FormularioDirecciones!, "retiro", "OrigenDir", "RetiroComprobante", "Dirección de retiro", modelo.RetiroComprobante);
+        modelo.EntregaCampo = CampoVisual(f, modelo.FormularioDirecciones!, "entrega", "DestinoDir", "EntregaComprobante", "Dirección de entrega", modelo.EntregaComprobante);
     }
 }

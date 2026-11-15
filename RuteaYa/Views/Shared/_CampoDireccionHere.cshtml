@@ -4,7 +4,7 @@
      data-sugerencias-url="@Model.UrlSugerencias" data-resolver-url="@Model.UrlResolver" data-confirmar-url="@Model.UrlConfirmar">
     <label for="@Model.IdHtml">@Model.Etiqueta</label>
     <div class="direccion-buscador">
-    <input id="@Model.IdHtml" name="@Model.NombreTexto" type="search" autocomplete="off" minlength="3" maxlength="200"
+    <input id="@Model.IdHtml" name="@Model.NombreTexto" type="search" autocomplete="off" minlength="3" maxlength="200" required
            value="@Model.TextoInicial" role="combobox" aria-autocomplete="list" aria-expanded="false"
            aria-controls="@(Model.IdHtml)-sugerencias" aria-describedby="@(Model.IdHtml)-estado" data-texto-direccion />
     <ul id="@(Model.IdHtml)-sugerencias" role="listbox" aria-label="Sugerencias de dirección" data-sugerencias></ul>

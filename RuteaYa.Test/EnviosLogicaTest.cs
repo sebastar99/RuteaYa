@@ -68,7 +68,7 @@ public class EnviosLogicaTest
     }
 
     [Fact]
-    public async Task CrearAsync_OrigenYDestinoIguales_LanzaExcepcionSinConsultar()
+    public async Task CrearAsync_SinComprobantes_NoPermiteCrearNiConsultar()
     {
         var consultas = new ConsultasEfSimuladas();
         await using var db = consultas.CrearContexto();
@@ -83,7 +83,7 @@ public class EnviosLogicaTest
             FechaLimite = DateTime.Today
         };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new EnviosLogica(db, null!).CrearAsync(7, dto));
+        await Assert.ThrowsAsync<ComprobanteUbicacionException>(() => new EnviosLogica(db, null!).CrearAsync(7, dto));
 
         Assert.Empty(consultas.Consultas);
     }
@@ -91,7 +91,7 @@ public class EnviosLogicaTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task CrearAsync_SinResultadosOErrorEnDestino_NoInventaCoordenadasNiGuarda(bool errorEnDestino)
+    public async Task CrearAsync_SinComprobantes_NoGeocodificaAunqueProveedorDevuelvaDatosOErrores(bool errorEnDestino)
     {
         using var contexto = new EnviosContextoPrueba();
         var geo = new Mock<IGeocodificacionServicio>(MockBehavior.Strict);
@@ -106,8 +106,8 @@ public class EnviosLogicaTest
         var servicio = new EnviosLogica(contexto.Db, geo.Object);
         var dto = new CrearEnvioDto { OrigenDir = "Origen", DestinoDir = "Destino", Descripcion = "Test",
             PesoKg = 1, Monto = 100, FechaLimite = DateTime.Today.AddDays(1) };
-        if (errorEnDestino) await Assert.ThrowsAsync<HttpRequestException>(() => servicio.CrearAsync(7, dto));
-        else await Assert.ThrowsAsync<ArgumentException>(() => servicio.CrearAsync(7, dto));
+        await Assert.ThrowsAsync<ComprobanteUbicacionException>(() => servicio.CrearAsync(7, dto));
+        geo.VerifyNoOtherCalls();
         Assert.Equal(0, contexto.Guardados);
         Assert.Empty(contexto.Db.ChangeTracker.Entries());
         Assert.Empty(contexto.Consultas.Consultas);

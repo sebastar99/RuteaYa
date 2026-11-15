@@ -11,12 +11,13 @@ namespace RuteaYa.Logica
     public class EnviosLogica
     {
         private readonly RuteaYaDbContext _db;
-        private readonly IGeocodificacionServicio _geocodificacion;
+        private readonly IUbicacionesConfirmadasServicio _ubicaciones;
 
-        public EnviosLogica(RuteaYaDbContext db, IGeocodificacionServicio geocodificacion)
+        public EnviosLogica(RuteaYaDbContext db, IGeocodificacionServicio geocodificacion, IUbicacionesConfirmadasServicio? ubicaciones = null)
         {
             _db = db;
-            _geocodificacion = geocodificacion;
+            // El parámetro anterior se conserva para los consumidores existentes. Crear ya no geocodifica.
+            _ubicaciones = ubicaciones ?? new UbicacionesConfirmadasServicio(db);
         }
 
         //lista de envios de un usuario(filtrado por estados)
@@ -61,20 +62,23 @@ namespace RuteaYa.Logica
             if (dto == null)
                 throw new ArgumentException("Los datos del envío son obligatorios.");
 
-            Validar(dto);
-
-            var origen = await GeocodificarAsync(dto.OrigenDir, "el origen");
-            var destino = await GeocodificarAsync(dto.DestinoDir, "el destino");
+            var datos = dto.Ubicaciones;
+            if (datos?.Retiro == null || datos.Entrega == null || datos.Retiro.TipoRecurso != TipoRecursoUbicacion.Envio ||
+                datos.Entrega.TipoRecurso != TipoRecursoUbicacion.Envio || datos.Retiro.RecursoId.HasValue || datos.Entrega.RecursoId.HasValue ||
+                datos.Retiro.Campo != CampoUbicacion.RetiroEnvio || datos.Entrega.Campo != CampoUbicacion.EntregaEnvio ||
+                datos.Retiro.FormularioId != datos.Entrega.FormularioId || string.IsNullOrEmpty(datos.ComprobanteRetiro) || string.IsNullOrEmpty(datos.ComprobanteEntrega))
+                throw new ComprobanteUbicacionException("ubicaciones_requeridas", "Elegí y confirmá las direcciones de retiro y entrega antes de publicar.");
+            var origen = await _ubicaciones.ObtenerDireccionAsync(usuarioId, datos.Retiro, datos.ComprobanteRetiro);
+            var destino = await _ubicaciones.ObtenerDireccionAsync(usuarioId, datos.Entrega, datos.ComprobanteEntrega);
+            var canonico = new CrearEnvioDto { OrigenDir = origen, DestinoDir = destino, FechaLimite = dto.FechaLimite,
+                PesoKg = dto.PesoKg, Tamano = dto.Tamano, Descripcion = dto.Descripcion, Monto = dto.Monto };
+            Validar(canonico);
 
             var envio = new Envio
             {
                 UsuarioId = usuarioId,
-                OrigenDir = dto.OrigenDir.Trim(),
-                OrigenLat = origen.Latitud,
-                OrigenLng = origen.Longitud,
-                DestinoDir = dto.DestinoDir.Trim(),
-                DestinoLat = destino.Latitud,
-                DestinoLng = destino.Longitud,
+                OrigenDir = origen,
+                DestinoDir = destino,
                 FechaLimite = dto.FechaLimite,
                 PesoKg = dto.PesoKg,
                 Tamano = dto.Tamano,
@@ -85,7 +89,9 @@ namespace RuteaYa.Logica
             };
 
             _db.Envios.Add(envio);
-            await _db.SaveChangesAsync();
+            await _ubicaciones.GuardarAsync(usuarioId, new[] {
+                new AsignacionUbicacionDto(datos.Retiro, datos.ComprobanteRetiro, Envio: envio),
+                new AsignacionUbicacionDto(datos.Entrega, datos.ComprobanteEntrega, Envio: envio) });
 
             return Convertir(envio);
         }
@@ -260,26 +266,6 @@ namespace RuteaYa.Logica
             Monto = e.Monto,
             Estado = e.Estado
         };
-
-        // Conserva la selección existente del primer candidato. No equivale a confirmación.
-        // Ante un error o cero candidatos no se fabrica una ubicación ni se guarda el envío.
-        private async Task<PuntoRutaDto> GeocodificarAsync(string direccion, string cual)
-        {
-            if (string.IsNullOrWhiteSpace(direccion))
-            {
-                throw new ArgumentException($"La dirección de {cual} no puede estar vacía.");
-            }
-
-            if (_geocodificacion == null)
-                throw new InvalidOperationException("No se configuró el servicio de geocodificación.");
-            var candidatos = await _geocodificacion.GeocodificarAsync(direccion.Trim());
-            var posicion = candidatos?.FirstOrDefault()?.Posicion;
-            if (posicion == null)
-                throw new ArgumentException($"No se encontró una ubicación para {cual}. Revisá la dirección.");
-            if (posicion.Latitud is < -90 or > 90 || posicion.Longitud is < -180 or > 180)
-                throw new InvalidOperationException("El servicio devolvió una ubicación inválida.");
-            return posicion;
-        }
 
         private static void Validar(CrearEnvioDto dto)
         {

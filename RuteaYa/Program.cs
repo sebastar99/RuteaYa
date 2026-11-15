@@ -14,7 +14,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
 builder.Services.AddScoped<PrevisualizacionRecorridoServicio>();
 builder.Services.AddScoped<SeleccionDireccionServicio>();
-builder.Services.AddScoped<FormulariosViajeServicio>();
+builder.Services.AddScoped<FormulariosDireccionesServicio>();
 builder.Services.AddScoped<IFuenteSeleccionUbicacionVerificada, FuenteSeleccionUbicacionVerificada>();
 builder.Services.AddScoped<IUbicacionesConfirmadasServicio, UbicacionesConfirmadasServicio>();
 builder.Services.AddHttpClient<IBusquedaDireccionesServicio, BusquedaDireccionesHereServicio>(client =>

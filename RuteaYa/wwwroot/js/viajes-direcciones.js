@@ -1,4 +1,5 @@
-document.querySelectorAll('[data-viaje-direcciones]').forEach(form => {
+// Coordinación de envío de formularios; el componente HERE y los endpoints verifican la selección.
+document.querySelectorAll('[data-viaje-direcciones], [data-envio-direcciones]').forEach(form => {
     const status = form.querySelector('[data-estado-viaje]'), list = form.querySelector('[data-paradas-viaje]');
     let saving = false;
     const ready = () => {
@@ -8,7 +9,7 @@ document.querySelectorAll('[data-viaje-direcciones]').forEach(form => {
     };
     form.addEventListener('submit', event => {
         if (saving || !ready()) { event.preventDefault(); status.textContent = 'Elegí y confirmá todas las direcciones nuevas o modificadas.'; return; }
-        saving = true; status.textContent = 'Guardando viaje y ubicaciones verificadas…';
+        saving = true; status.textContent = form.matches('[data-envio-direcciones]') ? 'Publicando envío y ubicaciones verificadas…' : 'Guardando viaje y ubicaciones verificadas…';
         form.querySelectorAll('button[type=submit]').forEach(b => b.disabled = true);
     });
     form.addEventListener('click', async event => {

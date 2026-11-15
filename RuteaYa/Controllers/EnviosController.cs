@@ -7,6 +7,8 @@ using RuteaYa.Logica.DTOs;
 using System;
 using System.Data.Common;
 using System.Threading.Tasks;
+using RuteaYa.Web.Models;
+using RuteaYa.Web.Services;
 
 namespace RuteaYa.Web.Controllers;
 
@@ -18,11 +20,13 @@ public class EnviosController : Controller
     private const string VistaFormulario = "~/Views/Panel/NuevoEnvio.cshtml";
     private const string VistaDetalle = "~/Views/Panel/DetalleEnvio.cshtml";
     private readonly EnviosLogica _enviosLogica;
+    private readonly FormulariosDireccionesServicio? _formularios;
 
-    public EnviosController(EnviosLogica enviosLogica)
+    public EnviosController(EnviosLogica enviosLogica, FormulariosDireccionesServicio? formularios = null)
     {
         ArgumentNullException.ThrowIfNull(enviosLogica);
         _enviosLogica = enviosLogica;
+        _formularios = formularios;
     }
 
     // GET: /Envios (Pantalla 7 - Mis Envíos)
@@ -48,39 +52,59 @@ public class EnviosController : Controller
 
     // GET: /Envios/Crear (Muestra la Pantalla 6)
     [HttpGet("Crear")]
-    public IActionResult Crear()
+    public async Task<IActionResult> Crear()
     {
-        return View(VistaFormulario);
+        var usuarioId = ObtenerUsuarioIdActual(); if (usuarioId <= 0) return Forbid();
+        var modelo = new CrearEnvioViewModel();
+        try {
+            if (_formularios == null) throw new InvalidOperationException("El formulario de direcciones no está configurado.");
+            await _formularios.PrepararEnvioAsync(usuarioId, modelo, HttpContext.RequestAborted);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { ModelState.AddModelError("", e.Message); }
+        return View(VistaFormulario, modelo);
     }
 
     // POST: /Envios/Crear (Procesa y guarda el nuevo envío)
     [HttpPost("Crear")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Crear(CrearEnvioDto dto)
+    public async Task<IActionResult> Crear(CrearEnvioViewModel dto)
     {
-        if (!ModelState.IsValid)
-            return View(VistaFormulario, dto);
+        var usuarioId = ObtenerUsuarioIdActual(); if (usuarioId <= 0) return Forbid();
+        dto.Ubicaciones = null; // El endpoint anterior tampoco puede recibir contextos/FK/coordenadas libres.
+        try {
+            if (_formularios == null) throw new InvalidOperationException("Volvé a abrir el formulario y confirmá las dos direcciones.");
+            _formularios.PrepararGuardadoEnvio(usuarioId, dto);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { ModelState.AddModelError("", e.Message); }
+        if (!ModelState.IsValid) { Rellenar(usuarioId, dto); return View(VistaFormulario, dto); }
 
         try
         {
-            var usuarioId = ObtenerUsuarioIdActual();
-            if (usuarioId <= 0) return Forbid();
-
             await _enviosLogica.CrearAsync(usuarioId, dto);
             TempData["Exito"] = "El envío fue publicado correctamente.";
             return RedirectToAction(nameof(Index));
         }
+        catch (ComprobanteUbicacionException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+        }
         catch (ArgumentException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            return View(VistaFormulario, dto);
         }
         catch (Exception)
         {
             Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             ModelState.AddModelError(string.Empty, "No se pudo publicar el envío. Revisá la disponibilidad del servicio e intentá nuevamente.");
-            return View(VistaFormulario, dto);
         }
+        Rellenar(usuarioId, dto);
+        return View(VistaFormulario, dto);
+    }
+
+    private void Rellenar(int usuarioId, CrearEnvioViewModel dto)
+    {
+        try { _formularios?.RellenarEnvio(usuarioId, dto); }
+        catch (ArgumentException ex) { ModelState.AddModelError("", ex.Message); }
     }
 
     // GET: /Envios/Detalle/5 (Muestra el detalle del envío)

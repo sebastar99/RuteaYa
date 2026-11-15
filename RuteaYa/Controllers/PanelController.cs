@@ -14,9 +14,9 @@ namespace RuteaYa.Web.Controllers
     {
         private readonly RuteaYaDbContext _dbContext;
         private readonly IViajesApiServicio _viajesApiServicio;
-        private readonly FormulariosViajeServicio? _formulariosViaje;
+        private readonly FormulariosDireccionesServicio? _formulariosViaje;
 
-        public PanelController(RuteaYaDbContext dbContext, IViajesApiServicio viajesApiServicio, FormulariosViajeServicio? formulariosViaje = null)
+        public PanelController(RuteaYaDbContext dbContext, IViajesApiServicio viajesApiServicio, FormulariosDireccionesServicio? formulariosViaje = null)
         {
             _dbContext = dbContext;
             _viajesApiServicio = viajesApiServicio;

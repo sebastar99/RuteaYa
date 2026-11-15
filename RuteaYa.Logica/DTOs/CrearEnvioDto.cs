@@ -8,6 +8,7 @@ namespace RuteaYa.Logica.DTOs
 {
     public class CrearEnvioDto
     {
+        public UbicacionesEnvioDto? Ubicaciones { get; set; }
         [Required(ErrorMessage = "El  origen es obligatorio.")]
         public string OrigenDir { get; set; } = string.Empty;
 

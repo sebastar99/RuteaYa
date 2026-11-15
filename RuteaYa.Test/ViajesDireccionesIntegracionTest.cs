@@ -249,13 +249,15 @@ public class ViajesDireccionesIntegracionTest
         protected override void OnModelCreating(ModelBuilder b) { base.OnModelCreating(b); b.Entity<Envio>().Property(e => e.RowVersion).ValueGeneratedNever();
             foreach (var p in new[] { "PosicionLatitud", "PosicionLongitud", "NavegacionLatitud", "NavegacionLongitud" }) b.Entity<UbicacionConfirmada>().Property<decimal>(p).HasConversion<double>(); }
     }
-    private sealed class Host : IAsyncDisposable
+    internal sealed class Host : IAsyncDisposable
     {
         private SqliteConnection _connection = new("Data Source=:memory:"); private WebApplication _api = null!, _mvc = null!;
         public HttpClient Mvc = null!, Api = null!;
+        public Mock<IGeocodificacionServicio> Geo = new(MockBehavior.Strict);
+        public int LlamadasGateway;
         public RelojPrueba Reloj = new();
         public RuteaYaDbContext Db() => new DbPrueba(new DbContextOptionsBuilder<RuteaYaDbContext>().UseSqlite(_connection).Options);
-        public static async Task<Host> Crear(bool navegador = false, [CallerFilePath] string archivo = "") {
+        public static async Task<Host> Crear(bool navegador = false, bool navegadorEnvios = false, [CallerFilePath] string archivo = "") {
             var f = new Host(); await f._connection.OpenAsync();
             await using (var db = f.Db()) { await db.Database.EnsureCreatedAsync(); db.Usuarios.AddRange(
                 new Usuario { Id = 7, Nombre = "Siete", Apellido = "Test", Email = "siete@test.invalid", PasswordHash = "ficticio" },
@@ -265,7 +267,8 @@ public class ViajesDireccionesIntegracionTest
             f._api = Aplicacion(api); await f._api.StartAsync(); var url = Direccion(f._api);
             f.Api = new HttpClient { BaseAddress = new Uri(url) }; f.Api.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
             var mvc = Builder(typeof(MvcController)); mvc.Services.AddScoped(_ => f.Db()); mvc.Services.AddMemoryCache(); mvc.Services.AddHttpContextAccessor(); mvc.Services.AddSingleton<TimeProvider>(f.Reloj);
-            mvc.Services.AddScoped<IViajesApiServicio>(sp => new ViajesApiServicio(new HttpClient(new IdentidadApi(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>())) { BaseAddress = new Uri(url) }));
+            mvc.Services.AddScoped<IViajesApiServicio>(sp => new ViajesApiServicio(new HttpClient(new IdentidadApi(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), () => Interlocked.Increment(ref f.LlamadasGateway))) { BaseAddress = new Uri(url) }));
+            mvc.Services.AddSingleton(f.Geo.Object); mvc.Services.AddScoped<EnviosLogica>();
             var busqueda = new Mock<IBusquedaDireccionesServicio>();
             busqueda.Setup(b => b.SugerirAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((string t, CancellationToken _) =>
                 new[] { new SugerenciaDireccionDto { IdHere = "here:af:" + t, Nombre = t, Localidad = "Morón", Direccion = t + ", Morón" } });
@@ -274,13 +277,13 @@ public class ViajesDireccionesIntegracionTest
                     Posicion = new() { Latitud = -34, Longitud = -58 }, Accesos = new() { new() { Latitud = -35, Longitud = -59 } } });
             mvc.Services.AddSingleton(busqueda.Object); mvc.Services.AddScoped<SeleccionDireccionServicio>();
             mvc.Services.AddScoped<IFuenteSeleccionUbicacionVerificada, FuenteSeleccionUbicacionVerificada>();
-            mvc.Services.AddScoped<IUbicacionesConfirmadasServicio, UbicacionesConfirmadasServicio>(); mvc.Services.AddScoped<FormulariosViajeServicio>();
-            f._mvc = Aplicacion(mvc, navegador, archivo); await f._mvc.StartAsync();
+            mvc.Services.AddScoped<IUbicacionesConfirmadasServicio, UbicacionesConfirmadasServicio>(); mvc.Services.AddScoped<FormulariosDireccionesServicio>();
+            f._mvc = Aplicacion(mvc, navegador, archivo, navegadorEnvios); await f._mvc.StartAsync();
             f.Mvc = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = new Uri(Direccion(f._mvc)) };
             f.Mvc.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7"); return f;
         }
-        public async Task<(string Texto, string Token)> Confirmar(string form, string campo, string texto, string csrf) {
-            var url = $"/DireccionesViaje/{form}/";
+        public async Task<(string Texto, string Token)> Confirmar(string form, string campo, string texto, string csrf, string prefijo = "DireccionesViaje") {
+            var url = $"/{prefijo}/{form}/";
             using var sugeridas = JsonDocument.Parse(await Mvc.GetStringAsync(url + "Sugerencias?campo=" + campo + "&texto=" + Uri.EscapeDataString(texto)));
             var sugerencia = sugeridas.RootElement[0].GetProperty("token").GetString()!;
             using var resolver = await Post(url + "Resolver?campo=" + campo, csrf, ("token", sugerencia));
@@ -300,19 +303,19 @@ public class ViajesDireccionesIntegracionTest
             b.Logging.ClearProviders(); b.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, 0));
             b.Services.AddDataProtection().UseEphemeralDataProtectionProvider(); b.Services.AddControllersWithViews().AddApplicationPart(controller.Assembly);
             b.Services.AddAuthentication("Prueba").AddScheme<AuthenticationSchemeOptions, Auth>("Prueba", _ => { }); b.Services.AddAuthorization(); return b; }
-        private static WebApplication Aplicacion(WebApplicationBuilder b, bool navegador = false, string archivo = "") {
+        private static WebApplication Aplicacion(WebApplicationBuilder b, bool navegador = false, string archivo = "", bool navegadorEnvios = false) {
             var a = b.Build();
             if (navegador) {
                 a.Use(async (context, next) => {
                     context.Request.Headers["X-Usuario-Prueba"] = "7";
-                    if (context.Request.Method != "GET" || !context.Request.Path.StartsWithSegments("/Panel")) { await next(); return; }
+                    if (context.Request.Method != "GET" || !(navegadorEnvios ? context.Request.Path.StartsWithSegments("/Envios") : context.Request.Path.StartsWithSegments("/Panel"))) { await next(); return; }
                     var original = context.Response.Body; await using var buffer = new MemoryStream(); context.Response.Body = buffer;
                     await next(); buffer.Position = 0; var html = await new StreamReader(buffer).ReadToEndAsync();
-                    html = html.Replace("</body>", "<script src=\"/pruebas/viajes-browser.js\"></script></body>");
+                    html = html.Replace("</body>", "<script src=\"/pruebas/formulario-browser.js\"></script></body>");
                     context.Response.Body = original; context.Response.ContentLength = null; await context.Response.WriteAsync(html);
                 });
                 a.MapGet("/js/{nombre}", (string nombre) => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "..", "RuteaYa", "wwwroot", "js", Path.GetFileName(nombre))), "application/javascript"));
-                a.MapGet("/pruebas/viajes-browser.js", () => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "Fixtures", "viajes-browser.js")), "application/javascript"));
+                a.MapGet("/pruebas/formulario-browser.js", () => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "Fixtures", navegadorEnvios ? "envios-browser.js" : "viajes-browser.js")), "application/javascript"));
             }
             a.UseRouting(); a.UseAuthentication(); a.UseAuthorization();
             a.MapControllerRoute("default", "{controller=Acceso}/{action=Login}/{id?}"); return a; }
@@ -320,11 +323,11 @@ public class ViajesDireccionesIntegracionTest
         public async ValueTask DisposeAsync() { Mvc?.Dispose(); Api?.Dispose(); if (_mvc != null) { await _mvc.StopAsync(); await _mvc.DisposeAsync(); }
             if (_api != null) { await _api.StopAsync(); await _api.DisposeAsync(); } await _connection.DisposeAsync(); }
     }
-    private sealed class RelojPrueba : TimeProvider { public DateTimeOffset Ahora = DateTimeOffset.UtcNow; public override DateTimeOffset GetUtcNow() => Ahora; }
-    private sealed class IdentidadApi(Microsoft.AspNetCore.Http.IHttpContextAccessor accessor) : DelegatingHandler(new HttpClientHandler())
+    internal sealed class RelojPrueba : TimeProvider { public DateTimeOffset Ahora = DateTimeOffset.UtcNow; public override DateTimeOffset GetUtcNow() => Ahora; }
+    private sealed class IdentidadApi(Microsoft.AspNetCore.Http.IHttpContextAccessor accessor, Action llamada) : DelegatingHandler(new HttpClientHandler())
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) {
-            request.Headers.Add("X-Usuario-Prueba", accessor.HttpContext!.User.FindFirstValue(ClaimTypes.NameIdentifier)); return base.SendAsync(request, ct); }
+            llamada(); request.Headers.Add("X-Usuario-Prueba", accessor.HttpContext!.User.FindFirstValue(ClaimTypes.NameIdentifier)); return base.SendAsync(request, ct); }
     }
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
         : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)

@@ -1,4 +1,4 @@
-@model RuteaYa.Logica.DTOs.CrearEnvioDto
+@model RuteaYa.Web.Models.CrearEnvioViewModel
 
 @{
     ViewData["Title"] = "Nuevo envío";
@@ -16,10 +16,11 @@
 </div>
 
 <div class="panel-card">
-    <form class="panel-form" asp-controller="Envios" asp-action="Crear" method="post">
+    <form class="panel-form" asp-controller="Envios" asp-action="Crear" method="post" data-envio-direcciones>
         @Html.AntiForgeryToken()
 
         <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+        <input type="hidden" name="FormularioDirecciones" value="@Model.FormularioDirecciones" />
 
         <div>
             <h2>Información principal</h2>
@@ -28,14 +29,14 @@
 
         <div class="panel-form-grid">
             <div class="panel-field">
-                <label asp-for="OrigenDir">Origen / dirección de retiro *</label>
-                <input class="panel-input" asp-for="OrigenDir" type="text" placeholder="Calle, número, localidad" required />
+                @if (Model.RetiroCampo != null) { <partial name="_CampoDireccionHere" model="Model.RetiroCampo" /> }
+                else { <p role="alert">No se pudo preparar la dirección de retiro. Volvé a abrir Crear Envío.</p> }
                 <span asp-validation-for="OrigenDir" class="text-danger"></span>
             </div>
 
             <div class="panel-field">
-                <label asp-for="DestinoDir">Destino / dirección de entrega *</label>
-                <input class="panel-input" asp-for="DestinoDir" type="text" placeholder="Calle, número, localidad" required />
+                @if (Model.EntregaCampo != null) { <partial name="_CampoDireccionHere" model="Model.EntregaCampo" /> }
+                else { <p role="alert">No se pudo preparar la dirección de entrega. Volvé a abrir Crear Envío.</p> }
                 <span asp-validation-for="DestinoDir" class="text-danger"></span>
             </div>
 
@@ -81,5 +82,13 @@
             <a class="panel-button outline" asp-controller="Envios" asp-action="Index">Cancelar</a>
             <button class="panel-button" type="submit">Publicar envío</button>
         </div>
+        <p role="status" aria-live="polite" data-estado-viaje>Elegí y confirmá retiro y entrega antes de publicar.</p>
     </form>
 </div>
+<link rel="stylesheet" href="~/css/direcciones-here.css" asp-append-version="true" />
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/here-http.js" asp-append-version="true"></script>
+    <script src="~/js/direcciones-here.js" asp-append-version="true"></script>
+    <script src="~/js/viajes-direcciones.js" asp-append-version="true"></script>
+}
