@@ -24,7 +24,7 @@ public class CompatibilidadPersistidaTest
         using var f = new Fixture(false); await using var db = f.Db();
         var servicio = new SalidasViajeServicio(db); var seleccion = Seleccion(f.ViajeId);
         var id = (await servicio.SeleccionarAsync(7, seleccion))!.Value;
-        seleccion.OffsetUtcMinutos = null; seleccion.LlegadaSinRestriccion = false;
+        seleccion.LlegadaSinRestriccion = false;
         Assert.Equal(id, await servicio.SeleccionarAsync(7, seleccion));
         Assert.Single(await db.SalidasViaje.ToListAsync());
         var salida = (await servicio.ObtenerAsync(7, f.ViajeId, id))!;
@@ -319,7 +319,8 @@ public class CompatibilidadPersistidaTest
         public RuteaYaDbContext Db() => new DbPrueba(new DbContextOptionsBuilder<RuteaYaDbContext>().UseSqlite(_conexion).AddInterceptors(Contador).Options);
         public RuteaYaDbContext DbIndependiente(params IInterceptor[] interceptores) => new DbPrueba(new DbContextOptionsBuilder<RuteaYaDbContext>()
             .UseSqlite(_conexion.ConnectionString).AddInterceptors(interceptores).Options);
-        public Fixture(bool paradas, int cantidadEnvios = 1, string? defecto = null, decimal pesoMax = 100, bool snapshotAntiguo = false, string? conexion = null)
+        public Fixture(bool paradas, int cantidadEnvios = 1, string? defecto = null, decimal pesoMax = 100, bool snapshotAntiguo = false, string? conexion = null,
+            string retiroDir = "Retiro", string entregaDir = "Entrega")
         {
             _conexion = new SqliteConnection(conexion ?? "Data Source=:memory:");
             _conexion.Open(); using var db = Db(); db.Database.EnsureCreated();
@@ -339,7 +340,7 @@ public class CompatibilidadPersistidaTest
             if (defecto == "legado") { v.OrigenUbicacion = null; v.DestinoUbicacion = null; }
             CantidadBase = paradas ? 3 : 2; db.Viajes.Add(v);
             for (var i = 0; i < cantidadEnvios; i++) {
-                var e = new Envio { UsuarioId = 8, OrigenDir = "Retiro", DestinoDir = "Entrega", Descripcion = "Paquete", Estado = EstadoEnvio.BuscandoConductor,
+                var e = new Envio { UsuarioId = 8, OrigenDir = retiroDir, DestinoDir = entregaDir, Descripcion = "Paquete", Estado = EstadoEnvio.BuscandoConductor,
                     PesoKg = 2.5m, Monto = 100, OrigenLat = 89, DestinoLat = 89, FechaLimite = new DateTime(2026, 11, 21, 12, 0, 0, DateTimeKind.Unspecified) };
                 e.RetiroUbicacion = defecto == "retiro" ? null : U(defecto == "usuario" ? 7 : 8, TipoRecursoUbicacion.Envio, CampoUbicacion.RetiroEnvio, defecto == "texto" ? "No corresponde" : e.OrigenDir, -34.8m);
                 e.EntregaUbicacion = U(8, TipoRecursoUbicacion.Envio, CampoUbicacion.EntregaEnvio, e.DestinoDir, -34.9m);

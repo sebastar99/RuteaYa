@@ -48,19 +48,15 @@
                 <label asp-for="EntregaLimiteLocal">Horario límite de entrega (opcional, en la fecha indicada)</label>
                 <input class="panel-input" asp-for="EntregaLimiteLocal" type="datetime-local" />
                 <span asp-validation-for="EntregaLimiteLocal"></span>
+                <small class="panel-help">Si no indicás horario, se entiende que se puede entregar hasta el final de la fecha límite.</small>
             </div>
             <div class="panel-field">
                 <label asp-for="RetiroDisponibleDesdeLocal">Disponible para retirar desde (opcional)</label>
-                <input class="panel-input" asp-for="RetiroDisponibleDesdeLocal" type="datetime-local" />
+                <input class="panel-input" asp-for="RetiroDisponibleDesdeLocal" type="datetime-local" data-retiro-desde />
                 <span asp-validation-for="RetiroDisponibleDesdeLocal"></span>
-                <label><input asp-for="RetiroSinRestriccion" /> El retiro no tiene restricción de horario</label>
+                <label><input asp-for="RetiroSinRestriccion" data-retiro-libre /> El retiro no tiene restricción de horario</label>
                 <span asp-validation-for="RetiroSinRestriccion"></span>
-            </div>
-            <div class="panel-field">
-                <label asp-for="OffsetUtcMinutos">Offset UTC de estos horarios, en minutos</label>
-                <input class="panel-input" asp-for="OffsetUtcMinutos" type="number" min="-840" max="840" step="1" />
-                <span asp-validation-for="OffsetUtcMinutos"></span>
-                <small>Ingresalo explícitamente: UTC−03:00 = −180; UTC = 0. Sin horarios explícitos la compatibilidad temporal queda indeterminada.</small>
+                <small class="panel-help">Los horarios se interpretan en hora de Argentina.</small>
             </div>
 
             <div class="panel-field">
@@ -107,4 +103,15 @@
     <script src="~/js/here-http.js" asp-append-version="true"></script>
     <script src="~/js/direcciones-here.js" asp-append-version="true"></script>
     <script src="~/js/viajes-direcciones.js" asp-append-version="true"></script>
+    <script>
+        (function () {
+            var desde = document.querySelector('[data-retiro-desde]'), libre = document.querySelector('[data-retiro-libre]');
+            if (!desde || !libre) return;
+            function sincronizar() {
+                if (desde.value) { libre.checked = false; libre.disabled = true; } else { libre.disabled = false; }
+            }
+            desde.addEventListener('input', sincronizar);
+            sincronizar();
+        })();
+    </script>
 }

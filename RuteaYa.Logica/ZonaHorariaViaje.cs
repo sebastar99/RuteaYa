@@ -5,6 +5,20 @@ namespace RuteaYa.Logica;
 public static class ZonaHorariaViaje
 {
     public const string Argentina = "America/Argentina/Buenos_Aires";
+    public static string? ArgentinaPorDireccion(string? direccion) =>
+        direccion != null && direccion.Trim().EndsWith(", Argentina", StringComparison.OrdinalIgnoreCase) ? Argentina : null;
+
+    /// <summary>
+    /// Zona única para los horarios de un envío. Solo se resuelve si todas las direcciones confirmadas
+    /// son de Argentina; si no puede determinarse devuelve null y nunca se inventa una zona.
+    /// </summary>
+    public static TimeZoneInfo? PorDirecciones(params string?[] direcciones)
+    {
+        if (direcciones.Length == 0 || direcciones.Any(d => ArgentinaPorDireccion(d) == null)) return null;
+        try { return TimeZoneInfo.FindSystemTimeZoneById(Argentina); }
+        catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException) { return null; }
+    }
+
     public static string? Automatica(Viaje v)
     {
         var u = v.OrigenUbicacion;
@@ -12,8 +26,7 @@ public static class ZonaHorariaViaje
             u.Campo == CampoUbicacion.OrigenViaje && (!u.RecursoId.HasValue || u.RecursoId == v.Id) &&
             u.ConsumidaEnUtc.HasValue && u.ConfirmadaEnUtc != default && u.ConfirmadaEnUtc <= u.ConsumidaEnUtc &&
             u.ConsumidaEnUtc <= u.VenceEnUtc && u.IdHere.StartsWith("here:", StringComparison.Ordinal) &&
-            u.Proveedor == "HERE-v7" && u.DireccionNormalizada == v.Origen &&
-            u.DireccionNormalizada.Trim().EndsWith(", Argentina", StringComparison.OrdinalIgnoreCase) ? Argentina : null;
+            u.Proveedor == "HERE-v7" && u.DireccionNormalizada == v.Origen ? ArgentinaPorDireccion(u.DireccionNormalizada) : null;
     }
 
     public static TimeZoneInfo Resolver(Viaje viaje, string? seleccion)

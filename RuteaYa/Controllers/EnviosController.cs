@@ -55,7 +55,8 @@ public class EnviosController : Controller
     public async Task<IActionResult> Crear()
     {
         var usuarioId = ObtenerUsuarioIdActual(); if (usuarioId <= 0) return Forbid();
-        var modelo = new CrearEnvioViewModel();
+        // El retiro sin restricción es una elección visible del formulario: viene tildada y se destilda al indicar un horario.
+        var modelo = new CrearEnvioViewModel { RetiroSinRestriccion = true };
         try {
             if (_formularios == null) throw new InvalidOperationException("El formulario de direcciones no está configurado.");
             await _formularios.PrepararEnvioAsync(usuarioId, modelo, HttpContext.RequestAborted);

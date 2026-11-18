@@ -66,11 +66,18 @@ public sealed class DatosConfirmadosOportunidadPersistidosServicio(RuteaYaDbCont
                 DisponibleDesde = e.RetiroDisponibleDesde.HasValue ? RestriccionTemporalDto.Informada(e.RetiroDisponibleDesde.Value) :
                     e.RetiroSinRestriccion ? RestriccionTemporalDto.SinRestriccion() : RestriccionTemporalDto.Desconocida()
             };
-            // datetime2 no conserva zona ni Kind; no se interpreta como UTC ni fin de día por conveniencia.
+            // datetime2 no conserva zona ni Kind; no se interpreta como UTC ni con la zona del servidor.
             if (e.EntregaLimiteConOffset.HasValue && e.EntregaLimiteConOffset.Value.Date == e.FechaLimite.Date)
                 datos.FechaLimiteEntrega = RestriccionTemporalDto.Informada(e.EntregaLimiteConOffset.Value);
             else if (!e.EntregaLimiteConOffset.HasValue && e.FechaLimite != default && e.FechaLimite.Kind == DateTimeKind.Utc)
                 datos.FechaLimiteEntrega = RestriccionTemporalDto.Informada(new DateTimeOffset(e.FechaLimite));
+            // Una fecha límite sin horario (00:00) significa "hasta el final de ese día". Solo se interpreta cuando retiro y
+            // entrega son direcciones argentinas confirmadas por HERE; si la zona no puede determinarse, el dato sigue pendiente.
+            else if (!e.EntregaLimiteConOffset.HasValue && e.FechaLimite != default && e.FechaLimite.TimeOfDay == TimeSpan.Zero &&
+                datos.RetiroConfirmado != null && datos.EntregaConfirmada != null &&
+                ZonaHorariaViaje.PorDirecciones(e.OrigenDir, e.DestinoDir) is { } zona)
+                datos.FechaLimiteEntrega = RestriccionTemporalDto.Informada(
+                    ZonaHorariaViaje.Convertir(e.FechaLimite.Date.AddDays(1).AddSeconds(-1), zona));
             resultado.Add(e.Id, datos);
         }
         return resultado;

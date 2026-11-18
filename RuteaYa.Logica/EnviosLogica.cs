@@ -65,8 +65,6 @@ namespace RuteaYa.Logica
             if (dto == null)
                 throw new ArgumentException("Los datos del envío son obligatorios.");
 
-            var horarios = HorariosEnvio.Convertir(dto);
-
             var datos = dto.Ubicaciones;
             if (datos?.Retiro == null || datos.Entrega == null || datos.Retiro.TipoRecurso != TipoRecursoUbicacion.Envio ||
                 datos.Entrega.TipoRecurso != TipoRecursoUbicacion.Envio || datos.Retiro.RecursoId.HasValue || datos.Entrega.RecursoId.HasValue ||
@@ -75,6 +73,8 @@ namespace RuteaYa.Logica
                 throw new ComprobanteUbicacionException("ubicaciones_requeridas", "Elegí y confirmá las direcciones de retiro y entrega antes de publicar.");
             var origen = await _ubicaciones.ObtenerDireccionAsync(usuarioId, datos.Retiro, datos.ComprobanteRetiro);
             var destino = await _ubicaciones.ObtenerDireccionAsync(usuarioId, datos.Entrega, datos.ComprobanteEntrega);
+            // La zona horaria la decide el servidor a partir de las direcciones confirmadas; el usuario solo ingresa fecha y hora.
+            var horarios = HorariosEnvio.Convertir(dto, ZonaHorariaViaje.PorDirecciones(origen, destino));
             var canonico = new CrearEnvioDto { OrigenDir = origen, DestinoDir = destino, FechaLimite = dto.FechaLimite,
                 PesoKg = dto.PesoKg, Tamano = dto.Tamano, Descripcion = dto.Descripcion, Monto = dto.Monto };
             Validar(canonico);

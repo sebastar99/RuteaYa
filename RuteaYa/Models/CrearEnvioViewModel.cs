@@ -15,8 +15,6 @@ public class CrearEnvioViewModel : CrearEnvioDto, IValidatableObject
     public new decimal PesoKg { get => base.PesoKg; set => base.PesoKg = value; }
     [ModelBinder(BinderType = typeof(DecimalHtmlBinder)), Range(1, 1000000, ErrorMessage = "El monto ofrecido debe ser mayor a 0.")]
     public new decimal Monto { get => base.Monto; set => base.Monto = value; }
-    [Range(-840, 840, ErrorMessage = "La zona del horario debe estar entre -840 y 840 minutos.")]
-    public new int? OffsetUtcMinutos { get => base.OffsetUtcMinutos; set => base.OffsetUtcMinutos = value; }
     [BindRequired]
     public new DateTime FechaLimite { get => base.FechaLimite; set => base.FechaLimite = value; }
     public string? FormularioDirecciones { get; set; }
@@ -29,8 +27,6 @@ public class CrearEnvioViewModel : CrearEnvioDto, IValidatableObject
     {
         // Presentación por campo de las mismas reglas que valida EnviosLogica/HorariosEnvio.
         if (FechaLimite < DateTime.Now.Date) yield return new("La fecha límite no puede ser anterior a hoy.", new[] { nameof(FechaLimite) });
-        if ((EntregaLimiteLocal.HasValue || RetiroDisponibleDesdeLocal.HasValue) && !OffsetUtcMinutos.HasValue)
-            yield return new("Indicá la zona de los horarios del envío.", new[] { nameof(OffsetUtcMinutos) });
         if (RetiroSinRestriccion && RetiroDisponibleDesdeLocal.HasValue)
             yield return new("Elegí un horario de retiro o marcá sin restricción, no ambos.", new[] { nameof(RetiroDisponibleDesdeLocal), nameof(RetiroSinRestriccion) });
         if (EntregaLimiteLocal.HasValue && EntregaLimiteLocal.Value.Date != FechaLimite.Date)

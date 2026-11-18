@@ -21,8 +21,6 @@ namespace RuteaYa.Logica.DTOs
         public DateTime? EntregaLimiteLocal { get; set; }
         public DateTime? RetiroDisponibleDesdeLocal { get; set; }
         public bool RetiroSinRestriccion { get; set; }
-        [Range(-840, 840)]
-        public int? OffsetUtcMinutos { get; set; }
 
         [Range(0.1, 1000.0, ErrorMessage = "El peso debe ser mayor a 0 kg.")]
         public decimal PesoKg { get; set; }

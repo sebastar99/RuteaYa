@@ -217,7 +217,7 @@ public class AceptacionEnviosTest
 
     [Theory]
     [InlineData("peso", "capacidad suficiente")]
-    [InlineData("datos", "datos pendientes")]
+    [InlineData("datos", "confirmar que el envío sea compatible")]
     [InlineData("asignado", "ya fue asignado")]
     public async Task Http_PostRevalidaPantallaAnterior_YExplicaElRechazoSinAsignar(string caso, string mensaje)
     {

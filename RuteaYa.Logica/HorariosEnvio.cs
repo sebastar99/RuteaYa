@@ -4,19 +4,21 @@ namespace RuteaYa.Logica;
 
 public static class HorariosEnvio
 {
-    public static (DateTimeOffset? Entrega, DateTimeOffset? Retiro) Convertir(CrearEnvioDto dto)
+    /// <summary>
+    /// Convierte los horarios locales del envío con la zona resuelta por el servidor.
+    /// Si hay horarios y no se pudo determinar la zona, se rechaza: no se inventa una zona horaria.
+    /// </summary>
+    public static (DateTimeOffset? Entrega, DateTimeOffset? Retiro) Convertir(CrearEnvioDto dto, TimeZoneInfo? zona)
     {
         if (dto.RetiroSinRestriccion && dto.RetiroDisponibleDesdeLocal.HasValue)
             throw new ArgumentException("Informá disponibilidad de retiro o sin restricción, no ambas.");
-        if ((dto.EntregaLimiteLocal.HasValue || dto.RetiroDisponibleDesdeLocal.HasValue) && !dto.OffsetUtcMinutos.HasValue)
-            throw new ArgumentException("Indicá el offset UTC de los horarios del envío.");
-        if (dto.OffsetUtcMinutos is < -840 or > 840)
-            throw new ArgumentException("El offset UTC debe estar entre -840 y 840 minutos.");
+        if ((dto.EntregaLimiteLocal.HasValue || dto.RetiroDisponibleDesdeLocal.HasValue) && zona == null)
+            throw new ArgumentException("No pudimos determinar la zona horaria de los horarios. Solo se pueden indicar horarios para direcciones de Argentina elegidas de la lista; dejalos en blanco o cambiá las direcciones.");
         DateTimeOffset? ConvertirFecha(DateTime? fecha)
         {
             if (!fecha.HasValue) return null;
             if (fecha.Value == default) throw new ArgumentException("El horario informado no es válido.");
-            return new DateTimeOffset(DateTime.SpecifyKind(fecha.Value, DateTimeKind.Unspecified), TimeSpan.FromMinutes(dto.OffsetUtcMinutos!.Value));
+            return ZonaHorariaViaje.Convertir(fecha.Value, zona!);
         }
         var entrega = ConvertirFecha(dto.EntregaLimiteLocal);
         var retiro = ConvertirFecha(dto.RetiroDisponibleDesdeLocal);

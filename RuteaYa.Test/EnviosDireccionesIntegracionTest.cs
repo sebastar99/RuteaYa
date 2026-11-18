@@ -23,12 +23,11 @@ public class EnviosDireccionesIntegracionTest
     }
 
     [Fact]
-    public async Task Crear_PersisteHorariosExplicitosConOffsetSinConvertirLaFechaLegadaEnUnInstante()
+    public async Task Crear_PersisteHorariosExplicitosConLaZonaArgentinaResueltaPorElServidor()
     {
         await using var f = await Host.Crear(); var form = await Preparar(f);
         var fecha = Valor(form.Datos, "FechaLimite");
         form.Datos.Add(new("EntregaLimiteLocal", fecha + "T18:30"));
-        form.Datos.Add(new("OffsetUtcMinutos", "-180"));
         form.Datos.Add(new("RetiroSinRestriccion", "true"));
         using var respuesta = await f.Mvc.PostAsync("/Envios/Crear", new FormUrlEncodedContent(form.Datos));
         Assert.Equal(HttpStatusCode.Redirect, respuesta.StatusCode);

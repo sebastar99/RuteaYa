@@ -68,7 +68,7 @@ public class UxDireccionesYHorariosTest
         var s = new SalidasViajeServicio(db);
         var id = (await s.SeleccionarAsync(7, new() { ViajeId = f.ViajeId, Fecha = fecha, ZonaHorariaId = "Europe/Madrid", LlegadaSinRestriccion = true }))!.Value;
         var original = (await db.SalidasViaje.AsNoTracking().SingleAsync()).FechaHora;
-        Assert.Equal(id, await s.SeleccionarAsync(7, new() { ViajeId = f.ViajeId, Fecha = fecha, ZonaHorariaId = ZonaHorariaViaje.Argentina, OffsetUtcMinutos = -999 }));
+        Assert.Equal(id, await s.SeleccionarAsync(7, new() { ViajeId = f.ViajeId, Fecha = fecha, ZonaHorariaId = ZonaHorariaViaje.Argentina }));
         var actual = (await db.SalidasViaje.AsNoTracking().SingleAsync()).FechaHora;
         Assert.Equal(original, actual); Assert.Equal(original.Offset, actual.Offset);
     }
