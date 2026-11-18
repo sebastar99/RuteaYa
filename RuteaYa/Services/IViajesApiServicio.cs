@@ -4,6 +4,8 @@ namespace RuteaYa.Web.Services
 {
     public interface IViajesApiServicio
     {
+        Task<(bool Exito, string Mensaje, RuteaYa.Logica.DTOs.ContextoUbicacionDto? Contexto)> CrearContextoUbicacionAsync(
+            RuteaYa.Logica.DTOs.SolicitudContextoViajeDto solicitud, CancellationToken ct = default);
         Task<(bool Exito, string Mensaje, List<ViajeViewModel> Viajes)> ListarViajesAsync(
             int usuarioId
         );

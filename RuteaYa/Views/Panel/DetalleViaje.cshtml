@@ -156,6 +156,7 @@ else
 
     <div class="panel-card">
         <h2>Paradas intermedias</h2>
+        <div asp-validation-summary="ModelOnly" role="alert"></div>
 
         @if (Model.Activo)
         {
@@ -172,14 +173,16 @@ else
                         <input type="text" id="ubicacion" name="ubicacion"  maxlength="150"
                             required class="panel-input" placeholder="Ej. Chivilcoy, Buenos Aires" 
                         />
+                        @Html.ValidationMessage("ubicacion")
                     </div>
 
                     <div class="panel-field">
                         <label for="orden">Orden de la parada</label>
 
-                        <input type="number" id="orden" name="orden" min="1" max="100"
+                        <input type="number" id="orden" name="orden" min="1" max="@(paradas.Count + 1)"
                             value="@(paradas.Count + 1)" required class="panel-input" 
                         />
+                        @Html.ValidationMessage("orden")
                     </div>
                 </div>
 
@@ -266,8 +269,10 @@ else
 
                     <input type="hidden" name="viajeId" value="@Model.Id" />
 
-                    @foreach (var parada in paradas.OrderBy(p => p.Orden))
+                    @{ var paradasOrdenadas = paradas.OrderBy(p => p.Orden).ToArray(); }
+                    @for (var i = 0; i < paradasOrdenadas.Length; i++)
                     {
+                        var parada = paradasOrdenadas[i];
                         <div class="reorder-row">
 
                             <div class="panel-field">
@@ -278,8 +283,9 @@ else
 
                             <div class="panel-field">
                                 <label>Nuevo orden</label>
-                                <input type="number" class="panel-input" name="ordenes" value="@parada.Orden"
+                                <input type="number" class="panel-input" name="ordenes[@i]" value="@parada.Orden"
                                     min="1" max="@paradas.Count" required />
+                                @Html.ValidationMessage($"ordenes[{i}]")
                             </div>
 
                         </div>

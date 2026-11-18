@@ -96,14 +96,17 @@ public class OportunidadesControllerTest
     }
 
     [Fact]
-    public async Task Index_ParametroMalFormado_NoConsulta()
+    public async Task Index_ParametroMalFormado_ConservaErroresYRecargaSoloSelectorPropio()
     {
         var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
         var controlador = Controlador(logica);
         controlador.ModelState.AddModelError("pagina", "Formato inválido.");
+        logica.Setup(l => l.ConsultarAsync(7, null, 1, 10, default)).ReturnsAsync(new ListadoCandidatosDto());
 
-        Assert.IsType<BadRequestObjectResult>(await controlador.Index(10));
+        Assert.IsType<ViewResult>(await controlador.Index(10));
+        Assert.Equal(400, controlador.Response.StatusCode);
 
+        logica.Verify(l => l.ConsultarAsync(7, null, 1, 10, default), Times.Once);
         logica.VerifyNoOtherCalls();
     }
 
@@ -123,8 +126,12 @@ public class OportunidadesControllerTest
         var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
         logica.Setup(l => l.ConsultarAsync(7, 10, 1, 51, default))
             .ThrowsAsync(new ArgumentOutOfRangeException("tamanoPagina"));
+        logica.Setup(l => l.ConsultarAsync(7, null, 1, 10, default)).ReturnsAsync(new ListadoCandidatosDto());
 
-        Assert.IsType<BadRequestObjectResult>(await Controlador(logica).Index(10, tamanoPagina: 51));
+        var controlador = Controlador(logica);
+        Assert.IsType<ViewResult>(await controlador.Index(10, tamanoPagina: 51));
+        Assert.Equal(400, controlador.Response.StatusCode);
+        Assert.False(controlador.ModelState.IsValid);
     }
 
     [Fact]
@@ -164,7 +171,7 @@ public class OportunidadesControllerTest
     }
 
     [Fact]
-    public async Task Index_Cancelacion_SePropagaSinConvertirlaEnListadoVacio()
+    public async Task Index_Cancelacion_Responde499SinListadoVacio()
     {
         using var cancelacion = new CancellationTokenSource();
         cancelacion.Cancel();
@@ -172,8 +179,8 @@ public class OportunidadesControllerTest
         logica.Setup(l => l.ConsultarAsync(7, 10, 1, 10, cancelacion.Token))
             .Returns(Task.FromCanceled<ListadoCandidatosDto?>(cancelacion.Token));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => Controlador(logica).Index(10, cancellationToken: cancelacion.Token));
+        var resultado = Assert.IsType<StatusCodeResult>(await Controlador(logica).Index(10, cancellationToken: cancelacion.Token));
+        Assert.Equal(499, resultado.StatusCode);
     }
 
     [Fact]
@@ -295,7 +302,7 @@ public class OportunidadesControllerTest
     }
 
     [Fact]
-    public async Task Detalle_Cancelacion_SePropaga()
+    public async Task Detalle_Cancelacion_Responde499()
     {
         using var cancelacion = new CancellationTokenSource();
         cancelacion.Cancel();
@@ -303,8 +310,8 @@ public class OportunidadesControllerTest
         logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, cancelacion.Token))
             .Returns(Task.FromCanceled<DetalleCandidatoDto?>(cancelacion.Token));
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            Controlador(logica).Detalle(10, 25, cancellationToken: cancelacion.Token));
+        var resultado = Assert.IsType<StatusCodeResult>(await Controlador(logica).Detalle(10, 25, cancellationToken: cancelacion.Token));
+        Assert.Equal(499, resultado.StatusCode);
     }
 
     [Theory]
@@ -329,6 +336,73 @@ public class OportunidadesControllerTest
         if (accion == "Detalle") Assert.Equal(envioId, resultado.RouteValues["envioId"]);
         Assert.Empty(consultas.Consultas);
         viajesApi.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(EstadoCompatibilidad.Compatible)]
+    [InlineData(EstadoCompatibilidad.Incompatible)]
+    [InlineData(EstadoCompatibilidad.Indeterminado)]
+    public async Task Detalle_ConservaLaEvaluacionDelServicioSinRecalcularEnControlador(EstadoCompatibilidad estado)
+    {
+        var evaluacion = new EvaluacionOportunidadDto
+        {
+            ResultadoMotor = new ResultadoCompatibilidadDto { ViajeId = 10, EnvioId = 25, Estado = estado }
+        };
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, default)).ReturnsAsync(new DetalleCandidatoDto
+        {
+            Viaje = new ViajeOportunidadesDto { Id = 10 }, Envio = new EnvioDto { Id = 25 }, Evaluacion = evaluacion
+        });
+
+        var vista = Assert.IsType<ViewResult>(await Controlador(logica).Detalle(10, 25));
+
+        var modelo = Assert.IsType<DetalleOportunidadViewModel>(vista.Model);
+        Assert.Same(evaluacion, modelo.Detalle!.Evaluacion);
+        Assert.Equal(estado, modelo.Detalle.Evaluacion.Estado);
+        Assert.Single(logica.Invocations);
+    }
+
+    [Fact]
+    public async Task Detalle_ConfirmacionesEnUrl_NoConviertenDatosPendientesEnCompatibles()
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, default)).ReturnsAsync(new DetalleCandidatoDto
+        {
+            Viaje = new ViajeOportunidadesDto { Id = 10 }, Envio = new EnvioDto { Id = 25 },
+            Evaluacion = new EvaluacionOportunidadDto
+            {
+                DatosPendientes = new[] { DatoPendienteOportunidad.RecorridoSinCoordenadasConfirmadas }
+            }
+        });
+        var controlador = Controlador(logica);
+        controlador.Request.QueryString = new QueryString("?compatible=true&coordenadasConfirmadas=true&pesoDisponibleKg=100");
+
+        var vista = Assert.IsType<ViewResult>(await controlador.Detalle(10, 25));
+
+        var modelo = Assert.IsType<DetalleOportunidadViewModel>(vista.Model);
+        Assert.Equal(EstadoCompatibilidad.Indeterminado, modelo.Detalle!.Evaluacion.Estado);
+        Assert.False(modelo.Detalle.Evaluacion.MotorEjecutado);
+        Assert.True(modelo.Detalle.EvaluacionPendiente);
+        logica.Verify(l => l.ObtenerDetalleAsync(7, 10, 25, default), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Detalle_ErrorDeEvaluacion_Devuelve503SinExponerDatosDelProveedor(bool configuracion)
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        Exception error = configuracion ? new InvalidOperationException("dato sensible") : new HttpRequestException("dato sensible");
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, default)).ThrowsAsync(error);
+        var controlador = Controlador(logica);
+
+        var vista = Assert.IsType<ViewResult>(await controlador.Detalle(10, 25));
+
+        Assert.Equal(503, controlador.Response.StatusCode);
+        var modelo = Assert.IsType<DetalleOportunidadViewModel>(vista.Model);
+        Assert.Null(modelo.Detalle);
+        Assert.NotNull(modelo.Error);
+        Assert.DoesNotContain("sensible", modelo.Error);
     }
 
     private sealed class ErrorBaseDatosSimulado : DbException

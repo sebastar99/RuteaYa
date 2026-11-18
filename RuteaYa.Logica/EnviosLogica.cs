@@ -8,15 +8,19 @@ using System.Linq;
 
 namespace RuteaYa.Logica
 {
-    public class EnviosLogica
+    public partial class EnviosLogica
     {
         private readonly RuteaYaDbContext _db;
-        private readonly IGeocodificacionServicio _geocodificacion;
+        private readonly IUbicacionesConfirmadasServicio _ubicaciones;
+        private readonly IOportunidadesLogica? _oportunidades;
 
-        public EnviosLogica(RuteaYaDbContext db, IGeocodificacionServicio geocodificacion)
+        public EnviosLogica(RuteaYaDbContext db, IGeocodificacionServicio geocodificacion, IUbicacionesConfirmadasServicio? ubicaciones = null,
+            IOportunidadesLogica? oportunidades = null)
         {
             _db = db;
-            _geocodificacion = geocodificacion;
+            _oportunidades = oportunidades;
+            // El parámetro anterior se conserva para los consumidores existentes. Crear ya no geocodifica.
+            _ubicaciones = ubicaciones ?? new UbicacionesConfirmadasServicio(db);
         }
 
         //lista de envios de un usuario(filtrado por estados)
@@ -61,21 +65,29 @@ namespace RuteaYa.Logica
             if (dto == null)
                 throw new ArgumentException("Los datos del envío son obligatorios.");
 
-            Validar(dto);
-
-            var origen = await GeocodificarAsync(dto.OrigenDir, "el origen");
-            var destino = await GeocodificarAsync(dto.DestinoDir, "el destino");
+            var datos = dto.Ubicaciones;
+            if (datos?.Retiro == null || datos.Entrega == null || datos.Retiro.TipoRecurso != TipoRecursoUbicacion.Envio ||
+                datos.Entrega.TipoRecurso != TipoRecursoUbicacion.Envio || datos.Retiro.RecursoId.HasValue || datos.Entrega.RecursoId.HasValue ||
+                datos.Retiro.Campo != CampoUbicacion.RetiroEnvio || datos.Entrega.Campo != CampoUbicacion.EntregaEnvio ||
+                datos.Retiro.FormularioId != datos.Entrega.FormularioId || string.IsNullOrEmpty(datos.ComprobanteRetiro) || string.IsNullOrEmpty(datos.ComprobanteEntrega))
+                throw new ComprobanteUbicacionException("ubicaciones_requeridas", "Elegí y confirmá las direcciones de retiro y entrega antes de publicar.");
+            var origen = await _ubicaciones.ObtenerDireccionAsync(usuarioId, datos.Retiro, datos.ComprobanteRetiro);
+            var destino = await _ubicaciones.ObtenerDireccionAsync(usuarioId, datos.Entrega, datos.ComprobanteEntrega);
+            // La zona horaria la decide el servidor a partir de las direcciones confirmadas; el usuario solo ingresa fecha y hora.
+            var horarios = HorariosEnvio.Convertir(dto, ZonaHorariaViaje.PorDirecciones(origen, destino));
+            var canonico = new CrearEnvioDto { OrigenDir = origen, DestinoDir = destino, FechaLimite = dto.FechaLimite,
+                PesoKg = dto.PesoKg, Tamano = dto.Tamano, Descripcion = dto.Descripcion, Monto = dto.Monto };
+            Validar(canonico);
 
             var envio = new Envio
             {
                 UsuarioId = usuarioId,
-                OrigenDir = dto.OrigenDir.Trim(),
-                OrigenLat = origen.Latitud,
-                OrigenLng = origen.Longitud,
-                DestinoDir = dto.DestinoDir.Trim(),
-                DestinoLat = destino.Latitud,
-                DestinoLng = destino.Longitud,
+                OrigenDir = origen,
+                DestinoDir = destino,
                 FechaLimite = dto.FechaLimite,
+                EntregaLimiteConOffset = horarios.Entrega,
+                RetiroDisponibleDesde = horarios.Retiro,
+                RetiroSinRestriccion = dto.RetiroSinRestriccion,
                 PesoKg = dto.PesoKg,
                 Tamano = dto.Tamano,
                 Descripcion = dto.Descripcion.Trim(),
@@ -85,7 +97,9 @@ namespace RuteaYa.Logica
             };
 
             _db.Envios.Add(envio);
-            await _db.SaveChangesAsync();
+            await _ubicaciones.GuardarAsync(usuarioId, new[] {
+                new AsignacionUbicacionDto(datos.Retiro, datos.ComprobanteRetiro, Envio: envio),
+                new AsignacionUbicacionDto(datos.Entrega, datos.ComprobanteEntrega, Envio: envio) });
 
             return Convertir(envio);
         }
@@ -143,43 +157,9 @@ namespace RuteaYa.Logica
             return true;
         }
 
-        // El conductor toma un envío que busca conductor, usando uno de sus viajes activos.
-        public async Task<bool> AceptarAsync(int conductorId, int viajeId, int envioId)
-        {
-            if (conductorId <= 0)
-                throw new ArgumentException("Usuario no válido.");
-
-            if (viajeId <= 0 || envioId <= 0)
-                throw new ArgumentException("Los identificadores no son válidos.");
-
-            var viajeActivo = await _db.Viajes.AsNoTracking().AnyAsync(
-                v => v.Id == viajeId && v.UsuarioId == conductorId && v.Activo);
-
-            if (!viajeActivo)
-                throw new ArgumentException("El viaje seleccionado no existe o no está activo.");
-
-            var envio = await _db.Envios.FirstOrDefaultAsync(e => e.Id == envioId);
-
-            if (envio == null || envio.Estado != EstadoEnvio.BuscandoConductor)
-                throw new ArgumentException("El envío ya no está disponible.");
-
-            if (envio.UsuarioId == conductorId)
-                throw new ArgumentException("No podés transportar tus propios envíos.");
-
-            envio.Estado = EstadoEnvio.ConductorAsignado;
-            envio.ConductorId = conductorId;
-
-            try
-            {
-                await _db.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                throw new ArgumentException("El envío fue tomado por otro conductor.");
-            }
-
-            return true;
-        }
+        // Firma legada: no tiene salida concreta y no puede autorizar una asignación.
+        public Task<bool> AceptarAsync(int conductorId, int viajeId, int envioId) =>
+            throw new ArgumentException("Seleccioná una salida concreta y aceptá desde Oportunidades.");
 
         // El conductor asignado avanza el envío: Retirado, EnCamino o Entregado.
         public async Task<bool> ActualizarEstadoConductorAsync(int conductorId, int envioId, EstadoEnvio nuevoEstado)
@@ -235,7 +215,6 @@ namespace RuteaYa.Logica
 
         private static bool TransicionValida(EstadoEnvio actual, EstadoEnvio nuevo) => (actual, nuevo) switch
         {
-            (EstadoEnvio.BuscandoConductor, EstadoEnvio.ConductorAsignado) => true,
             (EstadoEnvio.ConductorAsignado, EstadoEnvio.Retirado) => true,
             (EstadoEnvio.Retirado, EstadoEnvio.EnCamino) => true,
             (EstadoEnvio.EnCamino, EstadoEnvio.Entregado) => true,
@@ -260,49 +239,6 @@ namespace RuteaYa.Logica
             Monto = e.Monto,
             Estado = e.Estado
         };
-
-        // Geocodifica cualquier dirección ingresada.
-        // Si el servicio de HERE no está configurado o falla, asigna coordenadas dinámicas (decimal)
-        // basadas en la dirección para que no rebote y guarde en la BD.
-        private async Task<PuntoRutaDto> GeocodificarAsync(string direccion, string cual)
-        {
-            if (string.IsNullOrWhiteSpace(direccion))
-            {
-                throw new ArgumentException($"La dirección de {cual} no puede estar vacía.");
-            }
-
-            if (_geocodificacion != null)
-            {
-                try
-                {
-                    var candidatos = await _geocodificacion.GeocodificarAsync(direccion.Trim());
-                    var candidato = candidatos?.FirstOrDefault();
-
-                    if (candidato?.Posicion != null)
-                    {
-                        return candidato.Posicion;
-                    }
-                }
-                catch
-                {
-                    // Ignora el error de HERE y pasa al cálculo dinámico local
-                }
-            }
-
-            // Genera latitud y longitud locales compatibles con SQL Server (decimal 9,6) 
-            var hash = Math.Abs(direccion.Trim().ToLowerInvariant().GetHashCode());
-            var latOffset = Convert.ToDecimal((hash % 1000) / 10000.0);
-            var lngOffset = Convert.ToDecimal(((hash / 1000) % 1000) / 10000.0);
-
-            var latitudFinal = Math.Round(-34.6037m + latOffset, 6);
-            var longitudFinal = Math.Round(-58.3816m + lngOffset, 6);
-
-            return new PuntoRutaDto
-            {
-                Latitud = latitudFinal,
-                Longitud = longitudFinal
-            };
-        }
 
         private static void Validar(CrearEnvioDto dto)
         {

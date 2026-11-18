@@ -1,64 +1,45 @@
-﻿using System.Data.Common;
+using System.Data.Common;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
-using Microsoft.EntityFrameworkCore;
 using Moq;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
+using RuteaYa.Test.Helpers;
 using RuteaYa.Web.Controllers;
-using Xunit;
+using RuteaYa.Web.Models;
 
 namespace RuteaYa.Test;
 
 public class EnviosControllerTest
 {
-    private static EnviosController Controlador(Mock<EnviosLogica> logica,
-        string? identificador = "7", bool autenticado = true)
+    // Se prueba la lógica real sobre EF interceptado; no se mockean métodos no virtuales.
+    private static EnviosController Controlador(EnviosContextoPrueba contexto, string? identificador = "7",
+        IGeocodificacionServicio? geo = null, string tipoClaim = ClaimTypes.NameIdentifier)
     {
-        var claims = identificador == null ? Array.Empty<Claim>() :
-            new[] { new Claim(ClaimTypes.NameIdentifier, identificador) };
-
-        var httpContext = new DefaultHttpContext
+        var claims = identificador == null ? Array.Empty<Claim>() : new[] { new Claim(tipoClaim, identificador) };
+        var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Cookies")) };
+        return new EnviosController(new EnviosLogica(contexto.Db, geo ?? Mock.Of<IGeocodificacionServicio>()))
         {
-            User = new ClaimsPrincipal(new ClaimsIdentity(claims, autenticado ? "Cookies" : null))
-        };
-
-        var tempData = new TempDataDictionary(httpContext, Mock.Of<ITempDataProvider>());
-
-        return new EnviosController(logica.Object)
-        {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = httpContext
-            },
-            TempData = tempData
+            ControllerContext = new ControllerContext { HttpContext = http },
+            TempData = new TempDataDictionary(http, Mock.Of<ITempDataProvider>())
         };
     }
 
     [Fact]
     public async Task Index_UsuarioAutenticado_DevuelveVistaConEnvios()
     {
-        var enviosEsperados = new List<EnvioDto>
-        {
-            new EnvioDto { Id = 1, Descripcion = "Paquete 1", Monto = 1000 },
-            new EnvioDto { Id = 2, Descripcion = "Paquete 2", Monto = 2000 }
-        };
-
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!) { CallBase = false };
-        using var cancelacion = new CancellationTokenSource();
-        logica.Setup(l => l.ListarAsync(7, null)).ReturnsAsync(enviosEsperados);
-
-        var controlador = Controlador(logica);
-        var resultado = await controlador.Index(null, cancelacion.Token);
-
-        var vista = Assert.IsType<ViewResult>(resultado);
+        using var contexto = new EnviosContextoPrueba();
+        contexto.Consultas.Responder(EnviosContextoPrueba.Envios(
+            (1, 7, null, EstadoEnvio.BuscandoConductor, "Paquete 1"), (2, 7, null, EstadoEnvio.Entregado, "Paquete 2")));
+        var vista = Assert.IsType<ViewResult>(await Controlador(contexto).Index(null));
         Assert.Equal("~/Views/Panel/Envios.cshtml", vista.ViewName);
-        var modelo = Assert.IsAssignableFrom<IEnumerable<EnvioDto>>(vista.Model);
-        Assert.Equal(2, modelo.Count());
-        logica.Verify(l => l.ListarAsync(7, null), Times.Once);
+        Assert.Equal(2, Assert.IsAssignableFrom<IEnumerable<EnvioDto>>(vista.Model).Count());
+        var consulta = Assert.Single(contexto.Consultas.Consultas);
+        Assert.Matches(@"\[UsuarioId\]\s*=\s*@", consulta.Sql);
+        Assert.Contains(consulta.Parametros.Values, v => Equals(v, 7));
     }
 
     [Theory]
@@ -66,42 +47,43 @@ public class EnviosControllerTest
     [InlineData("")]
     [InlineData("0")]
     [InlineData("-1")]
+    [InlineData("no-numérico")]
     public async Task Index_IdentidadSinIdValido_ProhibeSinConsultar(string? identificador)
     {
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
+        using var contexto = new EnviosContextoPrueba();
+        Assert.IsType<ForbidResult>(await Controlador(contexto, identificador).Index(null));
+        Assert.Empty(contexto.Consultas.Consultas);
+        Assert.Equal(0, contexto.Guardados);
+    }
 
-        var resultado = await Controlador(logica, identificador).Index(null);
-
-        Assert.IsType<ForbidResult>(resultado);
+    [Fact]
+    public async Task Index_ClaimSub_UsaUsuarioReal()
+    {
+        using var contexto = new EnviosContextoPrueba();
+        contexto.Consultas.Responder(EnviosContextoPrueba.Envios());
+        Assert.IsType<ViewResult>(await Controlador(contexto, "8", tipoClaim: "sub").Index(null));
+        Assert.Contains(Assert.Single(contexto.Consultas.Consultas).Parametros.Values, v => Equals(v, 8));
     }
 
     [Fact]
     public async Task Index_ErrorDeBaseDeDatos_MuestraMensajeSinExponerDatos()
     {
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-        logica.Setup(l => l.ListarAsync(7, null)).ThrowsAsync(new ErrorBaseDatosSimulado());
-
-        var controlador = Controlador(logica);
-        var resultado = await controlador.Index(null);
-
-        var vista = Assert.IsType<ViewResult>(resultado);
+        using var contexto = new EnviosContextoPrueba(new ErrorBaseDatosSimulado());
+        var controlador = Controlador(contexto);
+        var vista = Assert.IsType<ViewResult>(await controlador.Index(null));
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, controlador.Response.StatusCode);
-        Assert.NotNull(controlador.ViewBag.Error);
+        Assert.DoesNotContain("interno", (string)controlador.ViewBag.Error);
         Assert.Empty(Assert.IsType<EnvioDto[]>(vista.Model));
     }
 
     [Fact]
     public async Task Detalle_IdValido_DevuelveVistaConEnvio()
     {
-        var envio = new EnvioDto { Id = 5, Descripcion = "Caja", Monto = 1500 };
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-        logica.Setup(l => l.ObtenerAsync(7, 5)).ReturnsAsync(envio);
-
-        var resultado = await Controlador(logica).Detalle(5);
-
-        var vista = Assert.IsType<ViewResult>(resultado);
+        using var contexto = new EnviosContextoPrueba();
+        contexto.Consultas.Responder(EnviosContextoPrueba.Envios((5, 7, null, EstadoEnvio.BuscandoConductor, "Caja")));
+        var vista = Assert.IsType<ViewResult>(await Controlador(contexto).Detalle(5));
         Assert.Equal("~/Views/Panel/DetalleEnvio.cshtml", vista.ViewName);
-        Assert.Same(envio, vista.Model);
+        Assert.Equal("Caja", Assert.IsType<EnvioDto>(vista.Model).Descripcion);
     }
 
     [Theory]
@@ -109,94 +91,109 @@ public class EnviosControllerTest
     [InlineData(-5)]
     public async Task Detalle_IdInvalido_DevuelveNotFoundSinConsultar(int idInvalido)
     {
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-
-        var resultado = await Controlador(logica).Detalle(idInvalido);
-
-        Assert.IsType<NotFoundResult>(resultado);
+        using var contexto = new EnviosContextoPrueba();
+        Assert.IsType<NotFoundResult>(await Controlador(contexto).Detalle(idInvalido));
+        Assert.Empty(contexto.Consultas.Consultas);
     }
 
     [Fact]
     public async Task Detalle_EnvioInexistente_DevuelveNotFound()
     {
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-        logica.Setup(l => l.ObtenerAsync(7, 99)).ReturnsAsync((EnvioDto?)null);
-
-        var resultado = await Controlador(logica).Detalle(99);
-
-        Assert.IsType<NotFoundResult>(resultado);
+        using var contexto = new EnviosContextoPrueba();
+        contexto.Consultas.Responder(EnviosContextoPrueba.Envios());
+        Assert.IsType<NotFoundResult>(await Controlador(contexto).Detalle(99));
     }
 
     [Fact]
     public async Task Crear_Get_DevuelveVistaFormulario()
     {
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-
-        var resultado = Controlador(logica).Crear();
-
-        var vista = Assert.IsType<ViewResult>(resultado);
+        using var contexto = new EnviosContextoPrueba();
+        var vista = Assert.IsType<ViewResult>(await Controlador(contexto).Crear());
         Assert.Equal("~/Views/Panel/NuevoEnvio.cshtml", vista.ViewName);
     }
 
     [Fact]
-    public async Task Crear_PostValido_RedirigeAIndexConMensajeExito()
+    public async Task Crear_PostConTextoPeroSinFormularioVerificado_NoPublicaNiGeocodifica()
     {
-        var dto = new CrearEnvioDto { OrigenDir = "Origen", DestinoDir = "Destino", Descripcion = "Test" };
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-        logica.Setup(l => l.CrearAsync(7, dto)).ReturnsAsync(new EnvioDto { Id = 1 });
-
-        var controlador = Controlador(logica);
-        var resultado = await controlador.Crear(dto);
-
-        var redireccion = Assert.IsType<RedirectToActionResult>(resultado);
-        Assert.Equal("Index", redireccion.ActionName);
-        Assert.True(controlador.TempData.ContainsKey("Exito"));
+        using var contexto = new EnviosContextoPrueba();
+        var geo = new Mock<IGeocodificacionServicio>(MockBehavior.Strict);
+        geo.Setup(g => g.GeocodificarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { new ResultadoGeocodificacionDto { Posicion = new() { Latitud = -34, Longitud = -58 } } });
+        var controlador = Controlador(contexto, geo: geo.Object);
+        Assert.IsType<ViewResult>(await controlador.Crear(DtoValido()));
+        Assert.False(controlador.ModelState.IsValid);
+        Assert.False(controlador.TempData.ContainsKey("Exito"));
+        Assert.Equal(0, contexto.Guardados);
+        geo.VerifyNoOtherCalls();
     }
 
     [Fact]
     public async Task Crear_ModeloInvalido_DevuelveVistaConDtoSinConsultar()
     {
-        var dto = new CrearEnvioDto();
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-        var controlador = Controlador(logica);
+        using var contexto = new EnviosContextoPrueba();
+        var controlador = Controlador(contexto);
         controlador.ModelState.AddModelError("Descripcion", "Campo requerido");
+        var dto = new CrearEnvioViewModel();
+        Assert.Same(dto, Assert.IsType<ViewResult>(await controlador.Crear(dto)).Model);
+        Assert.Empty(contexto.Consultas.Consultas);
+        Assert.Equal(0, contexto.Guardados);
+    }
 
-        var resultado = await controlador.Crear(dto);
+    [Fact]
+    public async Task Crear_SinFormulario_NoConsultaProveedorNiExponeDatos()
+    {
+        using var contexto = new EnviosContextoPrueba();
+        var geo = new Mock<IGeocodificacionServicio>(MockBehavior.Strict);
+        geo.Setup(g => g.GeocodificarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("URL y credencial ficticia que no deben verse"));
+        var controlador = Controlador(contexto, geo: geo.Object);
+        Assert.IsType<ViewResult>(await controlador.Crear(DtoValido()));
+        Assert.Equal(200, controlador.Response.StatusCode);
+        Assert.DoesNotContain("credencial", controlador.ModelState[string.Empty]!.Errors.Single().ErrorMessage);
+        Assert.Equal(0, contexto.Guardados);
+        Assert.Empty(contexto.Db.ChangeTracker.Entries());
+        geo.VerifyNoOtherCalls();
+    }
 
-        var vista = Assert.IsType<ViewResult>(resultado);
-        Assert.Same(dto, vista.Model);
+    [Theory]
+    [InlineData(null)]
+    [InlineData("malformado")]
+    public async Task CrearYCancelar_SinClaimValido_NoOperanComoUsuarioUno(string? identificador)
+    {
+        using var contexto = new EnviosContextoPrueba();
+        var controlador = Controlador(contexto, identificador);
+        Assert.IsType<ForbidResult>(await controlador.Crear(DtoValido()));
+        Assert.IsType<ForbidResult>(await controlador.Cancelar(10));
+        Assert.IsType<ForbidResult>(await controlador.Detalle(10));
+        Assert.Empty(contexto.Consultas.Consultas);
+        Assert.Equal(0, contexto.Guardados);
     }
 
     [Fact]
     public async Task Cancelar_PostExitoso_RedirigeAIndexConMensajeExito()
     {
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-        logica.Setup(l => l.CancelarAsync(7, 10)).ReturnsAsync(true);
-
-        var controlador = Controlador(logica);
-        var resultado = await controlador.Cancelar(10);
-
-        var redireccion = Assert.IsType<RedirectToActionResult>(resultado);
-        Assert.Equal("Index", redireccion.ActionName);
+        using var contexto = new EnviosContextoPrueba();
+        contexto.Consultas.Responder(EnviosContextoPrueba.Envios((10, 7, null, EstadoEnvio.BuscandoConductor, "Test")));
+        var controlador = Controlador(contexto);
+        Assert.Equal("Index", Assert.IsType<RedirectToActionResult>(await controlador.Cancelar(10)).ActionName);
         Assert.True(controlador.TempData.ContainsKey("Exito"));
+        Assert.Equal(1, contexto.Guardados);
+        Assert.Equal(EstadoEnvio.Cancelado, contexto.Db.Envios.Local.Single().Estado);
     }
 
     [Fact]
     public async Task Cancelar_ExcepcionLogica_RedirigeAIndexConMensajeError()
     {
-        var logica = new Mock<EnviosLogica>((RuteaYaDbContext)null!);
-        logica.Setup(l => l.CancelarAsync(7, 10)).ThrowsAsync(new InvalidOperationException("No se puede cancelar."));
-
-        var controlador = Controlador(logica);
-        var resultado = await controlador.Cancelar(10);
-
-        var redireccion = Assert.IsType<RedirectToActionResult>(resultado);
-        Assert.Equal("Index", redireccion.ActionName);
+        using var contexto = new EnviosContextoPrueba();
+        contexto.Consultas.Responder(EnviosContextoPrueba.Envios((10, 7, null, EstadoEnvio.Entregado, "Test")));
+        var controlador = Controlador(contexto);
+        Assert.Equal("Index", Assert.IsType<RedirectToActionResult>(await controlador.Cancelar(10)).ActionName);
         Assert.True(controlador.TempData.ContainsKey("Error"));
+        Assert.Equal(0, contexto.Guardados);
     }
 
-    private sealed class ErrorBaseDatosSimulado : DbException
-    {
-        public ErrorBaseDatosSimulado() : base("error interno simulado") { }
-    }
+    private static CrearEnvioViewModel DtoValido() => new() { OrigenDir = "Origen", DestinoDir = "Destino",
+        Descripcion = "Test", PesoKg = 1, Monto = 100, FechaLimite = DateTime.Today.AddDays(1) };
+
+    private sealed class ErrorBaseDatosSimulado() : DbException("error interno simulado");
 }

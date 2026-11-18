@@ -85,6 +85,10 @@ pantalla ni un endpoint de prueba. No se ejecutaron consultas reales con credenc
 
 ## Documentación oficial consultada
 
+Para la nueva pantalla MVC y la extensión independiente de geometría, ver
+[Previsualización de recorridos propios](recorridos-previsualizacion.md).
+`IRutasServicio` conserva el cálculo de totales descrito en este documento.
+
 - [GET /v8/routes: parámetros, autenticación y respuesta](https://docs.here.com/routing/reference/routing-api-v8-calculateroutes.md)
 - [Paradas intermedias y orden de via](https://docs.here.com/routing/docs/routing-v8-intermediate-waypoints.md)
 - [Resumen por sección, unidades y totales](https://docs.here.com/routing/docs/routing-v8-route-summary.md)

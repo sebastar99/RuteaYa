@@ -39,6 +39,24 @@ public class ViajesController : ControllerBase
         return int.TryParse(identificador, out var id) && id > 0 ? id : 0;
     }
 
+    [HttpPost("ubicaciones/contexto")]
+    public async Task<IActionResult> CrearContextoUbicacion(SolicitudContextoViajeDto dto,
+        [FromServices] IUbicacionesConfirmadasServicio ubicaciones, CancellationToken ct)
+    {
+        var usuarioId = ObtenerUsuarioId();
+        if (usuarioId <= 0) return Unauthorized();
+        if (dto.Campo == RuteaYa.Entidades.CampoUbicacion.Parada && dto.ParadaId.HasValue)
+        {
+            if (!dto.ViajeId.HasValue || !dto.FormularioId.HasValue || dto.ParadaId <= 0) return BadRequest();
+            var viaje = await _viajesLogica.ObtenerPorIdAsync(usuarioId, dto.ViajeId.Value);
+            if (viaje == null || !viaje.Paradas.Any(p => p.Id == dto.ParadaId)) return NotFound();
+            dto.ClaveCampo = IdentidadParadaFormulario.Existente(dto.FormularioId.Value, dto.ParadaId.Value);
+        }
+        try { return Ok(await ubicaciones.CrearContextoAsync(usuarioId, RuteaYa.Entidades.TipoRecursoUbicacion.Viaje,
+            dto.ViajeId, dto.Campo, dto.ClaveCampo, dto.FormularioId, ct)); }
+        catch (ComprobanteUbicacionException) { return BadRequest(new { mensaje = "No se pudo autorizar el contexto de ubicaciones del viaje." }); }
+    }
+
     [HttpGet]
     public async Task<IActionResult> ListarViajes ([FromQuery] string estado = "todos")
     {
@@ -119,6 +137,7 @@ public class ViajesController : ControllerBase
                 new { id = resultado.viaje.Id }, resultado.viaje
             );
         }
+        catch (ComprobanteUbicacionException ex) { return Conflict(new { mensaje = ex.Message, codigo = ex.Codigo }); }
         catch (ArgumentException ex)
         {
             return BadRequest(new { mensaje = ex.Message });
@@ -159,6 +178,7 @@ public class ViajesController : ControllerBase
                 
             return Ok(resultado.viaje);
         }
+        catch (ComprobanteUbicacionException ex) { return Conflict(new { mensaje = ex.Message, codigo = ex.Codigo }); }
         catch (ArgumentException ex)
         {
             return BadRequest(new { mensaje = ex.Message });

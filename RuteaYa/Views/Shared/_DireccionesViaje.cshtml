@@ -1,0 +1,21 @@
+@model RuteaYa.Web.Models.ViajeViewModel
+<input type="hidden" name="FormularioDirecciones" value="@Model.FormularioDirecciones" />
+@if (Model.OrigenCampo == null || Model.DestinoCampo == null)
+{
+    <div class="panel-alert" role="alert">No se pudo preparar el formulario de direcciones. Volvé a abrir esta pantalla cuando la API esté disponible.</div>
+}
+else
+{
+    <div class="panel-form-grid">
+        <div class="panel-field"><partial name="_CampoDireccionHere" model="Model.OrigenCampo" /></div>
+        <div class="panel-field"><partial name="_CampoDireccionHere" model="Model.DestinoCampo" /></div>
+    </div>
+    <h3>Paradas intermedias</h3>
+    <p>Una dirección por entrada, en el orden del recorrido. Las comas pertenecen a la dirección.</p>
+    <div data-paradas-viaje>
+        @foreach (var parada in Model.Paradas) { <partial name="_ParadaViajeDireccion" model="parada" /> }
+    </div>
+    <button type="button" class="panel-button outline" data-agregar-parada
+            data-url="@Url.Action("Parada", "DireccionesViaje", new { formulario = Model.FormularioDirecciones })">Agregar parada</button>
+}
+<p role="status" aria-live="polite" data-estado-viaje>Elegí y confirmá las direcciones nuevas o modificadas.</p>

@@ -12,7 +12,7 @@ namespace RuteaYa.Web.Services;
 /// y departureTime=any (sin hora de salida ni tráfico en tiempo real).
 /// Suma los resúmenes de todas las secciones de la primera ruta devuelta.
 /// </summary>
-public class RutasHereServicio : IRutasServicio
+public class RutasHereServicio : IRutasServicio, IRutasGeometriaServicio
 {
     private readonly HttpClient _httpClient;
     private readonly IOptions<HereRoutingOpciones> _opciones;
@@ -28,18 +28,25 @@ public class RutasHereServicio : IRutasServicio
     public async Task<ResultadoRutaDto> CalcularAsync(
         IReadOnlyList<PuntoRutaDto> puntos,
         CancellationToken cancellationToken = default)
+        => (await ConsultarAsync(puntos, false, cancellationToken)).Totales;
+
+    public Task<ResultadoRutaGeometriaDto> CalcularGeometriaAsync(
+        IReadOnlyList<PuntoRutaDto> puntos, CancellationToken cancellationToken = default)
+        => ConsultarAsync(puntos, true, cancellationToken);
+
+    private async Task<ResultadoRutaGeometriaDto> ConsultarAsync(
+        IReadOnlyList<PuntoRutaDto> puntos, bool geometria, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var coordenadas = ValidarYFormatear(puntos);
         var apiKey = _opciones.Value.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException(
-                "No se configuró HereRouting:ApiKey. Usá User Secrets o variables de entorno.");
+            throw new HereNoConfiguradoException();
 
         var parametros = new List<string>
         {
             "transportMode=car", "routingMode=fast", "departureTime=any",
-            "return=summary", "alternatives=0",
+            geometria ? "return=summary,polyline" : "return=summary", "alternatives=0",
             $"origin={Uri.EscapeDataString(coordenadas[0])}",
             $"destination={Uri.EscapeDataString(coordenadas[^1])}"
         };
@@ -61,7 +68,15 @@ public class RutasHereServicio : IRutasServicio
             var datos = await JsonSerializer.DeserializeAsync<RespuestaHere>(
                 contenido, cancellationToken: cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            return ObtenerTotales(datos);
+            var resultado = new ResultadoRutaGeometriaDto { Totales = ObtenerTotales(datos) };
+            if (geometria)
+            {
+                if (datos!.Routes![0]!.Sections!.Count != puntos.Count - 1)
+                    throw new InvalidOperationException("HERE Routing devolvió un recorrido con secciones incompletas.");
+                foreach (var seccion in datos!.Routes![0]!.Sections!)
+                    resultado.Secciones.Add(FlexiblePolyline.Decodificar(seccion!.Polyline));
+            }
+            return resultado;
         }
         catch (HttpRequestException error)
         {
@@ -74,7 +89,7 @@ public class RutasHereServicio : IRutasServicio
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            throw new OperationCanceledException("Se canceló la consulta a HERE Routing.", cancellationToken);
+            throw;
         }
         catch (OperationCanceledException)
         {
@@ -165,6 +180,8 @@ public class RutasHereServicio : IRutasServicio
 
     private sealed class SeccionHere
     {
+        [JsonPropertyName("polyline")]
+        public string? Polyline { get; set; }
         [JsonPropertyName("summary")]
         public ResumenHere? Summary { get; set; }
         [JsonPropertyName("notices")]

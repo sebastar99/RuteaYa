@@ -76,6 +76,12 @@ namespace RuteaYa.Entidades.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("decimal(18,6)");
 
+                    b.Property<DateTimeOffset?>("EntregaLimiteConOffset")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("EntregaUbicacionId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<byte>("Estado")
                         .HasColumnType("tinyint");
 
@@ -103,11 +109,23 @@ namespace RuteaYa.Entidades.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<DateTimeOffset?>("RetiroDisponibleDesde")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("RetiroSinRestriccion")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("RetiroUbicacionId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
+
+                    b.Property<int?>("SalidaViajeId")
+                        .HasColumnType("int");
 
                     b.Property<byte>("Tamano")
                         .HasColumnType("tinyint");
@@ -118,6 +136,12 @@ namespace RuteaYa.Entidades.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ConductorId");
+
+                    b.HasIndex("EntregaUbicacionId");
+
+                    b.HasIndex("RetiroUbicacionId");
+
+                    b.HasIndex("SalidaViajeId");
 
                     b.HasIndex("UsuarioId");
 
@@ -140,15 +164,186 @@ namespace RuteaYa.Entidades.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<Guid?>("UbicacionConfirmadaId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("ViajeId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UbicacionConfirmadaId");
+
                     b.HasIndex("ViajeId", "Orden")
                         .IsUnique();
 
                     b.ToTable("Paradas", (string)null);
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.SalidaViaje", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Disponible")
+                        .HasColumnType("bit");
+
+                    b.Property<DateOnly>("Fecha")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("FechaHora")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("LlegadaMaxima")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("LlegadaSinRestriccion")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("ViajeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ViajeId", "Fecha")
+                        .IsUnique();
+
+                    b.ToTable("SalidasViaje", (string)null);
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.UbicacionConfirmada", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AccesoElegido")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Campo")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ClaveCampo")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTimeOffset>("ConfirmadaEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("ConsumidaEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DireccionNormalizada")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<Guid>("FormularioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("IdHere")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<decimal>("NavegacionLatitud")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("NavegacionLongitud")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<bool>("NumeroPuertaCorregido")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("PosicionEstimada")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("PosicionLatitud")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("PosicionLongitud")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<string>("Proveedor")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("RecursoId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RevisionRecurso")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("SeleccionHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("TipoNumeroPuerta")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<int>("TipoRecurso")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TipoResultado")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("UsuarioId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("VenceEnUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeleccionHash")
+                        .IsUnique();
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("VenceEnUtc");
+
+                    b.ToTable("UbicacionesConfirmadas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Ubicacion_Acceso", "[AccesoElegido] >= -1");
+
+                            t.HasCheckConstraint("CK_Ubicacion_Ambito", "([TipoRecurso] = 1 AND [Campo] IN (1,2,3)) OR ([TipoRecurso] = 2 AND [Campo] IN (4,5))");
+
+                            t.HasCheckConstraint("CK_Ubicacion_Navegacion", "[NavegacionLatitud] BETWEEN -90 AND 90 AND [NavegacionLongitud] BETWEEN -180 AND 180");
+
+                            t.HasCheckConstraint("CK_Ubicacion_Posicion", "[PosicionLatitud] BETWEEN -90 AND 90 AND [PosicionLongitud] BETWEEN -180 AND 180");
+                        });
                 });
 
             modelBuilder.Entity("RuteaYa.Entidades.Usuario", b =>
@@ -211,6 +406,9 @@ namespace RuteaYa.Entidades.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<Guid?>("DestinoUbicacionId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<decimal>("DesvioMaxKm")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
@@ -226,6 +424,9 @@ namespace RuteaYa.Entidades.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<Guid?>("OrigenUbicacionId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<decimal>("PesoMax")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
@@ -234,6 +435,10 @@ namespace RuteaYa.Entidades.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DestinoUbicacionId");
+
+                    b.HasIndex("OrigenUbicacionId");
 
                     b.ToTable("Viajes", (string)null);
                 });
@@ -256,6 +461,21 @@ namespace RuteaYa.Entidades.Migrations
                         .HasForeignKey("ConductorId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("RuteaYa.Entidades.UbicacionConfirmada", "EntregaUbicacion")
+                        .WithMany()
+                        .HasForeignKey("EntregaUbicacionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("RuteaYa.Entidades.UbicacionConfirmada", "RetiroUbicacion")
+                        .WithMany()
+                        .HasForeignKey("RetiroUbicacionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("RuteaYa.Entidades.SalidaViaje", "SalidaViaje")
+                        .WithMany()
+                        .HasForeignKey("SalidaViajeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("RuteaYa.Entidades.Usuario", "Usuario")
                         .WithMany()
                         .HasForeignKey("UsuarioId")
@@ -264,18 +484,68 @@ namespace RuteaYa.Entidades.Migrations
 
                     b.Navigation("Conductor");
 
+                    b.Navigation("EntregaUbicacion");
+
+                    b.Navigation("RetiroUbicacion");
+
+                    b.Navigation("SalidaViaje");
+
                     b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("RuteaYa.Entidades.Parada", b =>
                 {
+                    b.HasOne("RuteaYa.Entidades.UbicacionConfirmada", "UbicacionConfirmada")
+                        .WithMany()
+                        .HasForeignKey("UbicacionConfirmadaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("RuteaYa.Entidades.Viaje", "Viaje")
                         .WithMany("Paradas")
                         .HasForeignKey("ViajeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("UbicacionConfirmada");
+
                     b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.SalidaViaje", b =>
+                {
+                    b.HasOne("RuteaYa.Entidades.Viaje", "Viaje")
+                        .WithMany()
+                        .HasForeignKey("ViajeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Viaje");
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.UbicacionConfirmada", b =>
+                {
+                    b.HasOne("RuteaYa.Entidades.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("RuteaYa.Entidades.Viaje", b =>
+                {
+                    b.HasOne("RuteaYa.Entidades.UbicacionConfirmada", "DestinoUbicacion")
+                        .WithMany()
+                        .HasForeignKey("DestinoUbicacionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("RuteaYa.Entidades.UbicacionConfirmada", "OrigenUbicacion")
+                        .WithMany()
+                        .HasForeignKey("OrigenUbicacionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("DestinoUbicacion");
+
+                    b.Navigation("OrigenUbicacion");
                 });
 
             modelBuilder.Entity("RuteaYa.Entidades.Viaje", b =>

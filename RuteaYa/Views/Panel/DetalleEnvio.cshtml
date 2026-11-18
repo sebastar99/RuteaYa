@@ -1,4 +1,4 @@
-@model RuteaYa.Logica.DTOs.EnvioDto 
+@model RuteaYa.Logica.DTOs.EnvioDto
 
 @{
     ViewData["Title"] = "Detalle del envío";
@@ -118,12 +118,12 @@ else if (Model != null)
         <div class="panel-card panel-modal-content">
             <h3>¿Estás seguro de cancelar?</h3>
             <p class="panel-muted">El paquete dejará de estar disponible para los conductores y la publicación se dará por finalizada.</p>
-            
+
             <div class="panel-form-actions" style="margin-top: 20px;">
                 <button type="button" class="panel-button outline" onclick="cerrarModalCancelar()">
                     Volver atrás
                 </button>
-                
+
                 <form asp-controller="Envios" asp-action="Cancelar" asp-route-id="@Model.Id" method="post" style="display:inline;">
                     @Html.AntiForgeryToken()
                     <button type="submit" class="panel-button danger">

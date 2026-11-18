@@ -171,3 +171,17 @@ dotnet test "RuteaYa.Test/RuteaYa.Test.csproj" --no-restore --filter "FullyQuali
 dotnet test "RuteaYa.slnx" --no-restore
 dotnet build "RuteaYa.slnx" --no-restore
 ```
+
+## Zona horaria y fecha límite sin horario (envíos)
+
+- El usuario ya no ingresa un offset UTC: solo fecha y hora. La zona la resuelve el servidor
+  (`ZonaHorariaViaje.PorDirecciones`) y únicamente es Argentina cuando el retiro y la entrega son direcciones
+  confirmadas por HERE que terminan en ", Argentina". Si no puede determinarse, no se inventa una zona: los
+  horarios del envío se rechazan al publicar y una fecha límite sin horario queda como dato pendiente.
+- Una fecha límite sin horario (00:00) se interpreta como "hasta el final de ese día" (23:59:59) en hora de
+  Argentina, solo al evaluar y solo si la zona se determinó. No se modifican los datos guardados. Un envío con
+  horario explícito conserva su offset persistido.
+- Un rechazo real se mantiene: una salida posterior a la fecha límite es incompatible, y un recorrido que
+  termina después del límite no se aprueba sin poder verificarlo.
+- En Crear envío, "El retiro no tiene restricción de horario" viene tildado como elección visible del
+  formulario; al indicar un horario de retiro se destilda.

@@ -1,0 +1,15 @@
+@model RuteaYa.Web.Models.CampoDireccionViewModel
+<div class="campo-direccion-here" data-direccion-here
+     data-texto-original="@Model.TextoInicial" data-conservar-actual="@(Model.ConservarActual ? "true" : "false")"
+     data-sugerencias-url="@Model.UrlSugerencias" data-resolver-url="@Model.UrlResolver" data-confirmar-url="@Model.UrlConfirmar">
+    <label for="@Model.IdHtml">@Model.Etiqueta</label>
+    <div class="direccion-buscador">
+    <input id="@Model.IdHtml" name="@Model.NombreTexto" type="search" autocomplete="off" minlength="3" maxlength="@Model.LongitudMaxima" required
+           value="@Model.TextoInicial" role="combobox" aria-autocomplete="list" aria-expanded="false"
+           aria-controls="@(Model.IdHtml)-sugerencias" aria-describedby="@(Model.IdHtml)-estado" data-texto-direccion />
+    <ul id="@(Model.IdHtml)-sugerencias" role="listbox" aria-label="Sugerencias de dirección" data-sugerencias></ul>
+    </div>
+    <p id="@(Model.IdHtml)-estado" role="status" aria-live="polite" data-estado-direccion>@(Model.TokenInicial != null ? "✓ Dirección seleccionada" : Model.ConservarActual ? (Model.ConfirmadaPersistida ? "✓ Dirección guardada" : "Actualizá esta dirección eligiendo una opción de la lista para poder ver su recorrido.") : "Escribí la dirección y elegí una opción de la lista.")</p>
+    <input type="hidden" name="@Model.NombreToken" value="@Model.TokenInicial" data-confirmacion-direccion />
+    @Html.ValidationMessage(Model.NombreTexto)
+</div>

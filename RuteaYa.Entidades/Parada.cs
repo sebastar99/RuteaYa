@@ -9,6 +9,8 @@ public class Parada {
     [Required]
     [MaxLength(150)]
     public string Ubicacion { get; set; } = string.Empty;
+    public Guid? UbicacionConfirmadaId { get; set; }
+    public UbicacionConfirmada? UbicacionConfirmada { get; set; }
 
     public int Orden { get; set; }
 

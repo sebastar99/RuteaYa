@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RuteaYa.Logica;
+using RuteaYa.Logica.DTOs;
+using Microsoft.EntityFrameworkCore;
+using RuteaYa.Entidades;
 using RuteaYa.Web.Models;
 
 namespace RuteaYa.Web.Controllers;
@@ -14,57 +17,89 @@ public class OportunidadesController : Controller
 {
     private const string Vista = "~/Views/Panel/Oportunidades.cshtml";
     private readonly IOportunidadesLogica _oportunidades;
+    private readonly EnviosLogica? _envios;
+    private readonly RuteaYaDbContext? _db;
 
-    public OportunidadesController(IOportunidadesLogica oportunidades)
+    public OportunidadesController(IOportunidadesLogica oportunidades, EnviosLogica? envios = null, RuteaYaDbContext? db = null)
     {
         ArgumentNullException.ThrowIfNull(oportunidades);
         _oportunidades = oportunidades;
+        _envios = envios;
+        _db = db;
     }
 
     [HttpGet("")]
     [HttpGet("Index")]
     public async Task<IActionResult> Index(
         int? viajeId = null, int pagina = 1, int tamanoPagina = 10,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, int? salidaId = null)
     {
         if (User.Identity?.IsAuthenticated != true) return Challenge();
         var conductorId = ObtenerConductorId();
         if (conductorId <= 0) return Forbid();
-        if (!ModelState.IsValid) return BadRequest("Los parámetros de la consulta no son válidos.");
+        if (!ModelState.IsValid) return await ConsultaInvalida();
         if (viajeId.HasValue && viajeId.Value <= 0) return NotFound();
+        if (salidaId.HasValue && (!viajeId.HasValue || salidaId <= 0)) return NotFound();
 
         try
         {
-            var listado = await _oportunidades.ConsultarAsync(
-                conductorId, viajeId, pagina, tamanoPagina, cancellationToken);
-            if (listado == null) return NotFound();
-            return View(Vista, new OportunidadesViewModel { Listado = listado });
+            var modelo = await PrepararListado(conductorId, viajeId, salidaId, pagina, tamanoPagina, cancellationToken);
+            if (modelo == null) return NotFound();
+            return View(Vista, modelo);
         }
         catch (ArgumentOutOfRangeException)
         {
-            return BadRequest("La página debe ser positiva y el tamaño de página debe estar entre 1 y 50.");
+            if (pagina < 1) ModelState.AddModelError(nameof(pagina), "La página debe ser mayor o igual a 1.");
+            if (tamanoPagina is < 1 or > 50) ModelState.AddModelError(nameof(tamanoPagina), "Ingresá entre 1 y 50 envíos por página.");
+            return await ConsultaInvalida();
         }
-        catch (Exception error) when (error is DbException or TimeoutException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
+        catch (Exception error) when (error is DbException or TimeoutException or HttpRequestException or InvalidOperationException)
         {
             // No mostrar mensajes del proveedor, conexiones ni datos internos.
             Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             return View(Vista, new OportunidadesViewModel
             {
-                Error = "No se pudieron cargar los candidatos. Intentá nuevamente más tarde."
+                Error = "No se pudieron cargar o evaluar los candidatos. Revisá la disponibilidad de datos y del servicio de rutas e intentá nuevamente."
             });
         }
+
+        async Task<IActionResult> ConsultaInvalida()
+        {
+            var propios = await _oportunidades.ConsultarAsync(conductorId, null, 1, 10, cancellationToken);
+            Response.StatusCode = 400;
+            return View(Vista, new OportunidadesViewModel { Listado = propios ?? new() });
+        }
+    }
+
+    private async Task<OportunidadesViewModel?> PrepararListado(int conductorId, int? viajeId, int? salidaId, int pagina, int tamanoPagina, CancellationToken ct)
+    {
+        var listado = salidaId.HasValue
+            ? await _oportunidades.ConsultarSalidaAsync(conductorId, viajeId!.Value, salidaId.Value, pagina, tamanoPagina, ct)
+            : await _oportunidades.ConsultarAsync(conductorId, viajeId, pagina, tamanoPagina, ct);
+        if (listado == null) return null;
+        var modelo = new OportunidadesViewModel { Listado = listado, Seleccion = new() { ViajeId = viajeId ?? 0, LlegadaSinRestriccion = true } };
+        if (_db != null && listado.ViajeSeleccionado != null)
+        {
+            var v = await _db.Viajes.AsNoTracking().Include(v => v.Dias).Include(v => v.OrigenUbicacion)
+                .SingleAsync(v => v.Id == listado.ViajeSeleccionado.Id && v.UsuarioId == conductorId, ct);
+            modelo.DiasHabilitados = v.Dias.Select(d => d.DiaSemana).ToArray(); modelo.HoraSalida = v.HoraSalida;
+            modelo.ZonaAutomatica = ZonaHorariaViaje.Automatica(v);
+        }
+        return modelo;
     }
 
     [HttpGet("Detalle")]
     public async Task<IActionResult> Detalle(
         int viajeId, int envioId, int pagina = 1, int tamanoPagina = 10,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, int? salidaId = null)
     {
         if (User.Identity?.IsAuthenticated != true) return Challenge();
         var conductorId = ObtenerConductorId();
         if (conductorId <= 0) return Forbid();
         if (!ModelState.IsValid) return BadRequest("Los parámetros de la consulta no son válidos.");
         if (viajeId <= 0 || envioId <= 0) return NotFound();
+        if (salidaId <= 0) return NotFound();
         if (pagina < 1 || tamanoPagina < 1 || tamanoPagina > 50)
             return BadRequest("La página debe ser positiva y el tamaño de página debe estar entre 1 y 50.");
 
@@ -74,11 +109,13 @@ public class OportunidadesController : Controller
         };
         try
         {
-            modelo.Detalle = await _oportunidades.ObtenerDetalleAsync(
-                conductorId, viajeId, envioId, cancellationToken);
+            modelo.Detalle = salidaId.HasValue
+                ? await _oportunidades.ObtenerDetalleSalidaAsync(conductorId, viajeId, salidaId.Value, envioId, cancellationToken)
+                : await _oportunidades.ObtenerDetalleAsync(conductorId, viajeId, envioId, cancellationToken);
             if (modelo.Detalle == null) return NotFound();
         }
-        catch (Exception error) when (error is DbException or TimeoutException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
+        catch (Exception error) when (error is DbException or TimeoutException or HttpRequestException or InvalidOperationException)
         {
             Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             modelo.Error = "No se pudo cargar el detalle. Intentá nuevamente más tarde.";
@@ -86,26 +123,91 @@ public class OportunidadesController : Controller
         return View("~/Views/Panel/DetalleOportunidad.cshtml", modelo);
     }
 
-    [HttpPost("Aceptar")]
+    [HttpPost("SeleccionarSalida")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Aceptar(
-        int viajeId, int envioId, [FromServices] EnviosLogica envios)
+    public async Task<IActionResult> SeleccionarSalida(SeleccionSalidaDto seleccion, CancellationToken cancellationToken = default)
     {
+        if (User.Identity?.IsAuthenticated != true) return Challenge();
         var conductorId = ObtenerConductorId();
         if (conductorId <= 0) return Forbid();
-        if (viajeId <= 0 || envioId <= 0) return NotFound();
-
+        if (seleccion.ViajeId <= 0) return NotFound();
         try
         {
-            await envios.AceptarAsync(conductorId, viajeId, envioId);
-            TempData["Exito"] = "Aceptaste el envío. Ya podés gestionarlo desde Mis transportes.";
+            if (!ModelState.IsValid) return await MostrarSalidaInvalida();
+            var id = await _oportunidades.SeleccionarSalidaAsync(conductorId, seleccion, cancellationToken);
+            if (!id.HasValue) return NotFound();
+            return RedirectToAction(nameof(Index), new { viajeId = seleccion.ViajeId, salidaId = id.Value });
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException e) {
+            ModelState.AddModelError(e.ParamName ?? "", e.Message.Split(" (Parameter", StringSplitOptions.None)[0]);
+            return await MostrarSalidaInvalida();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
+        catch (Exception e) when (e is DbException or Microsoft.EntityFrameworkCore.DbUpdateException or TimeoutException)
+        { return StatusCode(503, "No se pudo guardar la salida. Recargá e intentá nuevamente."); }
+
+        async Task<IActionResult> MostrarSalidaInvalida()
         {
-            TempData["Error"] = ex.Message;
+            var modelo = await PrepararListado(conductorId, seleccion.ViajeId, null, 1, 10, cancellationToken);
+            if (modelo == null) return NotFound();
+            modelo.Seleccion = seleccion;
+            return View(Vista, modelo);
         }
 
-        return RedirectToAction("Index", "Transportes");
+    }
+
+    [HttpPost("Aceptar")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Aceptar(int viajeId, int envioId, int? salidaId = null, CancellationToken cancellationToken = default)
+    {
+        if (User.Identity?.IsAuthenticated != true) return Challenge();
+        var conductorId = ObtenerConductorId();
+        if (conductorId <= 0) return Forbid();
+        if (!ModelState.IsValid) return BadRequest("Los parámetros no son válidos.");
+        if (viajeId <= 0 || envioId <= 0) return NotFound();
+        if (!salidaId.HasValue || salidaId <= 0) return BadRequest("Seleccioná una salida concreta antes de aceptar.");
+        if (_envios == null) return StatusCode(503, "No se pudo preparar la aceptación.");
+        try
+        {
+            var resultado = await _envios.AceptarSalidaAsync(conductorId, viajeId, salidaId.Value, envioId, cancellationToken);
+            if (resultado.Estado == EstadoAceptacion.NoEncontrado) return NotFound();
+            if (resultado.Exito)
+            {
+                TempData["Exito"] = resultado.Estado == EstadoAceptacion.YaAceptado
+                    ? $"El envío #{envioId} ya estaba asignado a esta salida. Podés consultarlo en tus transportes."
+                    : $"El envío #{envioId} quedó asignado correctamente a tu salida." + await CapacidadRestanteAsync(conductorId, viajeId, salidaId.Value, cancellationToken);
+                return RedirectToAction("Index", "Transportes");
+            }
+            var mensaje = resultado.Estado switch
+            {
+                EstadoAceptacion.EnvioNoDisponible => "El envío ya fue asignado o dejó de estar disponible.",
+                EstadoAceptacion.SalidaNoValida => "La salida ya no es válida. Elegí otra fecha de salida.",
+                EstadoAceptacion.CapacidadInsuficiente => "No hay capacidad suficiente de peso o cupos en esta salida.",
+                EstadoAceptacion.Incompatible => "El envío no es compatible con esta salida.",
+                EstadoAceptacion.DatosPendientes => "Todavía no se puede confirmar que el envío sea compatible.",
+                _ => "Otro conductor modificó el envío al mismo tiempo. Recargá e intentá de nuevo."
+            };
+            var razon = resultado.Evaluacion == null ? null : PresentacionOportunidad.Razon(resultado.Evaluacion);
+            TempData["ErrorAceptacion"] = razon == null ? mensaje : $"{mensaje} {razon.Motivo} {razon.Solucion}".Trim();
+            if (resultado.Estado != EstadoAceptacion.EnvioNoDisponible)
+                return RedirectToAction(nameof(Detalle), new { viajeId, envioId, salidaId });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
+        catch (Exception e) when (e is HttpRequestException or TimeoutException or InvalidOperationException or Microsoft.EntityFrameworkCore.DbUpdateException or DbException)
+        { TempData["ErrorAceptacion"] = "No se pudo confirmar la asignación. Revisá la disponibilidad del servicio y recargá antes de reintentar."; }
+        return RedirectToAction(nameof(Index), new { viajeId, salidaId });
+    }
+
+    private async Task<string> CapacidadRestanteAsync(int conductorId, int viajeId, int salidaId, CancellationToken ct)
+    {
+        if (_db == null) return "";
+        try
+        {
+            var salida = await new SalidasViajeServicio(_db).ObtenerAsync(conductorId, viajeId, salidaId, ct);
+            return salida?.CuposDisponibles == null || salida.PesoDisponibleKg == null ? ""
+                : $" En esa salida te quedan {salida.CuposDisponibles} cupos y {salida.PesoDisponibleKg:0.##} kg.";
+        }
+        catch (Exception e) when (e is DbException or TimeoutException or InvalidOperationException) { return ""; }
     }
 
     private int ObtenerConductorId()

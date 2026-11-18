@@ -196,7 +196,7 @@ public class GeocodificacionHereServicioTest
         using var handler = new HandlerSimulado((_, _) => throw new InvalidOperationException("No debe enviar HTTP."));
         using var cliente = new HttpClient(handler);
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+        var error = await Assert.ThrowsAsync<HereNoConfiguradoException>(
             () => Servicio(cliente, clave).GeocodificarAsync("Morón"));
 
         Assert.Contains("HereRouting:ApiKey", error.Message);

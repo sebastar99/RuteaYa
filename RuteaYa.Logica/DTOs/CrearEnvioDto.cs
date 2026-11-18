@@ -8,6 +8,7 @@ namespace RuteaYa.Logica.DTOs
 {
     public class CrearEnvioDto
     {
+        public UbicacionesEnvioDto? Ubicaciones { get; set; }
         [Required(ErrorMessage = "El  origen es obligatorio.")]
         public string OrigenDir { get; set; } = string.Empty;
 
@@ -16,6 +17,10 @@ namespace RuteaYa.Logica.DTOs
 
         [Required(ErrorMessage = "La fecha límite es obligatoria.")]
         public DateTime FechaLimite { get; set; }
+        // Opcionales para publicaciones anteriores; si faltan, la evaluación temporal es indeterminada.
+        public DateTime? EntregaLimiteLocal { get; set; }
+        public DateTime? RetiroDisponibleDesdeLocal { get; set; }
+        public bool RetiroSinRestriccion { get; set; }
 
         [Range(0.1, 1000.0, ErrorMessage = "El peso debe ser mayor a 0 kg.")]
         public decimal PesoKg { get; set; }

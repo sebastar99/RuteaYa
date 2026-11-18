@@ -6,12 +6,14 @@ using RuteaYa.Logica.DTOs;
 
 namespace RuteaYa.Logica;
 
-public class ViajesLogica : IViajesLogica
+public partial class ViajesLogica : IViajesLogica
 {
     private readonly RuteaYaDbContext _db;
-    public ViajesLogica(RuteaYaDbContext db)
+    private readonly IUbicacionesConfirmadasServicio _ubicaciones;
+    public ViajesLogica(RuteaYaDbContext db, IUbicacionesConfirmadasServicio? ubicaciones = null)
     {
         _db = db;
+        _ubicaciones = ubicaciones ?? new UbicacionesConfirmadasServicio(db);
     }
 
     // ============== Lista viajes por usuario (filtra: activos/inactivos) ==============
@@ -71,6 +73,8 @@ public class ViajesLogica : IViajesLogica
             return (false, "Los datos del viaje son obligatorios.", null);
         }
 
+        if (dto.Ubicaciones != null) return await GuardarConUbicacionesAsync(usuarioId, null, dto);
+
         var error = Validar(dto);
         if(error != null)
         {
@@ -123,6 +127,8 @@ public class ViajesLogica : IViajesLogica
             return (false, "Los datos del viaje son obligatorios.", null);
         }
 
+        if (dto.Ubicaciones != null) return await GuardarConUbicacionesAsync(usuarioId, id, dto);
+
         var error = Validar(dto);
         if(error != null)
         {
@@ -143,9 +149,13 @@ public class ViajesLogica : IViajesLogica
             return (false, "No se puede editar un viaje inactivo.", null);
         }
 
+        var mismaRuta = viaje.Origen == dto.Origen.Trim() && viaje.Destino == dto.Destino.Trim() &&
+            viaje.Paradas.OrderBy(p => p.Orden).Select(p => p.Ubicacion).SequenceEqual(dto.Paradas.Select(p => p.Trim()));
+        if (!mismaRuta && (viaje.OrigenUbicacionId.HasValue || viaje.DestinoUbicacionId.HasValue || viaje.Paradas.Any(p => p.UbicacionConfirmadaId.HasValue)))
+            return (false, "Para cambiar una ubicación confirmada usá el formulario de ubicaciones verificadas.", null);
         await using var tx = await _db.Database.BeginTransactionAsync();
         _db.DiasViaje.RemoveRange(viaje.Dias);
-        _db.Paradas.RemoveRange(viaje.Paradas);
+        if (!mismaRuta) _db.Paradas.RemoveRange(viaje.Paradas);
 
         viaje.Origen = dto.Origen.Trim();
         viaje.Destino = dto.Destino.Trim();
@@ -162,7 +172,7 @@ public class ViajesLogica : IViajesLogica
         viaje.PesoMax = dto.PesoMax;
         viaje.DesvioMaxKm = dto.DesvioMaxKm;
 
-        viaje.Paradas = dto.Paradas.Select((p, i) => new Parada
+        if (!mismaRuta) viaje.Paradas = dto.Paradas.Select((p, i) => new Parada
         {
             ViajeId = id,
             Ubicacion = p.Trim(),
@@ -417,6 +427,8 @@ public class ViajesLogica : IViajesLogica
 
         Origen = v.Origen,
         Destino = v.Destino,
+        OrigenConfirmado = v.OrigenUbicacionId.HasValue,
+        DestinoConfirmado = v.DestinoUbicacionId.HasValue,
 
         HoraSalida = v.HoraSalida,
         HoraLlegada = v.HoraLlegada,
@@ -434,7 +446,8 @@ public class ViajesLogica : IViajesLogica
         {
             Id = p.Id,
             Ubicacion = p.Ubicacion,
-            Orden = p.Orden
+            Orden = p.Orden,
+            Confirmada = p.UbicacionConfirmadaId.HasValue
         }).ToList()
     };
 

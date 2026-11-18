@@ -6,6 +6,19 @@ namespace RuteaYa.Web.Services;
 
 public class ViajesApiServicio : IViajesApiServicio
 {
+    public async Task<(bool Exito, string Mensaje, RuteaYa.Logica.DTOs.ContextoUbicacionDto? Contexto)> CrearContextoUbicacionAsync(
+        RuteaYa.Logica.DTOs.SolicitudContextoViajeDto solicitud, CancellationToken ct = default)
+    {
+        try {
+            using var respuesta = await _httpClient.PostAsJsonAsync("api/viajes/ubicaciones/contexto", solicitud, ct);
+            if (!respuesta.IsSuccessStatusCode) return (false, await ObtenerMensajeError(respuesta), null);
+            var contexto = await respuesta.Content.ReadFromJsonAsync<RuteaYa.Logica.DTOs.ContextoUbicacionDto>(ct);
+            return contexto == null ? (false, "La API no devolvió un contexto válido.", null) : (true, "", contexto);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException)
+        { return (false, "No se pudo preparar el formulario de ubicaciones desde la API. Reintentá.", null); }
+    }
     private readonly HttpClient _httpClient;
 
     public ViajesApiServicio(HttpClient httpClient)
@@ -259,12 +272,7 @@ public class ViajesApiServicio : IViajesApiServicio
 
     private static object CrearDatosViaje(ViajeViewModel modelo)
     {
-        var paradas = (modelo.ParadasTexto ?? string.Empty)
-            .Split(
-                ',',
-                StringSplitOptions.RemoveEmptyEntries |
-                StringSplitOptions.TrimEntries)
-            .ToList();
+        var paradas = modelo.Paradas.Select(p => p.Ubicacion).ToList();
 
         return new
         {
@@ -279,7 +287,7 @@ public class ViajesApiServicio : IViajesApiServicio
             pesoMax = modelo.PesoMax,
             desvioMaxKm = modelo.DesvioMaxKm,
 
-            paradas
+            paradas, ubicaciones = modelo.Ubicaciones
         };
     }
 

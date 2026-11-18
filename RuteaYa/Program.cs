@@ -7,16 +7,37 @@ using RuteaYa.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options => RuteaYa.Web.Models.MensajesValidacionMvc.Configurar(options.ModelBindingMessageProvider));
 
 builder.Services.Configure<HereRoutingOpciones>(builder.Configuration.GetSection("HereRouting"));
-builder.Services.AddHttpClient<IRutasServicio, RutasHereServicio>(client =>
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
+builder.Services.AddScoped<PrevisualizacionRecorridoServicio>();
+builder.Services.AddScoped<SeleccionDireccionServicio>();
+builder.Services.AddScoped<FormulariosDireccionesServicio>();
+builder.Services.AddScoped<IFuenteSeleccionUbicacionVerificada, FuenteSeleccionUbicacionVerificada>();
+builder.Services.AddScoped<IUbicacionesConfirmadasServicio, UbicacionesConfirmadasServicio>();
+builder.Services.AddHttpClient<IBusquedaDireccionesServicio, BusquedaDireccionesHereServicio>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30))
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient<IRutasGeometriaServicio, RutasHereServicio>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30))
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient<MapasHereServicio>(client =>
+    client.Timeout = TimeSpan.FromSeconds(30))
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient<RutasHereServicio>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(30);
     })
     // La API Key viaja en la query según el contrato de HERE; no registrar la URL.
     .RemoveAllLoggers()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
+builder.Services.AddScoped<IRutasServicio>(sp => new RutasConsultaServicio(sp.GetRequiredService<RutasHereServicio>()));
 
 builder.Services.AddHttpClient<IGeocodificacionServicio, GeocodificacionHereServicio>(client =>
     {
@@ -33,6 +54,10 @@ builder.Services.AddDbContext<RuteaYaDbContext>(options =>
     options.UseSqlServer(connectionString));
 
 builder.Services.AddScoped<IOportunidadesLogica, OportunidadesLogica>();
+builder.Services.AddScoped<IDatosConfirmadosOportunidadServicio, DatosConfirmadosOportunidadPersistidosServicio>();
+builder.Services.AddScoped<IEvaluacionOportunidadServicio, EvaluacionOportunidadServicio>();
+builder.Services.AddScoped<IDesviosServicio, DesviosServicio>();
+builder.Services.AddScoped<ICompatibilidadServicio, CompatibilidadServicio>();
 builder.Services.AddScoped<EnviosLogica>();
 
 builder.Services.AddHttpContextAccessor();

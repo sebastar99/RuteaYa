@@ -1,0 +1,19 @@
+/* Estados compartidos de MVC/unobtrusive, incluidos los campos HERE y dinámicos. */
+input.input-validation-error,
+select.input-validation-error,
+textarea.input-validation-error {
+    border: 2px solid #b42318 !important;
+    box-shadow: 0 0 0 1px #b4231820;
+}
+input.input-validation-error:focus,
+select.input-validation-error:focus,
+textarea.input-validation-error:focus { outline: 2px solid #b4231840; outline-offset: 2px; }
+input[type=checkbox].input-validation-error,
+input[type=radio].input-validation-error { outline: 2px solid #b42318; outline-offset: 2px; }
+.field-validation-error, .validation-summary-errors {
+    color: #b42318 !important;
+    font-size: .9rem;
+}
+.field-validation-error { display: block; margin-top: .35rem; line-height: 1.4; }
+.field-validation-valid, .validation-summary-valid { display: none; }
+.validation-summary-errors ul { margin: .4rem 0; padding-left: 1.4rem; }

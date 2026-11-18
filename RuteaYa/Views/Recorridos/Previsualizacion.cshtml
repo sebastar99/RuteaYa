@@ -1,0 +1,50 @@
+@model RuteaYa.Web.Models.PrevisualizacionRecorridoViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Recorrido del viaje";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
+<link rel="stylesheet" href="~/css/recorridos.css" asp-append-version="true" />
+<div class="page-heading">
+    <div><h1>Recorrido del viaje</h1><p>@Model.Origen → @Model.Destino</p></div>
+    <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index" asp-route-viajeId="@Model.ViajeId">Volver a oportunidades</a>
+</div>
+@if (Model.Error != null)
+{
+    <div class="panel-card" role="alert"><p>@Model.Error</p>
+        <a class="panel-button" asp-controller="Panel" asp-action="EditarViaje" asp-route-id="@Model.ViajeId">Editar Viaje</a>
+        <a class="panel-button outline" asp-controller="Recorridos" asp-action="Index" asp-route-viajeId="@Model.ViajeId">Reintentar recorrido</a>
+    </div>
+}
+else
+{
+    <div class="panel-card">
+        <p>Usamos el origen, destino y las paradas que guardaste en tu viaje. No necesitás ingresarlos nuevamente.</p>
+        <a class="panel-button" asp-controller="Recorridos" asp-action="Index" asp-route-viajeId="@Model.ViajeId" data-recalcular-recorrido>Recalcular recorrido</a>
+    </div>
+}
+<section class="panel-card" id="resultado-recorrido" hidden="@(Model.Ruta == null)">
+    <h2>Recorrido de tu viaje</h2>
+    <div data-resumen-recorrido></div>
+    <div id="mapa-recorrido" role="region" aria-label="Mapa interactivo del recorrido"
+         data-teselas="@Url.Action("Tesela", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion, z = 0, x = 0, y = 0 })"
+         data-atribuciones="@Url.Action("Atribuciones", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion })"></div>
+    <p id="estado-mapa" role="status" aria-live="polite">Cargando recorrido…</p>
+    <details><summary>Avisos del mapa</summary><div id="avisos-mapa"></div></details>
+</section>
+@if (Model.Ruta != null)
+{
+    <script id="datos-recorrido" type="application/json">@Html.Raw(JsonSerializer.Serialize(
+        RuteaYa.Web.Models.MapaRecorridoViewModel.Crear(Model,
+            Url.Action("Tesela", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion, z = 0, x = 0, y = 0 }),
+            Url.Action("Atribuciones", "Recorridos", new { viajeId = Model.ViajeId, sesion = Model.Sesion })),
+        new JsonSerializerOptions(JsonSerializerDefaults.Web)))</script>
+}
+@section Scripts {
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+    <script src="~/js/here-http.js" asp-append-version="true"></script>
+    <script src="~/js/recorridos.js" asp-append-version="true"></script>
+}

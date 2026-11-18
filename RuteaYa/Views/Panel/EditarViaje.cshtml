@@ -6,12 +6,6 @@
     Layout = "~/Views/Shared/_PanelLayout.cshtml";
 
     var diasSeleccionados = Model.DiasSemana ?? new List<int>();
-    var paradasTexto = Model.ParadasTexto ?? string.Join(
-        ", ",
-        (Model.Paradas ?? new List<RuteaYa.Web.Models.ParadaViewModel>())
-            .OrderBy(p => p.Orden)
-            .Select(p => p.Ubicacion)
-    );
 }
 
 <div class="page-heading">
@@ -29,26 +23,15 @@
 </div>
 
 <div class="panel-card">
-    <form asp-controller="Panel" asp-action="EditarViaje" method="post">
+    <form asp-controller="Panel" asp-action="EditarViaje" method="post" data-viaje-direcciones>
 
         @Html.AntiForgeryToken()
         <input type="hidden" asp-for="Id" />
 
         <div asp-validation-summary="ModelOnly" class="text-danger" role="alert"></div>
 
+        <partial name="_DireccionesViaje" model="Model" />
         <div class="panel-form-grid">
-
-            <div class="panel-field">
-                <label asp-for="Origen">Origen</label>
-                <input asp-for="Origen" class="panel-input" />
-                <span asp-validation-for="Origen" class="text-danger"></span>
-            </div>
-
-            <div class="panel-field">
-                <label asp-for="Destino">Destino</label>
-                <input asp-for="Destino" class="panel-input" />
-                <span asp-validation-for="Destino" class="text-danger"></span>
-            </div>
 
             <div class="panel-field">
                 <label asp-for="HoraSalida">Hora de salida</label>
@@ -92,15 +75,6 @@
                 <span asp-validation-for="DesvioMaxKm" class="text-danger"></span>
             </div>
 
-            <div class="panel-field">
-                <label for="ParadasTexto">Paradas intermedias</label>
-
-                <input id="ParadasTexto" name="ParadasTexto" value="@paradasTexto"
-                    class="panel-input" placeholder="Ej.: Lujan, Mercedes" 
-                />
-
-                <small>Separar las paradas con comas y respetar el orden deseado.</small>
-            </div>
         </div>
 
         <div class="panel-field">
@@ -143,3 +117,9 @@
         </div>
     </form>
 </div>
+<link rel="stylesheet" href="~/css/direcciones-here.css" asp-append-version="true" />
+@section Scripts {
+    <script src="~/js/here-http.js" asp-append-version="true"></script>
+    <script src="~/js/direcciones-here.js" asp-append-version="true"></script>
+    <script src="~/js/viajes-direcciones.js" asp-append-version="true"></script>
+}

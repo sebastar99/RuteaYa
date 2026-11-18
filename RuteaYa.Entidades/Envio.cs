@@ -8,6 +8,10 @@ namespace RuteaYa.Entidades
     {
         public int Id { get; set; }
         public int UsuarioId { get; set; }
+        public Guid? RetiroUbicacionId { get; set; }
+        public UbicacionConfirmada? RetiroUbicacion { get; set; }
+        public Guid? EntregaUbicacionId { get; set; }
+        public UbicacionConfirmada? EntregaUbicacion { get; set; }
         public string OrigenDir { get; set; } = string.Empty;
         public decimal OrigenLat { get; set; }
         public decimal OrigenLng { get; set; }
@@ -15,6 +19,11 @@ namespace RuteaYa.Entidades
         public decimal DestinoLat { get; set; }
         public decimal DestinoLng { get; set; }
         public DateTime FechaLimite { get; set; }
+        public DateTimeOffset? EntregaLimiteConOffset { get; set; }
+        public DateTimeOffset? RetiroDisponibleDesde { get; set; }
+        public bool RetiroSinRestriccion { get; set; }
+        public int? SalidaViajeId { get; set; }
+        public SalidaViaje? SalidaViaje { get; set; }
         public decimal PesoKg { get; set; }
         public TamanoEnvio Tamano { get; set; }
         public string Descripcion { get; set; } = string.Empty;
@@ -23,13 +32,13 @@ namespace RuteaYa.Entidades
         public DateTime CreadoEn { get; set; } = DateTime.Now;
         public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
-     
+
         public int? ConductorId { get; set; }
 
 
         public virtual Usuario? Usuario { get; set; }
 
-      
+
         public virtual Usuario? Conductor { get; set; }
     }
 

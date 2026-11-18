@@ -23,5 +23,7 @@ public enum MotivoCompatibilidad
     HorarioAprobado,
     LlegadaMaximaDesconocida,
     DisponibilidadRetiroDesconocida,
-    VencimientoEntregaDesconocido
+    VencimientoEntregaDesconocido,
+    DisponibilidadSalidaDesconocida,
+    PesoMaximoPublicadoExcedido
 }

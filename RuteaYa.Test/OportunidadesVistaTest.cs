@@ -22,6 +22,73 @@ namespace RuteaYa.Test;
 
 public class OportunidadesVistaTest
 {
+    [Fact]
+    public async Task Salida_SeleccionConAntiforgeryYEnlacesConservanElContextoEnListadoYDetalle()
+    {
+        var salida = new SalidaViajeDto { Id = 87, ViajeId = 10, FechaHora = new DateTimeOffset(2030, 1, 7, 8, 0, 0, TimeSpan.FromHours(-3)),
+            Disponible = true, CuposDisponibles = 1, PesoDisponibleKg = 7.5m, PaquetesComprometidos = 1, PesoComprometidoKg = 2.5m };
+        var viaje = new ViajeOportunidadesDto { Id = 10, Origen = "Origen", Destino = "Destino", Activo = true, SalidaSeleccionada = salida };
+        var envio = new EnvioDto { Id = 25, OrigenDir = "Retiro", DestinoDir = "Entrega" };
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ConsultarAsync(7, 10, 1, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new ListadoCandidatosDto {
+            Viajes = new[] { viaje }, ViajeSeleccionado = viaje });
+        logica.Setup(l => l.SeleccionarSalidaAsync(7, It.Is<SeleccionSalidaDto>(s => s.ViajeId == 10 && s.Fecha == new DateOnly(2030, 1, 7)), It.IsAny<CancellationToken>())).ReturnsAsync(87);
+        logica.Setup(l => l.ConsultarSalidaAsync(7, 10, 87, 1, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new ListadoCandidatosDto {
+            Viajes = new[] { viaje }, ViajeSeleccionado = viaje, Candidatos = new[] { envio }, TotalCandidatos = 20 });
+        logica.Setup(l => l.ObtenerDetalleSalidaAsync(7, 10, 87, 25, It.IsAny<CancellationToken>())).ReturnsAsync(new DetalleCandidatoDto { Viaje = viaje, Envio = envio });
+        await using var app = CrearHost(logica.Object); await app.StartAsync();
+        try {
+            var url = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = new Uri(url) };
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            var inicial = await cliente.GetStringAsync("/Oportunidades?viajeId=10");
+            var token = WebUtility.HtmlDecode(Regex.Match(inicial, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"").Groups[1].Value);
+            var datos = new Dictionary<string, string> { ["ViajeId"] = "10", ["Fecha"] = "2030-01-07" };
+            using var sinToken = await cliente.PostAsync("/Oportunidades/SeleccionarSalida", new FormUrlEncodedContent(datos));
+            Assert.Equal(HttpStatusCode.BadRequest, sinToken.StatusCode);
+            datos["__RequestVerificationToken"] = token;
+            using var seleccion = await cliente.PostAsync("/Oportunidades/SeleccionarSalida", new FormUrlEncodedContent(datos));
+            Assert.Equal(HttpStatusCode.Redirect, seleccion.StatusCode);
+            var listado = WebUtility.HtmlDecode(await cliente.GetStringAsync(seleccion.Headers.Location));
+            Assert.Contains("Salida del 07/01/2030 08:00", listado); Assert.Contains("Capacidad restante: 1 cupos · 7,5 kg", listado.Replace("7.5", "7,5"));
+            var detalleUrl = Enlaces(listado).Single(e => e.Contains("/Oportunidades/Detalle"));
+            Assert.Contains("salidaId=87", detalleUrl);
+            Assert.Contains(Enlaces(listado), e => e.Contains("pagina=2") && e.Contains("salidaId=87"));
+            var detalle = WebUtility.HtmlDecode(await cliente.GetStringAsync(detalleUrl));
+            Assert.Contains("Salida del 07/01/2030 08:00", detalle);
+            Assert.Contains(Enlaces(detalle), e => e.Contains("/Oportunidades") && e.Contains("salidaId=87") && !e.Contains("Detalle"));
+            Assert.DoesNotContain("/Oportunidades/Aceptar", detalle);
+            logica.Verify(l => l.SeleccionarSalidaAsync(7, It.IsAny<SeleccionSalidaDto>(), It.IsAny<CancellationToken>()), Times.Once);
+        } finally { await app.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task ListadoYDetalle_ExponenDesvioRealYDatosPendientesSinPresentarCompatibilidadFalsa()
+    {
+        var viaje = new ViajeOportunidadesDto { Id = 10, Origen = "Origen", Destino = "Destino", Activo = true };
+        var envio = new EnvioDto { Id = 25, UsuarioId = 8, OrigenDir = "Retiro", DestinoDir = "Entrega", PesoKg = 2 };
+        var evaluacion = new EvaluacionOportunidadDto { DatosPendientes = new[] { DatoPendienteOportunidad.SalidaConcretaDesconocida },
+            ResultadoMotor = new ResultadoCompatibilidadDto { ViajeId = 10, EnvioId = 25, Estado = EstadoCompatibilidad.Indeterminado,
+                Motivos = new[] { MotivoCompatibilidad.DesvioAprobado }, InsercionSeleccionada = new() { Desvio = new() {
+                    DistanciaOriginalMetros = 10000, DistanciaConEnvioMetros = 11250, DistanciaAdicionalMetros = 1250,
+                    DuracionConEnvioSegundos = 1500, TiempoAdicionalSegundos = 300 } } } };
+        var logica = new Mock<IOportunidadesLogica>();
+        logica.Setup(l => l.ConsultarAsync(7, 10, 1, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new ListadoCandidatosDto {
+            Viajes = new[] { viaje }, ViajeSeleccionado = viaje, Candidatos = new[] { envio }, TotalCandidatos = 1,
+            Evaluaciones = new Dictionary<int, EvaluacionOportunidadDto> { [25] = evaluacion } });
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, It.IsAny<CancellationToken>())).ReturnsAsync(new DetalleCandidatoDto { Viaje = viaje, Envio = envio, Evaluacion = evaluacion });
+        await using var app = CrearHost(logica.Object); await app.StartAsync();
+        try {
+            var url = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient { BaseAddress = new Uri(url) }; cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            var listado = WebUtility.HtmlDecode(await cliente.GetStringAsync("/Oportunidades?viajeId=10"));
+            Assert.Contains("Pendiente de evaluación", listado); Assert.Contains("Desvío", listado); Assert.Contains("min", listado); Assert.Contains("Elegí la fecha de salida para evaluarlo", listado); Assert.DoesNotContain("Compatible</span>", listado);
+            var detalle = WebUtility.HtmlDecode(await cliente.GetStringAsync("/Oportunidades/Detalle?viajeId=10&envioId=25"));
+            Assert.Contains("cambia aproximadamente", detalle); Assert.Contains("Desvío permitido", detalle); Assert.Contains("disabled", detalle);
+            Assert.DoesNotContain("No se ejecutó el motor", detalle); Assert.DoesNotContain("Tomar este envío", detalle);
+        } finally { await app.StopAsync(); }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -146,8 +213,9 @@ public class OportunidadesVistaTest
             Assert.DoesNotContain("UsuarioId", detalleHtml);
             Assert.DoesNotContain("Desvío estimado", detalleHtml);
             Assert.DoesNotContain("Caballito", detalleHtml);
-            Assert.Contains("Tomar este envío", detalleHtml);
-            Assert.Contains("/Oportunidades/Aceptar", detalleHtml);
+            Assert.DoesNotContain("Tomar este envío", detalleHtml);
+            Assert.DoesNotContain("/Oportunidades/Aceptar", detalleHtml);
+            Assert.Contains("Todavía no elegiste la salida de tu viaje", WebUtility.HtmlDecode(detalleHtml));
             var enlaceVolver = Enlaces(detalleHtml).Single(e =>
             {
                 var uri = new Uri(cliente.BaseAddress, e);
@@ -171,11 +239,118 @@ public class OportunidadesVistaTest
         }
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(EstadoCompatibilidad.Compatible)]
+    [InlineData(EstadoCompatibilidad.Incompatible)]
+    [InlineData(EstadoCompatibilidad.Indeterminado)]
+    public async Task DetalleRazor_EstadosYMetricas_SoloMuestraResultadosCuandoHuboMotor(EstadoCompatibilidad? estado)
+    {
+        var evaluacion = new EvaluacionOportunidadDto();
+        if (!estado.HasValue)
+        {
+            evaluacion.DatosPendientes = new[]
+            {
+                DatoPendienteOportunidad.RecorridoSinCoordenadasConfirmadas,
+                DatoPendienteOportunidad.PesoDisponibleDesconocido,
+                DatoPendienteOportunidad.VencimientoEntregaNoInterpretado
+            };
+        }
+        else
+        {
+            evaluacion.ResultadoMotor = new ResultadoCompatibilidadDto
+            {
+                ViajeId = 10, EnvioId = 25, Estado = estado.Value,
+                Motivos = new[] { estado == EstadoCompatibilidad.Incompatible ? MotivoCompatibilidad.PesoExcedido :
+                    estado == EstadoCompatibilidad.Compatible ? MotivoCompatibilidad.HorarioAprobado : MotivoCompatibilidad.HorarioRetiroNoVerificable },
+                InsercionSeleccionada = estado == EstadoCompatibilidad.Incompatible ? null : new InsercionCompatibilidadDto
+                {
+                    SegmentoRetiro = 0, SegmentoEntrega = 1,
+                    FinalizacionEstimada = new DateTimeOffset(2026, 11, 2, 8, 11, 0, TimeSpan.Zero),
+                    Desvio = new ResultadoDesvioDto
+                    {
+                        DistanciaOriginalMetros = 10000, DistanciaConEnvioMetros = 10500, DistanciaAdicionalMetros = 500,
+                        DuracionConEnvioSegundos = 660, TiempoAdicionalSegundos = 60
+                    }
+                }
+            };
+        }
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, It.IsAny<CancellationToken>())).ReturnsAsync(new DetalleCandidatoDto
+        {
+            Viaje = new ViajeOportunidadesDto { Id = 10, Origen = "Origen publicado", Destino = "Destino publicado", Activo = true },
+            Envio = new EnvioDto { Id = 25, OrigenDir = "Retiro publicado", DestinoDir = "Entrega publicada" },
+            Evaluacion = evaluacion
+        });
+        await using var app = CrearHost(logica.Object);
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await app.StartAsync(limite.Token);
+        try
+        {
+            var direccion = app.Services.GetRequiredService<IServer>().Features
+                .Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient { BaseAddress = new Uri(direccion) };
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            using var respuesta = await cliente.GetAsync("/Oportunidades/Detalle?viajeId=10&envioId=25", limite.Token);
+            var html = WebUtility.HtmlDecode(await respuesta.Content.ReadAsStringAsync(limite.Token));
+
+            Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+            Assert.DoesNotContain("/Oportunidades/Aceptar", html);
+            Assert.Contains("disabled", html);
+            Assert.Contains("Todavía no elegiste la salida de tu viaje", html);
+            foreach (var condicion in new[] { "Disponibilidad", "Peso permitido", "Cupos disponibles", "Desvío permitido", "Horarios compatibles" })
+                Assert.Contains(condicion, html);
+            Assert.Contains(estado switch { null => "Pendiente de evaluación", EstadoCompatibilidad.Compatible => "Compatible", EstadoCompatibilidad.Incompatible => "No compatible", _ => "Pendiente de evaluación" }, html);
+            if (estado is null or EstadoCompatibilidad.Incompatible) Assert.DoesNotContain("cambia aproximadamente", html);
+            else Assert.Contains("cambia aproximadamente", html);
+            Assert.DoesNotContain("Segmento de retiro", html);
+        }
+        finally
+        {
+            await app.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Aceptar_PostDirectoSinSalida_ExigeAutenticacionAntiforgeryYSalida()
+    {
+        var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
+        logica.Setup(l => l.ConsultarAsync(7, null, 1, 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ListadoCandidatosDto());
+        // No se registra EnviosLogica, EF ni HERE: el POST bloqueado no debe resolverlos.
+        await using var app = CrearHost(logica.Object);
+        await app.StartAsync();
+        try
+        {
+            var direccion = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+            using var cliente = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+                { BaseAddress = new Uri(direccion), Timeout = TimeSpan.FromSeconds(20) };
+            using var anonimo = await cliente.PostAsync("/Oportunidades/Aceptar", new FormUrlEncodedContent(new Dictionary<string, string>()));
+            Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
+            cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
+            using var pagina = await cliente.GetAsync("/Oportunidades");
+            var html = await pagina.Content.ReadAsStringAsync();
+            var token = WebUtility.HtmlDecode(Regex.Match(html,
+                "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"").Groups[1].Value);
+            Assert.NotEmpty(token);
+            using var sinToken = await cliente.PostAsync("/Oportunidades/Aceptar",
+                new FormUrlEncodedContent(new Dictionary<string, string> { ["viajeId"] = "10", ["envioId"] = "25" }));
+            Assert.Equal(HttpStatusCode.BadRequest, sinToken.StatusCode);
+            using var respuesta = await cliente.PostAsync("/Oportunidades/Aceptar", new FormUrlEncodedContent(new Dictionary<string, string>
+                { ["viajeId"] = "10", ["envioId"] = "25", ["__RequestVerificationToken"] = token }));
+            Assert.Equal(HttpStatusCode.BadRequest, respuesta.StatusCode);
+            Assert.Contains("salida concreta", await respuesta.Content.ReadAsStringAsync());
+            logica.Verify(l => l.ConsultarAsync(7, null, 1, 10, It.IsAny<CancellationToken>()), Times.Once);
+            logica.VerifyNoOtherCalls();
+        }
+        finally { await app.StopAsync(); }
+    }
+
     private static IEnumerable<string> Enlaces(string html) =>
         Regex.Matches(html, "href=\"([^\"]+)\"")
             .Select(m => WebUtility.HtmlDecode(m.Groups[1].Value));
 
-    private static WebApplication CrearHost(IOportunidadesLogica logica)
+    internal static WebApplication CrearHost(IOportunidadesLogica logica, EnviosLogica? envios = null)
     {
         // Host exclusivo de prueba: solo loopback, autenticación ficticia y lógica simulada.
         // No ejecuta Program.cs ni carga User Secrets, EF, la API propia o servicios HERE.
@@ -189,6 +364,7 @@ public class OportunidadesVistaTest
         builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
         builder.Services.AddControllersWithViews().AddApplicationPart(typeof(OportunidadesController).Assembly);
         builder.Services.AddSingleton(logica);
+        if (envios != null) builder.Services.AddSingleton(envios);
         builder.Services.AddAuthentication("Prueba")
             .AddScheme<AuthenticationSchemeOptions, UsuarioPruebaHandler>("Prueba", _ => { });
         builder.Services.AddAuthorization();

@@ -7,6 +7,8 @@ public class ViajeDto
 
     public string Origen { get; set; } = "";
     public string Destino { get; set; } = "";
+    public bool OrigenConfirmado { get; set; }
+    public bool DestinoConfirmado { get; set; }
 
     public List<int> DiasSemana { get; set; } = new();
 
@@ -25,6 +27,7 @@ public class ViajeDto
 
 public class ParadaDto
 {
+    public bool Confirmada { get; set; }
     public int Id { get; set; }
 
     public string Ubicacion { get; set; } = "";

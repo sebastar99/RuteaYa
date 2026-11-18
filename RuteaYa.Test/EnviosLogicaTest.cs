@@ -5,6 +5,7 @@ using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
 using RuteaYa.Test.Helpers;
 using Xunit;
+using Moq;
 
 namespace RuteaYa.Test;
 
@@ -12,53 +13,13 @@ public class EnviosLogicaTest
 {
     private static DataTable TablaEnvios(params (int Id, int UsuarioId, int? ConductorId, byte Estado, string Descripcion)[] filas)
     {
-        var tabla = new DataTable();
-        tabla.Columns.Add("Id", typeof(int));
-        tabla.Columns.Add("UsuarioId", typeof(int));
-        tabla.Columns.Add("ConductorId", typeof(int));
-        tabla.Columns.Add("OrigenDir", typeof(string));
-        tabla.Columns.Add("OrigenLat", typeof(decimal));
-        tabla.Columns.Add("OrigenLng", typeof(decimal));
-        tabla.Columns.Add("DestinoDir", typeof(string));
-        tabla.Columns.Add("DestinoLat", typeof(decimal));
-        tabla.Columns.Add("DestinoLng", typeof(decimal));
-        tabla.Columns.Add("FechaLimite", typeof(DateTime));
-        tabla.Columns.Add("PesoKg", typeof(decimal));
-        tabla.Columns.Add("Tamano", typeof(byte));
-        tabla.Columns.Add("Descripcion", typeof(string));
-        tabla.Columns.Add("Monto", typeof(decimal));
-        tabla.Columns.Add("Estado", typeof(byte));
-        tabla.Columns.Add("CreadoEn", typeof(DateTime));
-
-        foreach (var f in filas)
-        {
-            tabla.Rows.Add(
-                f.Id, f.UsuarioId, f.ConductorId.HasValue ? (object)f.ConductorId.Value : DBNull.Value,
-                "Edison 3436", -34.6037m, -58.3816m, "Illia 2849", -34.6000m, -58.3800m,
-                new DateTime(2026, 11, 20), 2.5m, (byte)TamanoEnvio.Mediano, f.Descripcion, 4000m, f.Estado, DateTime.Now
-            );
-        }
-        return tabla;
+        return EnviosContextoPrueba.Envios(filas.Select(f => (f.Id, f.UsuarioId, f.ConductorId,
+            (EstadoEnvio)f.Estado, f.Descripcion)).ToArray());
     }
 
     private static DataTable TablaViajes(int viajeId, int usuarioId, bool activo)
     {
-        var tabla = new DataTable();
-        tabla.Columns.Add("Id", typeof(int));
-        tabla.Columns.Add("UsuarioId", typeof(int));
-        tabla.Columns.Add("Origen", typeof(string));
-        tabla.Columns.Add("Destino", typeof(string));
-        tabla.Columns.Add("Activo", typeof(bool));
-        tabla.Rows.Add(viajeId, usuarioId, "Morón", "Luján", activo);
-        return tabla;
-    }
-
-    private static DataTable TablaResultadoEscritura(int filasAfectadas = 1)
-    {
-        var tabla = new DataTable();
-        tabla.Columns.Add("FilasAfectadas", typeof(int));
-        tabla.Rows.Add(filasAfectadas);
-        return tabla;
+        return EnviosContextoPrueba.Existe(activo);
     }
 
     [Fact]
@@ -107,7 +68,7 @@ public class EnviosLogicaTest
     }
 
     [Fact]
-    public async Task CrearAsync_OrigenYDestinoIguales_LanzaExcepcionSinConsultar()
+    public async Task CrearAsync_SinComprobantes_NoPermiteCrearNiConsultar()
     {
         var consultas = new ConsultasEfSimuladas();
         await using var db = consultas.CrearContexto();
@@ -122,23 +83,51 @@ public class EnviosLogicaTest
             FechaLimite = DateTime.Today
         };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new EnviosLogica(db, null!).CrearAsync(7, dto));
+        await Assert.ThrowsAsync<ComprobanteUbicacionException>(() => new EnviosLogica(db, null!).CrearAsync(7, dto));
 
         Assert.Empty(consultas.Consultas);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CrearAsync_SinComprobantes_NoGeocodificaAunqueProveedorDevuelvaDatosOErrores(bool errorEnDestino)
+    {
+        using var contexto = new EnviosContextoPrueba();
+        var geo = new Mock<IGeocodificacionServicio>(MockBehavior.Strict);
+        geo.Setup(g => g.GeocodificarAsync("Origen", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { new ResultadoGeocodificacionDto { Posicion = new() { Latitud = -34, Longitud = -58 } } });
+        if (errorEnDestino)
+            geo.Setup(g => g.GeocodificarAsync("Destino", It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new HttpRequestException("Error de HERE simulado"));
+        else
+            geo.Setup(g => g.GeocodificarAsync("Destino", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Array.Empty<ResultadoGeocodificacionDto>());
+        var servicio = new EnviosLogica(contexto.Db, geo.Object);
+        var dto = new CrearEnvioDto { OrigenDir = "Origen", DestinoDir = "Destino", Descripcion = "Test",
+            PesoKg = 1, Monto = 100, FechaLimite = DateTime.Today.AddDays(1) };
+        await Assert.ThrowsAsync<ComprobanteUbicacionException>(() => servicio.CrearAsync(7, dto));
+        geo.VerifyNoOtherCalls();
+        Assert.Equal(0, contexto.Guardados);
+        Assert.Empty(contexto.Db.ChangeTracker.Entries());
+        Assert.Empty(contexto.Consultas.Consultas);
+        Assert.Equal(ConnectionState.Closed, contexto.Db.Database.GetDbConnection().State);
     }
 
     [Fact]
     public async Task CancelarAsync_EnvioEnBuscandoConductor_ModificaEstadoYGuarda()
     {
-        var consultas = new ConsultasEfSimuladas();
+        using var contexto = new EnviosContextoPrueba();
+        var consultas = contexto.Consultas;
         consultas.Responder(TablaEnvios((10, 7, null, (byte)EstadoEnvio.BuscandoConductor, "Test")));
-        consultas.Responder(TablaResultadoEscritura(1));
-        await using var db = consultas.CrearContexto();
+        var db = contexto.Db;
 
         var resultado = await new EnviosLogica(db, null!).CancelarAsync(7, 10);
 
         Assert.True(resultado);
-        Assert.Equal(2, consultas.Consultas.Count);
+        Assert.Single(consultas.Consultas);
+        Assert.Equal(1, contexto.Guardados);
+        Assert.Equal(EstadoEnvio.Cancelado, db.Envios.Local.Single().Estado);
     }
 
     [Fact]
@@ -154,45 +143,47 @@ public class EnviosLogicaTest
     }
 
     [Fact]
-    public async Task AceptarAsync_ConductorValidoYViajeActivo_AsignaConductorYEstado()
+    public async Task AceptarAsync_LegadoSinSalida_NoPuedeAsignar()
     {
-        var consultas = new ConsultasEfSimuladas();
+        using var contexto = new EnviosContextoPrueba();
+        var consultas = contexto.Consultas;
         consultas.Responder(TablaViajes(10, 8, true));
         consultas.Responder(TablaEnvios((25, 7, null, (byte)EstadoEnvio.BuscandoConductor, "Test")));
-        consultas.Responder(TablaResultadoEscritura(1));
-        await using var db = consultas.CrearContexto();
+        var db = contexto.Db;
 
-        var resultado = await new EnviosLogica(db, null!).AceptarAsync(conductorId: 8, viajeId: 10, envioId: 25);
-
-        Assert.True(resultado);
-        Assert.Equal(3, consultas.Consultas.Count);
+        await Assert.ThrowsAsync<ArgumentException>(() => new EnviosLogica(db, null!).AceptarAsync(conductorId: 8, viajeId: 10, envioId: 25));
+        Assert.Empty(consultas.Consultas);
+        Assert.Equal(0, contexto.Guardados);
+        Assert.Empty(db.Envios.Local);
     }
 
     [Fact]
-    public async Task AceptarAsync_IntentarTransportarEnvioPropio_LanzaExcepcion()
+    public async Task ActualizarEstadoAsync_NoPermiteAsignarSinCompatibilidad()
     {
         var consultas = new ConsultasEfSimuladas();
-        consultas.Responder(TablaViajes(10, 7, true));
         consultas.Responder(TablaEnvios((25, 7, null, (byte)EstadoEnvio.BuscandoConductor, "Test")));
         await using var db = consultas.CrearContexto();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new EnviosLogica(db, null!).AceptarAsync(conductorId: 7, viajeId: 10, envioId: 25));
-
-        Assert.Equal(2, consultas.Consultas.Count);
+        await Assert.ThrowsAsync<ArgumentException>(() => new EnviosLogica(db, null!).ActualizarEstadoAsync(7, 25, EstadoEnvio.ConductorAsignado));
+        Assert.Single(consultas.Consultas);
+        Assert.Equal(EstadoEnvio.BuscandoConductor, db.Envios.Local.Single().Estado);
+        Assert.Null(db.Envios.Local.Single().ConductorId);
     }
 
     [Fact]
     public async Task ActualizarEstadoConductorAsync_TransicionValida_AvanzaEstado()
     {
-        var consultas = new ConsultasEfSimuladas();
+        using var contexto = new EnviosContextoPrueba();
+        var consultas = contexto.Consultas;
         consultas.Responder(TablaEnvios((25, 7, 8, (byte)EstadoEnvio.ConductorAsignado, "Test")));
-        consultas.Responder(TablaResultadoEscritura(1));
-        await using var db = consultas.CrearContexto();
+        var db = contexto.Db;
 
         var resultado = await new EnviosLogica(db, null!).ActualizarEstadoConductorAsync(conductorId: 8, envioId: 25, nuevoEstado: EstadoEnvio.Retirado);
 
         Assert.True(resultado);
-        Assert.Equal(2, consultas.Consultas.Count);
+        Assert.Single(consultas.Consultas);
+        Assert.Equal(1, contexto.Guardados);
+        Assert.Equal(EstadoEnvio.Retirado, db.Envios.Local.Single().Estado);
     }
 
     [Fact]

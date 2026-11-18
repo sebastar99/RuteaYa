@@ -9,7 +9,10 @@ public class ViajeCompatibilidadDto
     public int ViajeId { get; set; }
     public IReadOnlyList<PuntoRutaDto> RecorridoBase { get; set; } = Array.Empty<PuntoRutaDto>();
     public bool Activo { get; set; }
-    public bool Disponible { get; set; }
+    public bool? Disponible { get; set; }
+    public bool PermitirEvaluacionParcial { get; set; }
+    public decimal? PesoMaximoPublicadoKg { get; set; }
+    public int? CuposMaximosPublicados { get; set; }
     public decimal DesvioMaxKm { get; set; }
 
     /// <summary>

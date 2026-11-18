@@ -13,6 +13,7 @@
     <title>@title | RuteaYa</title>
     <link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/panel.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/validacion.css" asp-append-version="true" />
 </head>
 <body>
     <div class="dashboard">
@@ -74,7 +75,7 @@
             }));
     </script>
 
-    <!-- renderizar la sección Scripts -->
+    <partial name="_ValidationScriptsPartial" />
     @await RenderSectionAsync("Scripts", required: false)
 
 </body>

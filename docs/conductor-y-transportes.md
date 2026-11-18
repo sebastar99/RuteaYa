@@ -1,5 +1,14 @@
 # Conductor y transporte de envíos
 
+> **Estado de esta integración temporal:** el POST de aceptación está bloqueado
+> en servidor (409), pendiente de compatibilidad, capacidad y vínculo persistente
+> al viaje/salida concreta. Transportes y su avance de estados se conservan para
+> asignaciones existentes. Los errores de geocodificación no generan coordenadas
+> artificiales; el primer candidato real aún no equivale a confirmación explícita.
+> Ver [informe de integración](integracion-tecnica-main-da523f0.md) para resultados,
+> correcciones de tests y pendientes. Los pasos de aceptación descritos abajo
+> corresponden al flujo previo de main y no están habilitados en este worktree.
+
 Este documento explica qué se agregó para que un envío pueda ser tomado por un
 conductor y avanzar hasta quedar entregado, y qué se cambió al crear envíos.
 

@@ -1,4 +1,4 @@
-@model RuteaYa.Logica.DTOs.CrearEnvioDto
+@model RuteaYa.Web.Models.CrearEnvioViewModel
 
 @{
     ViewData["Title"] = "Nuevo envío";
@@ -16,10 +16,11 @@
 </div>
 
 <div class="panel-card">
-    <form class="panel-form" asp-controller="Envios" asp-action="Crear" method="post">
+    <form class="panel-form" asp-controller="Envios" asp-action="Crear" method="post" data-envio-direcciones>
         @Html.AntiForgeryToken()
 
         <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+        <input type="hidden" name="FormularioDirecciones" value="@Model.FormularioDirecciones" />
 
         <div>
             <h2>Información principal</h2>
@@ -28,21 +29,34 @@
 
         <div class="panel-form-grid">
             <div class="panel-field">
-                <label asp-for="OrigenDir">Origen / dirección de retiro *</label>
-                <input class="panel-input" asp-for="OrigenDir" type="text" placeholder="Calle, número, localidad" required />
-                <span asp-validation-for="OrigenDir" class="text-danger"></span>
+                @if (Model.RetiroCampo != null) { <partial name="_CampoDireccionHere" model="Model.RetiroCampo" /> }
+                else { <p role="alert">No se pudo preparar la dirección de retiro. Volvé a abrir Crear Envío.</p> }
             </div>
 
             <div class="panel-field">
-                <label asp-for="DestinoDir">Destino / dirección de entrega *</label>
-                <input class="panel-input" asp-for="DestinoDir" type="text" placeholder="Calle, número, localidad" required />
-                <span asp-validation-for="DestinoDir" class="text-danger"></span>
+                @if (Model.EntregaCampo != null) { <partial name="_CampoDireccionHere" model="Model.EntregaCampo" /> }
+                else { <p role="alert">No se pudo preparar la dirección de entrega. Volvé a abrir Crear Envío.</p> }
             </div>
 
             <div class="panel-field">
                 <label asp-for="FechaLimite">Fecha límite *</label>
                 <input class="panel-input" asp-for="FechaLimite" type="date" required />
                 <span asp-validation-for="FechaLimite" class="text-danger"></span>
+            </div>
+
+            <div class="panel-field">
+                <label asp-for="EntregaLimiteLocal">Horario límite de entrega (opcional, en la fecha indicada)</label>
+                <input class="panel-input" asp-for="EntregaLimiteLocal" type="datetime-local" />
+                <span asp-validation-for="EntregaLimiteLocal"></span>
+                <small class="panel-help">Si no indicás horario, se entiende que se puede entregar hasta el final de la fecha límite.</small>
+            </div>
+            <div class="panel-field">
+                <label asp-for="RetiroDisponibleDesdeLocal">Disponible para retirar desde (opcional)</label>
+                <input class="panel-input" asp-for="RetiroDisponibleDesdeLocal" type="datetime-local" data-retiro-desde />
+                <span asp-validation-for="RetiroDisponibleDesdeLocal"></span>
+                <label><input asp-for="RetiroSinRestriccion" data-retiro-libre /> El retiro no tiene restricción de horario</label>
+                <span asp-validation-for="RetiroSinRestriccion"></span>
+                <small class="panel-help">Los horarios se interpretan en hora de Argentina.</small>
             </div>
 
             <div class="panel-field">
@@ -81,5 +95,23 @@
             <a class="panel-button outline" asp-controller="Envios" asp-action="Index">Cancelar</a>
             <button class="panel-button" type="submit">Publicar envío</button>
         </div>
+        <p role="status" aria-live="polite" data-estado-viaje>Elegí las direcciones de retiro y entrega de la lista antes de publicar.</p>
     </form>
 </div>
+<link rel="stylesheet" href="~/css/direcciones-here.css" asp-append-version="true" />
+@section Scripts {
+    <script src="~/js/here-http.js" asp-append-version="true"></script>
+    <script src="~/js/direcciones-here.js" asp-append-version="true"></script>
+    <script src="~/js/viajes-direcciones.js" asp-append-version="true"></script>
+    <script>
+        (function () {
+            var desde = document.querySelector('[data-retiro-desde]'), libre = document.querySelector('[data-retiro-libre]');
+            if (!desde || !libre) return;
+            function sincronizar() {
+                if (desde.value) { libre.checked = false; libre.disabled = true; } else { libre.disabled = false; }
+            }
+            desde.addEventListener('input', sincronizar);
+            sincronizar();
+        })();
+    </script>
+}

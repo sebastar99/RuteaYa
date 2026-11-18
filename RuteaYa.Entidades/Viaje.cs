@@ -13,6 +13,10 @@ public class Viaje {
     [Required]
     [MaxLength(150)]
     public string Origen { get; set; } = null!;
+    public Guid? OrigenUbicacionId { get; set; }
+    public UbicacionConfirmada? OrigenUbicacion { get; set; }
+    public Guid? DestinoUbicacionId { get; set; }
+    public UbicacionConfirmada? DestinoUbicacion { get; set; }
     // Horario del viaje
     public TimeSpan HoraSalida { get; set; }
     public TimeSpan HoraLlegada { get; set; }

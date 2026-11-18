@@ -4,6 +4,7 @@ namespace RuteaYa.Logica.DTOs;
 
 public class CrearViajeDto
 {
+    public UbicacionesViajeDto? Ubicaciones { get; set; }
     [Required(ErrorMessage = "El origen es obligatorio.")]
     [StringLength(150, MinimumLength = 2)]
     public string Origen { get; set; } = "";

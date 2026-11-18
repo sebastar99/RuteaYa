@@ -6,11 +6,11 @@ namespace RuteaYa.Web.Models
     public class RegistroUsuarioViewModel
     {
         [Required(ErrorMessage = "Ingresá tu nombre.")]
-        [StringLength(100)]
+        [StringLength(100, ErrorMessage = "El nombre no puede superar los 100 caracteres.")]
         public string Nombre { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Ingresá tu apellido.")]
-        [StringLength(100)]
+        [StringLength(100, ErrorMessage = "El apellido no puede superar los 100 caracteres.")]
         public string Apellido { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Ingresá tu correo.")]

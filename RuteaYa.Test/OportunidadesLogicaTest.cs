@@ -1,14 +1,19 @@
 using System.Data;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
+using RuteaYa.Logica.DTOs;
 using RuteaYa.Test.Helpers;
 
 namespace RuteaYa.Test;
 
 public class OportunidadesLogicaTest
 {
+    private static OportunidadesLogica Logica(RuteaYaDbContext db, IEvaluacionOportunidadServicio? evaluacion = null) =>
+        new(db, evaluacion ?? new EvaluacionOportunidadServicio(new DatosConfirmadosOportunidadActualesServicio(), new Mock<ICompatibilidadServicio>(MockBehavior.Strict).Object));
+
     private static DataTable Viajes(bool incluirViaje = true)
     {
         var tabla = new DataTable();
@@ -16,7 +21,9 @@ public class OportunidadesLogicaTest
         tabla.Columns.Add("Origen", typeof(string));
         tabla.Columns.Add("Destino", typeof(string));
         tabla.Columns.Add("Activo", typeof(bool));
-        if (incluirViaje) tabla.Rows.Add(10, "Morón", "Luján", true);
+        tabla.Columns.Add("DesvioMaxKm", typeof(decimal));
+        tabla.Columns.Add("UsuarioId", typeof(int));
+        if (incluirViaje) tabla.Rows.Add(10, "Morón", "Luján", true, 2m, 7);
         return tabla;
     }
 
@@ -49,19 +56,19 @@ public class OportunidadesLogicaTest
     }
 
     [Fact]
-    public async Task ConsultarAsync_ViajePropio_ListadoGlobalPorEstadoSinFiltrarPorDueno()
+    public async Task ConsultarAsync_ViajePropio_ListadoPorEstadoExcluyeEnviosPropios()
     {
         var consultas = new ConsultasEfSimuladas();
         consultas.Responder(Viajes());
         consultas.Responder(Cantidad(2));
-        consultas.Responder(Envios((25, 99), (24, 7)));
+        consultas.Responder(Envios((25, 99), (24, 8)));
         await using var db = consultas.CrearContexto();
 
-        var resultado = await new OportunidadesLogica(db).ConsultarAsync(7, 10);
+        var resultado = await Logica(db).ConsultarAsync(7, 10);
 
         Assert.NotNull(resultado);
         Assert.Equal(10, resultado.ViajeSeleccionado!.Id);
-        Assert.Equal(new[] { 99, 7 }, resultado.Candidatos.Select(e => e.UsuarioId));
+        Assert.Equal(new[] { 99, 8 }, resultado.Candidatos.Select(e => e.UsuarioId));
         Assert.All(resultado.Candidatos, e => Assert.Equal(EstadoEnvio.BuscandoConductor, e.Estado));
         Assert.Equal(2, resultado.TotalCandidatos);
         Assert.True(resultado.EvaluacionPendiente);
@@ -72,7 +79,8 @@ public class OportunidadesLogicaTest
         foreach (var consulta in consultas.Consultas.Skip(1))
         {
             Assert.Matches(@"\[Estado\]\s*=\s*(?:CAST\(\s*)?0\b", consulta.Sql);
-            Assert.DoesNotMatch(@"\[UsuarioId\]\s*=", consulta.Sql);
+            Assert.Matches(@"\[UsuarioId\]\s*<>\s*@", consulta.Sql);
+            Assert.Contains(consulta.Parametros.Values, v => Equals(v, 7));
         }
         Assert.Equal(2.5m, resultado.Candidatos[0].PesoKg);
         Assert.Equal(4000m, resultado.Candidatos[0].Monto);
@@ -91,7 +99,7 @@ public class OportunidadesLogicaTest
         consultas.Responder(Viajes(tieneViajes));
         await using var db = consultas.CrearContexto();
 
-        var resultado = await new OportunidadesLogica(db).ConsultarAsync(7, viajeId);
+        var resultado = await Logica(db).ConsultarAsync(7, viajeId);
 
         Assert.Null(resultado);
         Assert.Single(consultas.Consultas);
@@ -108,7 +116,7 @@ public class OportunidadesLogicaTest
         consultas.Responder(Viajes(tieneViajes));
         await using var db = consultas.CrearContexto();
 
-        var resultado = await new OportunidadesLogica(db).ConsultarAsync(7);
+        var resultado = await Logica(db).ConsultarAsync(7);
 
         Assert.NotNull(resultado);
         Assert.Null(resultado.ViajeSeleccionado);
@@ -125,7 +133,7 @@ public class OportunidadesLogicaTest
         consultas.Responder(Cantidad(0));
         await using var db = consultas.CrearContexto();
 
-        var resultado = await new OportunidadesLogica(db).ConsultarAsync(7, 10, 99);
+        var resultado = await Logica(db).ConsultarAsync(7, 10, 99);
 
         Assert.NotNull(resultado);
         Assert.Empty(resultado.Candidatos);
@@ -149,7 +157,7 @@ public class OportunidadesLogicaTest
         consultas.Responder(Envios((1, 99)));
         await using var db = consultas.CrearContexto();
 
-        var resultado = await new OportunidadesLogica(db).ConsultarAsync(7, 10, solicitada, tamano);
+        var resultado = await Logica(db).ConsultarAsync(7, 10, solicitada, tamano);
 
         Assert.Equal(paginaEsperada, resultado!.Pagina);
         Assert.Equal(tamano, resultado.TamanoPagina);
@@ -176,7 +184,7 @@ public class OportunidadesLogicaTest
         await using var db = consultas.CrearContexto();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => new OportunidadesLogica(db).ConsultarAsync(conductor, viaje, pagina, tamano));
+            () => Logica(db).ConsultarAsync(conductor, viaje, pagina, tamano));
 
         Assert.Empty(consultas.Consultas);
     }
@@ -189,10 +197,13 @@ public class OportunidadesLogicaTest
         consultas.Responder(Envios((25, 99)));
         await using var db = consultas.CrearContexto();
 
-        var resultado = await new OportunidadesLogica(db).ObtenerDetalleAsync(7, 10, 25);
+        var motor = new Mock<ICompatibilidadServicio>(MockBehavior.Strict);
+        var integracion = new EvaluacionOportunidadServicio(new DatosConfirmadosOportunidadActualesServicio(), motor.Object);
+        var resultado = await Logica(db, integracion).ObtenerDetalleAsync(7, 10, 25);
 
         Assert.NotNull(resultado);
         Assert.Equal(10, resultado.Viaje.Id);
+        Assert.Equal(2m, resultado.Viaje.DesvioMaxKm);
         Assert.Equal(25, resultado.Envio.Id);
         Assert.Equal("Retiro publicado", resultado.Envio.OrigenDir);
         Assert.Equal("Entrega publicada", resultado.Envio.DestinoDir);
@@ -201,6 +212,9 @@ public class OportunidadesLogicaTest
         Assert.Equal(TamanoEnvio.Mediano, resultado.Envio.Tamano);
         Assert.Equal(4000m, resultado.Envio.Monto);
         Assert.True(resultado.EvaluacionPendiente);
+        Assert.False(resultado.Evaluacion.MotorEjecutado);
+        Assert.NotEmpty(resultado.Evaluacion.DatosPendientes);
+        motor.VerifyNoOtherCalls();
         Assert.Equal(2, consultas.Consultas.Count);
         Assert.Matches(@"\[Id\]\s*=\s*@", consultas.Consultas[0].Sql);
         Assert.Matches(@"\[UsuarioId\]\s*=\s*@", consultas.Consultas[0].Sql);
@@ -215,6 +229,33 @@ public class OportunidadesLogicaTest
         Assert.Equal(ConnectionState.Closed, db.Database.GetDbConnection().State);
     }
 
+    [Fact]
+    public async Task ObtenerDetalleAsync_EvaluaUnaVezSoloDespuesDeAutorizarYCargarEnvioDisponible()
+    {
+        var consultas = new ConsultasEfSimuladas();
+        consultas.Responder(Viajes());
+        consultas.Responder(Envios((25, 99)));
+        await using var db = consultas.CrearContexto();
+        var evaluacion = new EvaluacionOportunidadDto
+        {
+            DatosPendientes = new[] { DatoPendienteOportunidad.PesoDisponibleDesconocido }
+        };
+        var integracion = new Mock<IEvaluacionOportunidadServicio>(MockBehavior.Strict);
+        integracion.Setup(e => e.EvaluarAsync(
+                It.Is<ViajeOportunidadesDto>(v => v.Id == 10 && v.DesvioMaxKm == 2),
+                It.Is<EnvioDto>(p => p.Id == 25 && p.Estado == EstadoEnvio.BuscandoConductor),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => Assert.Equal(2, consultas.Consultas.Count))
+            .ReturnsAsync(evaluacion);
+
+        var detalle = await Logica(db, integracion.Object).ObtenerDetalleAsync(7, 10, 25);
+
+        Assert.Same(evaluacion, detalle!.Evaluacion);
+        Assert.True(detalle.EvaluacionPendiente);
+        Assert.Single(integracion.Invocations);
+        Assert.Empty(db.ChangeTracker.Entries());
+    }
+
     [Theory]
     [InlineData(99)]
     [InlineData(999)]
@@ -224,7 +265,7 @@ public class OportunidadesLogicaTest
         consultas.Responder(Viajes(false));
         await using var db = consultas.CrearContexto();
 
-        var resultado = await new OportunidadesLogica(db).ObtenerDetalleAsync(7, viajeId, 25);
+        var resultado = await Logica(db).ObtenerDetalleAsync(7, viajeId, 25);
 
         Assert.Null(resultado);
         Assert.Single(consultas.Consultas);
@@ -242,11 +283,25 @@ public class OportunidadesLogicaTest
         consultas.Responder(Envios());
         await using var db = consultas.CrearContexto();
 
-        Assert.Null(await new OportunidadesLogica(db).ObtenerDetalleAsync(7, 10, envioId));
+        Assert.Null(await Logica(db).ObtenerDetalleAsync(7, 10, envioId));
 
         Assert.Equal(2, consultas.Consultas.Count);
         Assert.Matches(@"\[Estado\]\s*=\s*(?:CAST\(\s*)?0\b", consultas.Consultas[1].Sql);
         Assert.Empty(db.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task ObtenerDetalleAsync_EnvioPropio_ExcluidoPorSqlSinEvaluar()
+    {
+        var consultas = new ConsultasEfSimuladas();
+        consultas.Responder(Viajes());
+        consultas.Responder(Envios()); // WHERE excluye la publicación del conductor.
+        await using var db = consultas.CrearContexto();
+        var evaluacion = new Mock<IEvaluacionOportunidadServicio>(MockBehavior.Strict);
+        Assert.Null(await Logica(db, evaluacion.Object).ObtenerDetalleAsync(7, 10, 25));
+        Assert.Matches(@"\[UsuarioId\]\s*<>\s*@", consultas.Consultas[1].Sql);
+        Assert.Contains(consultas.Consultas[1].Parametros.Values, v => Equals(v, 7));
+        evaluacion.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -259,7 +314,7 @@ public class OportunidadesLogicaTest
         await using var db = consultas.CrearContexto();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => new OportunidadesLogica(db).ObtenerDetalleAsync(conductor, viaje, envio));
+            () => Logica(db).ObtenerDetalleAsync(conductor, viaje, envio));
 
         Assert.Empty(consultas.Consultas);
     }
@@ -273,7 +328,7 @@ public class OportunidadesLogicaTest
         cancelacion.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new OportunidadesLogica(db).ObtenerDetalleAsync(7, 10, 25, cancelacion.Token));
+            Logica(db).ObtenerDetalleAsync(7, 10, 25, cancelacion.Token));
 
         Assert.Empty(consultas.Consultas);
     }
@@ -287,7 +342,7 @@ public class OportunidadesLogicaTest
         cancelacion.Cancel();
 
         var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new OportunidadesLogica(db).ConsultarAsync(7, 10, cancellationToken: cancelacion.Token));
+            Logica(db).ConsultarAsync(7, 10, cancellationToken: cancelacion.Token));
 
         Assert.Equal(cancelacion.Token, error.CancellationToken);
         Assert.Empty(consultas.Consultas);
