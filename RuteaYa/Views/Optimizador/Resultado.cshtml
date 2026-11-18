@@ -1,0 +1,113 @@
+@model RuteaYa.Web.Models.OptimizadorResultadoViewModel
+@using RuteaYa.Models
+@{
+    ViewData["Title"] = "Optimizador";
+    ViewData["ActivePage"] = "Optimizador";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+    var r = Model.Resultado;
+    string Km(long metros) => (metros / 1000m).ToString("0.#") + " km";
+    string Min(long segundos) => (segundos / 60m).ToString("0.#") + " min";
+    string Firmado(long metros) => (metros > 0 ? "+" : "") + (metros / 1000m).ToString("0.#") + " km";
+    string FirmadoMin(long segundos) => (segundos > 0 ? "+" : "") + (segundos / 60m).ToString("0.#") + " min";
+}
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">RUTEAYA / PLANIFICACIÓN</span>
+        <h1>Optimizador de oportunidades</h1>
+        <p>@r.Origen → @r.Destino@(r.Salida.HasValue ? $" · salida {r.Salida.Value:dd/MM/yyyy HH:mm}" : "")</p>
+    </div>
+    <a class="panel-button outline" asp-controller="Optimizador" asp-action="Index" asp-route-viajeId="@r.ViajeId">← Cambiar salida</a>
+</div>
+
+@if (Model.Error != null) { <div class="panel-alert danger" role="alert">@Model.Error</div> }
+
+<div class="panel-stats">
+    <div class="panel-stat"><span>Cupos disponibles</span><strong>@r.CuposDisponibles / @r.CupoTotal</strong></div>
+    <div class="panel-stat"><span>Peso disponible</span><strong>@r.PesoDisponibleKg.ToString("0.##") / @r.PesoMaximoKg.ToString("0.##") kg</strong></div>
+    <div class="panel-stat"><span>Desvío máximo</span><strong>@r.DesvioMaxKm.ToString("0.##") km</strong></div>
+    <div class="panel-stat"><span>Candidatos</span><strong>@r.CandidatosDisponibles</strong></div>
+</div>
+
+@if (r.Bloqueo != null)
+{
+    <div class="panel-card" role="alert"><p>@r.Bloqueo</p>
+        <a class="panel-button outline" asp-controller="Optimizador" asp-action="Index" asp-route-viajeId="@r.ViajeId">Elegir otra salida</a>
+    </div>
+}
+else if (r.CandidatosDisponibles == 0)
+{
+    <div class="panel-card"><h2>Sin envíos candidatos</h2><p>Todavía no hay envíos de otros usuarios buscando conductor.</p></div>
+}
+else
+{
+    @if (r.Aviso != null) { <div class="panel-alert" role="alert">@r.Aviso</div> }
+    @if (r.Recomendada is { } mejor)
+    {
+        var cuposUsados = mejor.CantidadPaquetes + r.CuposComprometidos;
+        <div class="panel-card opportunity-card opportunity-card--green">
+            <h2>Combinación recomendada</h2>
+            <div class="panel-stats">
+                <div class="panel-stat highlight"><span>Ganancia total</span><strong>$@mejor.GananciaTotal.ToString("#,0")</strong></div>
+                <div class="panel-stat"><span>Paquetes</span><strong>@mejor.CantidadPaquetes nuevo(s)@(r.CuposComprometidos > 0 ? $" + {r.CuposComprometidos} ya asignados" : "")</strong></div>
+                <div class="panel-stat"><span>Peso de los nuevos</span><strong>@mejor.PesoTotalKg.ToString("0.##") kg</strong></div>
+                <div class="panel-stat"><span>Capacidad usada</span><strong>@cuposUsados / @r.CupoTotal cupos</strong></div>
+                <div class="panel-stat"><span>Desvío adicional</span><strong>@Firmado(mejor.DesvioMetros) · @FirmadoMin(mejor.TiempoAdicionalSegundos)</strong></div>
+                <div class="panel-stat"><span>Recorrido</span><strong>@Km(mejor.DistanciaOriginalMetros) → @Km(mejor.DistanciaCombinadaMetros)</strong></div>
+            </div>
+            <div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Paquete</th><th>Retiro</th><th>Entrega</th><th>Peso</th><th>Fecha límite</th><th>Pago</th></tr></thead><tbody>
+                @foreach (var p in mejor.Paquetes)
+                {
+                    <tr><td><strong>@p.Descripcion</strong></td><td>@p.OrigenDir</td><td>@p.DestinoDir</td>
+                        <td>@p.PesoKg.ToString("0.##") kg</td>
+                        <td>@(p.FechaLimite == default ? "Sin dato" : p.FechaLimite.TimeOfDay == TimeSpan.Zero ? p.FechaLimite.ToString("dd/MM/yyyy") : p.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</td>
+                        <td><strong>$@p.Monto.ToString("#,0")</strong></td></tr>
+                }
+            </tbody></table></div>
+            <h3>Orden del recorrido recomendado</h3>
+            <ol class="opp-list">
+                @foreach (var p in mejor.Orden)
+                {
+                    <li><strong>@p.Tipo:</strong> @p.Descripcion</li>
+                }
+            </ol>
+            @{ var urlConfirmar = Url.Action("Confirmar", "Optimizador", new { viajeId = r.ViajeId, salidaId = r.SalidaId })
+                + string.Concat(mejor.Paquetes.Select(p => "&envioIds=" + p.EnvioId)); }
+            <div class="panel-form-actions">
+                <a class="panel-button" href="@urlConfirmar">Confirmar combinación →</a>
+            </div>
+        </div>
+
+        @if (r.Alternativas.Count > 0)
+        {
+            <div class="panel-card">
+                <h2>Otras combinaciones posibles</h2>
+                <div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Paquetes</th><th>Ganancia</th><th>Peso</th><th>Desvío</th><th></th></tr></thead><tbody>
+                    @foreach (var a in r.Alternativas)
+                    {
+                        <tr><td>@a.CantidadPaquetes paquete(s): @string.Join(", ", a.Paquetes.Select(p => p.Descripcion))</td>
+                            <td><strong>$@a.GananciaTotal.ToString("#,0")</strong></td><td>@a.PesoTotalKg.ToString("0.##") kg</td>
+                            <td>@Firmado(a.DesvioMetros)</td>
+                            <td><a class="panel-button small outline"
+                                   href="@(Url.Action("Confirmar", "Optimizador", new { viajeId = r.ViajeId, salidaId = r.SalidaId }) + string.Concat(a.Paquetes.Select(p => "&envioIds=" + p.EnvioId)))">Elegir</a></td></tr>
+                    }
+                </tbody></table></div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="panel-card"><h2>No hay combinación compatible</h2>
+            <p>Ningún grupo de los envíos disponibles cumple a la vez cupos, peso, desvío máximo y horarios de tu salida.</p></div>
+    }
+
+    @if (r.Descartados.Count > 0)
+    {
+        <div class="panel-card">
+            <h2>Envíos no considerados</h2>
+            <ul class="opp-list">
+                @foreach (var d in r.Descartados) { <li><strong>@d.Descripcion:</strong> @d.Motivo</li> }
+            </ul>
+        </div>
+    }
+}
+@section Scripts { }

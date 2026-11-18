@@ -1,4 +1,4 @@
-﻿
+
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -34,8 +34,8 @@ namespace RuteaYa.Web.Controllers
             viajeId.HasValue && envioId.HasValue
                 ? RedirectToAction("Detalle", "Oportunidades", new { viajeId, envioId, pagina, tamanoPagina })
                 : RedirectToAction("Index", "Oportunidades", new { viajeId, pagina, tamanoPagina });
-        public IActionResult Optimizador() => View();
-        public IActionResult ConfirmarCombinacion() => View();
+        public IActionResult Optimizador() => RedirectToAction("Index", "Optimizador");
+        public IActionResult ConfirmarCombinacion() => RedirectToAction("Index", "Optimizador");
         public IActionResult Transportes() => RedirectToAction("Index", "Transportes");
 
         private int ObtenerUsuarioId()

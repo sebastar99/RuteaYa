@@ -158,48 +158,10 @@ else
         <h2>Paradas intermedias</h2>
         <div asp-validation-summary="ModelOnly" role="alert"></div>
 
-        @if (Model.Activo)
-        {
-            <form asp-controller="Panel" asp-action="AgregarParada" method="post" class="panel-form">
-                @Html.AntiForgeryToken()
-
-                <input type="hidden" name="viajeId" value="@Model.Id" />
-
-                <div class="panel-form-grid">
-
-                    <div class="panel-field">
-                        <label for="ubicacion">Ubicación de la parada</label>
-
-                        <input type="text" id="ubicacion" name="ubicacion"  maxlength="150"
-                            required class="panel-input" placeholder="Ej. Chivilcoy, Buenos Aires" 
-                        />
-                        @Html.ValidationMessage("ubicacion")
-                    </div>
-
-                    <div class="panel-field">
-                        <label for="orden">Orden de la parada</label>
-
-                        <input type="number" id="orden" name="orden" min="1" max="@(paradas.Count + 1)"
-                            value="@(paradas.Count + 1)" required class="panel-input" 
-                        />
-                        @Html.ValidationMessage("orden")
-                    </div>
-                </div>
-
-                <div class="panel-form-actions">
-                    <button type="submit" class="panel-button">
-                        Agregar parada
-                    </button>
-                </div>
-            </form>
-
-            <hr class="panel-divider" />
-        }
-
         @if (paradas.Count == 0)
         {
             <div class="panel-empty">
-                <p>Este viaje todavía no tiene paradas intermedias.</p>
+                <p>Este viaje todavía no tiene paradas intermedias. Podés agregarlas desde Editar viaje.</p>
             </div>
         }
         else

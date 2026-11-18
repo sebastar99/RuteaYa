@@ -1,0 +1,67 @@
+@model RuteaYa.Web.Models.ConfirmarCombinacionViewModel
+@{
+    ViewData["Title"] = "Confirmar combinación";
+    ViewData["ActivePage"] = "Optimizador";
+    Layout = "~/Views/Shared/_PanelLayout.cshtml";
+    var e = Model.Evaluacion;
+    string Km(long metros) => (metros / 1000m).ToString("0.#") + " km";
+    string Firmado(long metros) => (metros > 0 ? "+" : "") + (metros / 1000m).ToString("0.#") + " km";
+    string FirmadoMin(long segundos) => (segundos > 0 ? "+" : "") + (segundos / 60m).ToString("0.#") + " min";
+}
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">REVISIÓN FINAL</span>
+        <h1>Confirmar combinación</h1>
+        <p>Revisá el resumen antes de reservar @(e.Combinacion?.CantidadPaquetes ?? Model.EnvioIds.Length) paquete(s).</p>
+    </div>
+    <a class="panel-button outline" asp-controller="Optimizador" asp-action="Resultado" asp-route-viajeId="@e.ViajeId" asp-route-salidaId="@e.SalidaId">← Volver</a>
+</div>
+
+@if (Model.Error != null || !e.Valida)
+{
+    <div class="panel-alert danger" role="alert">
+        @(Model.Error ?? e.Motivo ?? "La selección no puede confirmarse.")
+        @if (e.EnviosNoDisponibles.Count > 0) { <text> Revisá la combinación: algún envío ya no está disponible.</text> }
+    </div>
+    <div class="panel-form-actions">
+        <a class="panel-button" asp-controller="Optimizador" asp-action="Resultado" asp-route-viajeId="@e.ViajeId" asp-route-salidaId="@e.SalidaId">Volver a calcular</a>
+        <a class="panel-button outline" asp-controller="Optimizador" asp-action="Index" asp-route-viajeId="@e.ViajeId">Cancelar</a>
+    </div>
+}
+else if (e.Combinacion is { } c)
+{
+    <div class="panel-card">
+        <h2>Recorrido seleccionado</h2>
+        <div class="panel-route-line"><span class="panel-point"></span><strong>@e.Origen</strong><div class="panel-line"></div><span class="panel-point end"></span><strong>@e.Destino</strong></div>
+        @if (e.Salida.HasValue) { <p class="panel-muted">Salida: @e.Salida.Value.ToString("dd/MM/yyyy HH:mm")</p> }
+    </div>
+    <div class="panel-card">
+        <h2>Envíos incluidos</h2>
+        <div class="panel-table-wrap"><table class="panel-table"><thead><tr><th>Paquete</th><th>Retiro</th><th>Entrega</th><th>Peso</th><th>Pago</th></tr></thead><tbody>
+            @foreach (var p in c.Paquetes)
+            {
+                <tr><td><strong>@p.Descripcion</strong></td><td>@p.OrigenDir</td><td>@p.DestinoDir</td>
+                    <td>@p.PesoKg.ToString("0.##") kg</td><td><strong>$@p.Monto.ToString("#,0")</strong></td></tr>
+            }
+        </tbody></table></div>
+    </div>
+    <div class="panel-stats">
+        <div class="panel-stat highlight"><span>Ganancia total</span><strong>$@c.GananciaTotal.ToString("#,0")</strong></div>
+        <div class="panel-stat"><span>Peso combinado</span><strong>@c.PesoTotalKg.ToString("0.##") kg</strong></div>
+        <div class="panel-stat"><span>Paquetes</span><strong>@c.CantidadPaquetes</strong></div>
+        <div class="panel-stat"><span>Desvío combinado</span><strong>@Firmado(c.DesvioMetros)</strong></div>
+        <div class="panel-stat"><span>Tiempo adicional</span><strong>@FirmadoMin(c.TiempoAdicionalSegundos)</strong></div>
+        <div class="panel-stat"><span>Distancia</span><strong>@Km(c.DistanciaOriginalMetros) → @Km(c.DistanciaCombinadaMetros)</strong></div>
+    </div>
+    <form method="post" asp-controller="Optimizador" asp-action="Confirmar">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="viajeId" value="@e.ViajeId" />
+        <input type="hidden" name="salidaId" value="@e.SalidaId" />
+        <input type="hidden" name="huella" value="@e.Huella" />
+        @foreach (var id in Model.EnvioIds) { <input type="hidden" name="envioIds" value="@id" /> }
+        <div class="panel-form-actions">
+            <a class="panel-button outline" asp-controller="Optimizador" asp-action="Resultado" asp-route-viajeId="@e.ViajeId" asp-route-salidaId="@e.SalidaId">Volver sin reservar</a>
+            <button class="panel-button" type="submit">Confirmar y reservar</button>
+        </div>
+    </form>
+}

@@ -153,63 +153,69 @@ public class CompatibilidadServicio : ICompatibilidadServicio
         if (insercion.Desvio.DuracionConEnvioSegundos < 0)
             throw new InvalidOperationException("El servicio de desvíos devolvió una duración total negativa.");
 
+        var r = EvaluarHorarios(viaje.SalidaProgramada, viaje.LlegadaMaxima,
+            new[] { new RestriccionesPaquete(envio.DisponibleDesde, envio.FechaLimiteEntrega) }, insercion.Desvio.DuracionConEnvioSegundos);
+        insercion.MotivosTemporales = r.Motivos;
+        insercion.EstadoTemporal = r.Estado;
+        insercion.FinalizacionEstimada = r.FinEstimado;
+    }
+
+    public sealed record RestriccionesPaquete(RestriccionTemporalDto DisponibleDesde, RestriccionTemporalDto FechaLimiteEntrega);
+
+    public sealed record ResultadoHorario(EstadoCompatibilidad Estado, IReadOnlyList<MotivoCompatibilidad> Motivos, DateTimeOffset? FinEstimado);
+
+    /// <summary>
+    /// Regla temporal única para uno o varios paquetes sobre un mismo recorrido, usando la duración total.
+    /// No infiere instantes de retiro/entrega: lo que no puede verificarse queda Indeterminado.
+    /// </summary>
+    public static ResultadoHorario EvaluarHorarios(DateTimeOffset? salidaProgramada, RestriccionTemporalDto llegadaMaxima,
+        IReadOnlyList<RestriccionesPaquete> paquetes, long duracionSegundos)
+    {
         var motivos = new List<MotivoCompatibilidad>();
-        insercion.MotivosTemporales = motivos.AsReadOnly();
-        AgregarRestriccionesDesconocidas(viaje, envio, motivos);
-        if (!viaje.SalidaProgramada.HasValue)
+        if (llegadaMaxima.Estado == EstadoRestriccionTemporal.Desconocida) motivos.Add(MotivoCompatibilidad.LlegadaMaximaDesconocida);
+        if (paquetes.Any(p => p.DisponibleDesde.Estado == EstadoRestriccionTemporal.Desconocida)) motivos.Add(MotivoCompatibilidad.DisponibilidadRetiroDesconocida);
+        if (paquetes.Any(p => p.FechaLimiteEntrega.Estado == EstadoRestriccionTemporal.Desconocida)) motivos.Add(MotivoCompatibilidad.VencimientoEntregaDesconocido);
+        if (!salidaProgramada.HasValue)
         {
             motivos.Add(MotivoCompatibilidad.SalidaNoInformada);
             motivos.Add(MotivoCompatibilidad.HorarioNoEvaluado);
-            return;
+            return new(EstadoCompatibilidad.Indeterminado, motivos.AsReadOnly(), null);
         }
 
-        var salida = viaje.SalidaProgramada.Value;
+        var salida = salidaProgramada.Value;
         DateTimeOffset fin;
         try
         {
             // Suma exacta en ticks, sin redondeos de double ni convertir a una zona fija.
-            fin = salida.AddTicks(checked(insercion.Desvio.DuracionConEnvioSegundos * TimeSpan.TicksPerSecond));
+            fin = salida.AddTicks(checked(duracionSegundos * TimeSpan.TicksPerSecond));
         }
         catch (Exception error) when (error is OverflowException or ArgumentOutOfRangeException)
         {
             throw new InvalidOperationException("La duración del recorrido excede el rango de fechas permitido.");
         }
-        insercion.FinalizacionEstimada = fin;
 
         var incompatible = false;
-        if (viaje.LlegadaMaxima.Estado == EstadoRestriccionTemporal.Informada &&
-            fin > viaje.LlegadaMaxima.Valor!.Value)
+        if (llegadaMaxima.Estado == EstadoRestriccionTemporal.Informada && fin > llegadaMaxima.Valor!.Value)
         {
             motivos.Add(MotivoCompatibilidad.LlegadaMaximaExcedida);
             incompatible = true;
         }
-        if (envio.FechaLimiteEntrega.Estado == EstadoRestriccionTemporal.Informada &&
-            fin > envio.FechaLimiteEntrega.Valor!.Value)
+        if (paquetes.Any(p => p.FechaLimiteEntrega.Estado == EstadoRestriccionTemporal.Informada && fin > p.FechaLimiteEntrega.Valor!.Value))
             motivos.Add(MotivoCompatibilidad.EntregaAntesDelVencimientoNoVerificable);
-
-        if (envio.DisponibleDesde.Estado == EstadoRestriccionTemporal.Informada)
+        if (paquetes.Any(p => p.DisponibleDesde.Estado == EstadoRestriccionTemporal.Informada && p.DisponibleDesde.Valor!.Value > fin))
         {
-            if (envio.DisponibleDesde.Valor!.Value > fin)
-            {
-                motivos.Add(MotivoCompatibilidad.DisponibilidadPosteriorAlRecorrido);
-                incompatible = true;
-            }
-            else if (envio.DisponibleDesde.Valor!.Value > salida)
-            {
-                // Incluye disponibilidad exactamente al finalizar: no se conoce el instante del retiro.
-                motivos.Add(MotivoCompatibilidad.HorarioRetiroNoVerificable);
-            }
+            motivos.Add(MotivoCompatibilidad.DisponibilidadPosteriorAlRecorrido);
+            incompatible = true;
         }
+        // Incluye disponibilidad exactamente al finalizar: no se conoce el instante del retiro.
+        if (paquetes.Any(p => p.DisponibleDesde.Estado == EstadoRestriccionTemporal.Informada &&
+                p.DisponibleDesde.Valor!.Value <= fin && p.DisponibleDesde.Valor!.Value > salida))
+            motivos.Add(MotivoCompatibilidad.HorarioRetiroNoVerificable);
 
-        if (incompatible)
-            insercion.EstadoTemporal = EstadoCompatibilidad.Incompatible;
-        else if (motivos.Count > 0)
-            insercion.EstadoTemporal = EstadoCompatibilidad.Indeterminado;
-        else
-        {
-            insercion.EstadoTemporal = EstadoCompatibilidad.Compatible;
-            motivos.Add(MotivoCompatibilidad.HorarioAprobado);
-        }
+        if (incompatible) return new(EstadoCompatibilidad.Incompatible, motivos.AsReadOnly(), fin);
+        if (motivos.Count > 0) return new(EstadoCompatibilidad.Indeterminado, motivos.AsReadOnly(), fin);
+        motivos.Add(MotivoCompatibilidad.HorarioAprobado);
+        return new(EstadoCompatibilidad.Compatible, motivos.AsReadOnly(), fin);
     }
 
     private static void AgregarRestriccionesDesconocidas(
