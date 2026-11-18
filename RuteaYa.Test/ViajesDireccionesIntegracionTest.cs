@@ -254,6 +254,7 @@ public class ViajesDireccionesIntegracionTest
         private SqliteConnection _connection = new("Data Source=:memory:"); private WebApplication _api = null!, _mvc = null!;
         public HttpClient Mvc = null!, Api = null!;
         public Mock<IGeocodificacionServicio> Geo = new(MockBehavior.Strict);
+        public Mock<IBusquedaDireccionesServicio> Busqueda = new();
         public int LlamadasGateway;
         public RelojPrueba Reloj = new();
         public RuteaYaDbContext Db() => new DbPrueba(new DbContextOptionsBuilder<RuteaYaDbContext>().UseSqlite(_connection).Options);
@@ -276,7 +277,7 @@ public class ViajesDireccionesIntegracionTest
                     Totales = new() { DistanciaMetros = 3210, DuracionSegundos = 123 }, Secciones = new() { p.ToList() } });
             mvc.Services.AddSingleton(rutas.Object);
             mvc.Services.AddSingleton(new MapasHereServicio(new HttpClient(new MapaHandler()), Options.Create(new HereRoutingOpciones { ApiKey = "simulada" })));
-            var busqueda = new Mock<IBusquedaDireccionesServicio>();
+            var busqueda = f.Busqueda;
             busqueda.Setup(b => b.SugerirAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((string t, CancellationToken _) =>
                 new[] { new SugerenciaDireccionDto { IdHere = "here:af:" + t, Nombre = t, Localidad = "Morón", Direccion = t + ", Morón" } });
             busqueda.Setup(b => b.ResolverAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((string id, CancellationToken _) =>
@@ -295,7 +296,7 @@ public class ViajesDireccionesIntegracionTest
             var sugerencia = sugeridas.RootElement[0].GetProperty("token").GetString()!;
             using var resolver = await Post(url + "Resolver?campo=" + campo, csrf, ("token", sugerencia));
             using var resuelta = JsonDocument.Parse(await resolver.Content.ReadAsStringAsync());
-            using var confirmar = await Post(url + "Confirmar?campo=" + campo, csrf, ("token", resuelta.RootElement.GetProperty("token").GetString()!), ("acceso", "0"));
+            using var confirmar = await Post(url + "Confirmar?campo=" + campo, csrf, ("token", resuelta.RootElement.GetProperty("token").GetString()!));
             Assert.Equal(HttpStatusCode.OK, confirmar.StatusCode);
             using var final = JsonDocument.Parse(await confirmar.Content.ReadAsStringAsync());
             return (final.RootElement.GetProperty("ubicacion").GetProperty("direccionNormalizada").GetString()!, final.RootElement.GetProperty("token").GetString()!);

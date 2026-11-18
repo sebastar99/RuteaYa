@@ -57,9 +57,10 @@ public class SeleccionDireccionServicio(IBusquedaDireccionesServicio busqueda, I
         var entrada = Leer("resuelta", usuarioId, ambito, token);
         var u = JsonSerializer.Deserialize<EstadoSeleccionDireccion>(entrada.Estado!)!.Ubicacion;
         bool Valido(PuntoRutaDto p) => p != null && p.Latitud is >= -90 and <= 90 && p.Longitud is >= -180 and <= 180;
-        // Una calle/localidad o una puerta interpolada no identifica un retiro o entrega con suficiente certeza.
-        if (u.TipoResultado is not ("houseNumber" or "place") || u.PosicionEstimada || u.NumeroPuertaCorregido ||
-            u.TipoNumeroPuerta == "interpolated" || !Valido(u.Posicion))
+        // houseNumber identifica la dirección elegida aunque HERE estime/interpole su
+        // posición. Esos indicadores describen su calidad, no una ambigüedad ni un error.
+        // Se conserva la calidad original y nunca se fabrica una coordenada o un acceso.
+        if (u.TipoResultado is not ("houseNumber" or "place") || string.IsNullOrWhiteSpace(u.DireccionNormalizada) || !Valido(u.Posicion))
             throw new ArgumentException("Elegí una dirección más precisa: calle, número y localidad, o un lugar identificado.");
         var acceso = -1;
         var distancia = decimal.MaxValue;

@@ -15,7 +15,7 @@ public class UxDireccionesYHorariosTest
     [InlineData("place", false, true)]
     [InlineData("street", false, false)]
     [InlineData("locality", false, false)]
-    [InlineData("houseNumber", true, false)]
+    [InlineData("houseNumber", true, true)]
     public async Task SeleccionAutomatica_ExigePrecision_YUsaAccesoMasCercanoSinRecibirCoordenadas(string tipo, bool estimada, bool acepta)
     {
         var u = new ResultadoGeocodificacionDto { IdHere = "here:af:1", DireccionNormalizada = "Calle 10, Argentina", TipoResultado = tipo, PosicionEstimada = estimada,
