@@ -9,15 +9,17 @@
 
 <div class="page-heading">
     <div>
-        <span class="eyebrow">DETALLE DEL CANDIDATO</span>
+        <span class="eyebrow">DETALLE DEL ENVÍO</span>
         <h1>Detalle de oportunidad</h1>
-        <p>Información publicada y estado de evaluación para tu viaje.</p>
+        <p>Revisá si el envío entra en tu viaje y aceptalo.</p>
     </div>
     <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
        asp-route-viajeId="@Model.ViajeId" asp-route-pagina="@Model.Pagina"
        asp-route-salidaId="@Model.Detalle?.Viaje.SalidaSeleccionada?.Id"
        asp-route-tamanoPagina="@Model.TamanoPagina">Volver al listado</a>
 </div>
+
+@if (TempData["ErrorAceptacion"] is string errorAceptacion) { <div class="panel-alert danger" role="alert">@errorAceptacion</div> }
 
 @if (Model.Error != null)
 {
@@ -28,110 +30,78 @@ else if (Model.Detalle != null)
     var candidato = Model.Detalle;
     var envio = candidato.Envio;
     var evaluacion = candidato.Evaluacion;
-    var textoEstado = !evaluacion.MotorEjecutado ? "Indeterminado: Pendiente de evaluación" : evaluacion.Estado switch
-    {
-        EstadoCompatibilidad.Compatible => "Compatible según la evaluación",
-        EstadoCompatibilidad.Incompatible => "No compatible",
-        _ => "Compatibilidad indeterminada"
-    };
-    var color = !evaluacion.MotorEjecutado || evaluacion.Estado == EstadoCompatibilidad.Indeterminado
-        ? "orange" : evaluacion.Estado == EstadoCompatibilidad.Compatible ? "green" : "red";
+    var estado = PresentacionOportunidad.Estado(evaluacion);
+    var color = PresentacionOportunidad.Color(estado);
+    var adicional = PresentacionOportunidad.Adicional(evaluacion);
+    var salidaElegida = candidato.Viaje.SalidaSeleccionada;
+    var noAcepta = PresentacionOportunidad.NoSePuedeAceptar(candidato);
     <div class="panel-card">
-        <h2>Viaje #@candidato.Viaje.Id: @candidato.Viaje.Origen → @candidato.Viaje.Destino</h2>
-        <a class="panel-button outline" asp-controller="Recorridos" asp-action="Index"
-           asp-route-viajeId="@candidato.Viaje.Id">Previsualizar recorrido del viaje</a>
-        <p>Estado del viaje: @(candidato.Viaje.Activo ? "Activo" : "Inactivo").
-            Esto no confirma disponibilidad ni capacidad de una salida concreta.</p>
-        <span class="panel-pill @color">@textoEstado</span>
-        @if (candidato.Viaje.SalidaSeleccionada is { } salida) { <partial name="_SalidaOportunidad" model="salida" /> }
-    </div>
-    <div class="panel-card">
-        <h2>Envío #@envio.Id</h2>
-        <div class="panel-table-wrap">
-            <table class="panel-table">
-                <tbody>
-                    <tr><th scope="row">Dirección de retiro</th><td>@envio.OrigenDir</td></tr>
-                    <tr><th scope="row">Dirección de entrega</th><td>@envio.DestinoDir</td></tr>
-                    <tr><th scope="row">Descripción</th><td>@envio.Descripcion</td></tr>
-                    <tr><th scope="row">Peso publicado</th><td>@envio.PesoKg.ToString("0.##") kg</td></tr>
-                    <tr><th scope="row">Tamaño</th><td>@envio.TamanoTexto</td></tr>
-                    <tr><th scope="row">Fecha límite publicada</th><td>@(envio.FechaLimite == default ? "No informada" : envio.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</td></tr>
-                    <tr><th scope="row">Monto ofrecido</th><td>@envio.Monto.ToString("C")</td></tr>
-                    <tr><th scope="row">Estado de publicación</th><td>Buscando conductor</td></tr>
-                </tbody>
-            </table>
+        <div class="detail-head">
+            <h2>@candidato.Viaje.Origen → @candidato.Viaje.Destino</h2>
+            <a class="panel-button outline small" asp-controller="Recorridos" asp-action="Index"
+               asp-route-viajeId="@candidato.Viaje.Id">Ver recorrido en el mapa</a>
         </div>
-        <p class="panel-note">La fecha se muestra tal como fue publicada, sin interpretar su zona horaria.
-            La disponibilidad por estado se verificó al consultar; no representa una reserva.</p>
+        @if (salidaElegida is { } salida) { <partial name="_SalidaOportunidad" model="salida" /> }
+        else { <p>Todavía no elegiste la fecha de salida de este viaje.</p> }
     </div>
+
     <div class="panel-card">
-        @if (!evaluacion.MotorEjecutado || evaluacion.DatosPendientes.Count > 0)
+        <div class="opp-card-head">
+            <h2>@envio.Descripcion</h2>
+            <span class="opp-reward">@envio.Monto.ToString("C")</span>
+        </div>
+        <div class="opp-route">
+            <div><small>Retiro</small>@envio.OrigenDir</div>
+            <div><small>Entrega</small>@envio.DestinoDir</div>
+        </div>
+        <dl class="opp-meta" style="margin-top:14px">
+            <div><dt>Peso</dt><dd>@envio.PesoKg.ToString("0.##") kg</dd></div>
+            <div><dt>Tamaño</dt><dd>@envio.TamanoTexto</dd></div>
+            <div><dt>Fecha límite</dt><dd>@(envio.FechaLimite == default ? "Sin dato" : envio.FechaLimite.TimeOfDay == TimeSpan.Zero ? envio.FechaLimite.ToString("dd/MM/yyyy") : envio.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</dd></div>
+        </dl>
+    </div>
+
+    <div class="panel-card">
+        <div class="detail-head">
+            <h2>Compatibilidad con tu viaje</h2>
+            <span class="panel-pill @color">@PresentacionOportunidad.Etiqueta(estado)</span>
+        </div>
+        @if (adicional.HasValue)
         {
-            <h2>Datos pendientes para evaluar</h2>
-            @if (!evaluacion.MotorEjecutado) { <p>No se ejecutó el motor ni se consultaron rutas para este candidato.</p> }
-            else { <p>Se evaluaron las condiciones verificables; estos datos siguen pendientes para una decisión completa.</p> }
-            @if (evaluacion.DatosPendientes.Count == 0)
-            {
-                <p>La evaluación aún no está preparada.</p>
-            }
-            else
-            {
-                <ul>
-                    @foreach (var dato in evaluacion.DatosPendientes)
-                    {
-                        <li>@MensajesEvaluacionOportunidad.DatoPendiente(dato)</li>
-                    }
-                </ul>
-            }
+            <p>Para llevarlo, tu recorrido cambia aproximadamente <strong>@PresentacionOportunidad.Firmado(adicional.Value.Km, "0.#") km</strong> y <strong>@PresentacionOportunidad.Firmado(adicional.Value.Minutos, "0") minutos</strong>.</p>
         }
-        @if (evaluacion.MotorEjecutado)
-        {
-            var resultado = evaluacion.ResultadoMotor!;
-            <h2>Resultado del motor de compatibilidad</h2>
-            <ul>
-                @foreach (var motivo in resultado.Motivos)
-                {
-                    <li>@MensajesEvaluacionOportunidad.Motivo(motivo)</li>
-                }
-            </ul>
-            @if (resultado.InsercionSeleccionada != null)
+        <ul class="cond-list">
+            @foreach (var condicion in PresentacionOportunidad.Condiciones(candidato))
             {
-                var insercion = resultado.InsercionSeleccionada;
-                var desvio = insercion.Desvio;
-                <div class="panel-table-wrap">
-                    <table class="panel-table">
-                        <tbody>
-                            <tr><th scope="row">Distancia original</th><td>@((desvio.DistanciaOriginalMetros / 1000m).ToString("0.###")) km</td></tr>
-                            <tr><th scope="row">Distancia con envío</th><td>@((desvio.DistanciaConEnvioMetros / 1000m).ToString("0.###")) km</td></tr>
-                            <tr><th scope="row">Distancia adicional calculada</th><td>@((desvio.DistanciaAdicionalMetros / 1000m).ToString("0.###")) km</td></tr>
-                            <tr><th scope="row">Duración total con envío</th><td>@((desvio.DuracionConEnvioSegundos / 60m).ToString("0.##")) minutos</td></tr>
-                            <tr><th scope="row">Tiempo adicional calculado</th><td>@((desvio.TiempoAdicionalSegundos / 60m).ToString("0.##")) minutos</td></tr>
-                            <tr><th scope="row">Segmento de retiro</th><td>@insercion.SegmentoRetiro</td></tr>
-                            <tr><th scope="row">Segmento de entrega</th><td>@insercion.SegmentoEntrega</td></tr>
-                            @if (insercion.FinalizacionEstimada.HasValue)
-                            {
-                                <tr><th scope="row">Finalización estimada del recorrido completo</th><td>@insercion.FinalizacionEstimada.Value.ToString("dd/MM/yyyy HH:mm zzz")</td></tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-                <p class="panel-note">Los segmentos empiezan en cero y se refieren al recorrido base confirmado.
-                    Las diferencias negativas se conservan. La finalización del recorrido no es una hora de entrega del paquete.</p>
+                var colorCondicion = condicion.Resultado switch { ResultadoCondicion.Cumple => "green", ResultadoCondicion.NoCumple => "red", _ => "orange" };
+                var icono = condicion.Resultado switch { ResultadoCondicion.Cumple => "✓", ResultadoCondicion.NoCumple => "✕", _ => "!" };
+                <li class="cond-item">
+                    <span class="cond-icon @colorCondicion" aria-hidden="true">@icono</span>
+                    <div>
+                        <strong>@condicion.Nombre</strong>
+                        <span class="cond-detalle">@condicion.Detalle</span>
+                    </div>
+                </li>
             }
-            <p class="panel-note">Resultado basado en los datos confirmados y las estimaciones del proveedor,
-                no una garantía de llegada ni una reserva. HERE Routing usa actualmente departureTime=any.</p>
+        </ul>
+    </div>
+
+    <div class="panel-card accept-box">
+        @if (noAcepta == null && salidaElegida != null)
+        {
+            <form method="post" asp-controller="Oportunidades" asp-action="Aceptar">
+                <input type="hidden" name="viajeId" value="@candidato.Viaje.Id" />
+                <input type="hidden" name="salidaId" value="@salidaElegida.Id" />
+                <input type="hidden" name="envioId" value="@envio.Id" />
+                <button class="panel-button" type="submit">Aceptar envío</button>
+            </form>
+            <p class="accept-solucion">Al aceptar, el envío pasa a Mis transportes y se descuenta de la capacidad de tu salida.</p>
+        }
+        else
+        {
+            <button class="panel-button" type="button" disabled aria-disabled="true">Aceptar envío</button>
+            <p class="accept-motivo" role="status">@noAcepta?.Motivo</p>
+            @if (noAcepta?.Solucion != null) { <p class="accept-solucion">@noAcepta.Solucion</p> }
         }
     </div>
-    @if (evaluacion.Estado == EstadoCompatibilidad.Compatible && evaluacion.MotorEjecutado && evaluacion.DatosPendientes.Count == 0 &&
-        candidato.Viaje.SalidaSeleccionada is { Disponible: true } salidaAceptable)
-    {
-        <form method="post" asp-controller="Oportunidades" asp-action="Aceptar" class="panel-form-actions">
-            <input type="hidden" name="viajeId" value="@candidato.Viaje.Id" />
-            <input type="hidden" name="salidaId" value="@salidaAceptable.Id" />
-            <input type="hidden" name="envioId" value="@envio.Id" />
-            <button class="panel-button" type="submit">Aceptar envío</button>
-        </form>
-        <p class="panel-note">Al aceptar se volverán a validar la compatibilidad y la capacidad en el servidor.</p>
-    }
-    else { <div class="panel-alert" role="note">No se puede aceptar hasta confirmar compatibilidad y una salida disponible.</div> }
 }

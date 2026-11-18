@@ -32,7 +32,7 @@ public class OportunidadesVistaTest
         var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
         logica.Setup(l => l.ConsultarAsync(7, 10, 1, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new ListadoCandidatosDto {
             Viajes = new[] { viaje }, ViajeSeleccionado = viaje });
-        logica.Setup(l => l.SeleccionarSalidaAsync(7, It.Is<SeleccionSalidaDto>(s => s.ViajeId == 10 && s.Fecha == new DateOnly(2030, 1, 7) && s.OffsetUtcMinutos == -180), It.IsAny<CancellationToken>())).ReturnsAsync(87);
+        logica.Setup(l => l.SeleccionarSalidaAsync(7, It.Is<SeleccionSalidaDto>(s => s.ViajeId == 10 && s.Fecha == new DateOnly(2030, 1, 7)), It.IsAny<CancellationToken>())).ReturnsAsync(87);
         logica.Setup(l => l.ConsultarSalidaAsync(7, 10, 87, 1, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new ListadoCandidatosDto {
             Viajes = new[] { viaje }, ViajeSeleccionado = viaje, Candidatos = new[] { envio }, TotalCandidatos = 20 });
         logica.Setup(l => l.ObtenerDetalleSalidaAsync(7, 10, 87, 25, It.IsAny<CancellationToken>())).ReturnsAsync(new DetalleCandidatoDto { Viaje = viaje, Envio = envio });
@@ -43,19 +43,19 @@ public class OportunidadesVistaTest
             cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
             var inicial = await cliente.GetStringAsync("/Oportunidades?viajeId=10");
             var token = WebUtility.HtmlDecode(Regex.Match(inicial, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"").Groups[1].Value);
-            var datos = new Dictionary<string, string> { ["ViajeId"] = "10", ["Fecha"] = "2030-01-07", ["OffsetUtcMinutos"] = "-180" };
+            var datos = new Dictionary<string, string> { ["ViajeId"] = "10", ["Fecha"] = "2030-01-07" };
             using var sinToken = await cliente.PostAsync("/Oportunidades/SeleccionarSalida", new FormUrlEncodedContent(datos));
             Assert.Equal(HttpStatusCode.BadRequest, sinToken.StatusCode);
             datos["__RequestVerificationToken"] = token;
             using var seleccion = await cliente.PostAsync("/Oportunidades/SeleccionarSalida", new FormUrlEncodedContent(datos));
             Assert.Equal(HttpStatusCode.Redirect, seleccion.StatusCode);
             var listado = WebUtility.HtmlDecode(await cliente.GetStringAsync(seleccion.Headers.Location));
-            Assert.Contains("Salida #87", listado); Assert.Contains("-03:00", listado); Assert.Contains("Capacidad restante", listado);
+            Assert.Contains("Salida del 07/01/2030 08:00", listado); Assert.Contains("Capacidad restante: 1 cupos · 7,5 kg", listado.Replace("7.5", "7,5"));
             var detalleUrl = Enlaces(listado).Single(e => e.Contains("/Oportunidades/Detalle"));
             Assert.Contains("salidaId=87", detalleUrl);
             Assert.Contains(Enlaces(listado), e => e.Contains("pagina=2") && e.Contains("salidaId=87"));
             var detalle = WebUtility.HtmlDecode(await cliente.GetStringAsync(detalleUrl));
-            Assert.Contains("Salida #87", detalle);
+            Assert.Contains("Salida del 07/01/2030 08:00", detalle);
             Assert.Contains(Enlaces(detalle), e => e.Contains("/Oportunidades") && e.Contains("salidaId=87") && !e.Contains("Detalle"));
             Assert.DoesNotContain("/Oportunidades/Aceptar", detalle);
             logica.Verify(l => l.SeleccionarSalidaAsync(7, It.IsAny<SeleccionSalidaDto>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -82,9 +82,9 @@ public class OportunidadesVistaTest
             var url = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
             using var cliente = new HttpClient { BaseAddress = new Uri(url) }; cliente.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7");
             var listado = WebUtility.HtmlDecode(await cliente.GetStringAsync("/Oportunidades?viajeId=10"));
-            Assert.Contains("Indeterminado", listado); Assert.Contains("Adicional:", listado); Assert.Contains("Falta una salida concreta", listado);
+            Assert.Contains("Pendiente de evaluación", listado); Assert.Contains("Desvío", listado); Assert.Contains("min", listado); Assert.Contains("Elegí la fecha de salida para evaluarlo", listado); Assert.DoesNotContain("Compatible</span>", listado);
             var detalle = WebUtility.HtmlDecode(await cliente.GetStringAsync("/Oportunidades/Detalle?viajeId=10&envioId=25"));
-            Assert.Contains("Distancia adicional calculada", detalle); Assert.Contains("Datos pendientes para evaluar", detalle);
+            Assert.Contains("cambia aproximadamente", detalle); Assert.Contains("Desvío permitido", detalle); Assert.Contains("disabled", detalle);
             Assert.DoesNotContain("No se ejecutó el motor", detalle); Assert.DoesNotContain("Tomar este envío", detalle);
         } finally { await app.StopAsync(); }
     }
@@ -215,7 +215,7 @@ public class OportunidadesVistaTest
             Assert.DoesNotContain("Caballito", detalleHtml);
             Assert.DoesNotContain("Tomar este envío", detalleHtml);
             Assert.DoesNotContain("/Oportunidades/Aceptar", detalleHtml);
-            Assert.Contains("No se puede aceptar hasta confirmar compatibilidad", WebUtility.HtmlDecode(detalleHtml));
+            Assert.Contains("Todavía no elegiste la salida de tu viaje", WebUtility.HtmlDecode(detalleHtml));
             var enlaceVolver = Enlaces(detalleHtml).Single(e =>
             {
                 var uri = new Uri(cliente.BaseAddress, e);
@@ -278,7 +278,7 @@ public class OportunidadesVistaTest
         var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
         logica.Setup(l => l.ObtenerDetalleAsync(7, 10, 25, It.IsAny<CancellationToken>())).ReturnsAsync(new DetalleCandidatoDto
         {
-            Viaje = new ViajeOportunidadesDto { Id = 10, Origen = "Origen publicado", Destino = "Destino publicado" },
+            Viaje = new ViajeOportunidadesDto { Id = 10, Origen = "Origen publicado", Destino = "Destino publicado", Activo = true },
             Envio = new EnvioDto { Id = 25, OrigenDir = "Retiro publicado", DestinoDir = "Entrega publicada" },
             Evaluacion = evaluacion
         });
@@ -295,31 +295,15 @@ public class OportunidadesVistaTest
             var html = WebUtility.HtmlDecode(await respuesta.Content.ReadAsStringAsync(limite.Token));
 
             Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
-            Assert.DoesNotContain(">Aceptar", html);
-            if (!estado.HasValue)
-            {
-                Assert.Contains("Pendiente de evaluación", html);
-                Assert.Contains("Falta el peso restante real", html);
-                Assert.Contains("vencimiento obligatorio", html);
-                Assert.Contains("No se ejecutó el motor", html);
-                Assert.DoesNotContain("Distancia adicional calculada", html);
-                Assert.DoesNotContain("Tiempo adicional calculado", html);
-            }
-            else
-            {
-                Assert.Contains(estado == EstadoCompatibilidad.Compatible ? "Compatible según la evaluación" :
-                    estado == EstadoCompatibilidad.Incompatible ? "No compatible" : "Compatibilidad indeterminada", html);
-                if (estado != EstadoCompatibilidad.Incompatible)
-                {
-                    Assert.Contains("Distancia adicional calculada", html);
-                    Assert.Contains("Tiempo adicional calculado", html);
-                    Assert.Contains("Segmento de retiro", html);
-                    Assert.Contains("Segmento de entrega", html);
-                    Assert.Contains("Finalización estimada del recorrido completo", html);
-                    Assert.Contains("no es una hora de entrega", html);
-                }
-                else Assert.DoesNotContain("Distancia adicional calculada", html);
-            }
+            Assert.DoesNotContain("/Oportunidades/Aceptar", html);
+            Assert.Contains("disabled", html);
+            Assert.Contains("Todavía no elegiste la salida de tu viaje", html);
+            foreach (var condicion in new[] { "Disponibilidad", "Peso permitido", "Cupos disponibles", "Desvío permitido", "Horarios compatibles" })
+                Assert.Contains(condicion, html);
+            Assert.Contains(estado switch { null => "Pendiente de evaluación", EstadoCompatibilidad.Compatible => "Compatible", EstadoCompatibilidad.Incompatible => "No compatible", _ => "Pendiente de evaluación" }, html);
+            if (estado is null or EstadoCompatibilidad.Incompatible) Assert.DoesNotContain("cambia aproximadamente", html);
+            else Assert.Contains("cambia aproximadamente", html);
+            Assert.DoesNotContain("Segmento de retiro", html);
         }
         finally
         {

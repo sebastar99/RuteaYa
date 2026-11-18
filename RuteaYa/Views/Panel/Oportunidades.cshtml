@@ -12,15 +12,9 @@
     <div>
         <span class="eyebrow">RUTEAYA / GESTIÓN</span>
         <h1>Candidatos para tu viaje</h1>
-        <p>Evaluación de publicaciones disponibles con datos confirmados del servidor.</p>
+        <p>Elegí tu viaje y la fecha de salida para ver qué envíos entran en tu recorrido.</p>
     </div>
     <a class="panel-button outline" asp-controller="Panel" asp-action="Viajes">Mis viajes</a>
-</div>
-
-<div class="panel-alert" role="note">
-    La evaluación distingue condiciones verificadas y datos pendientes. Un desvío aprobado
-    por sí solo no confirma salida, capacidad ni horarios. Las rutas son estimaciones de HERE.
-    Podés aceptar desde el detalle cuando la compatibilidad esté confirmada para la salida seleccionada.
 </div>
 
 @if (TempData["ErrorAceptacion"] is string errorAceptacion) { <div class="panel-alert danger" role="alert">@errorAceptacion</div> }
@@ -34,7 +28,11 @@
 }
 else if (listado.Viajes.Count == 0 && ViewData.ModelState.IsValid)
 {
-    <div class="panel-card"><h2>No tenés viajes registrados</h2><p>Consultá tus viajes para comenzar.</p></div>
+    <div class="panel-card">
+        <h2>No tenés viajes registrados</h2>
+        <p>Creá un viaje para ver los envíos que podés llevar.</p>
+        <a class="panel-button" asp-controller="Panel" asp-action="NuevoViaje">Crear viaje</a>
+    </div>
 }
 else
 {
@@ -44,7 +42,7 @@ else
             @Html.ValidationMessage("pagina")
             <div class="panel-form-grid">
                 <div class="panel-field">
-                    <label for="viajeId">Seleccioná uno de tus viajes</label>
+                    <label for="viajeId">Tu viaje</label>
                     <select id="viajeId" name="viajeId" class="panel-select" required>
                         <option value="">Elegí un viaje</option>
                         @foreach (var viaje in listado.Viajes)
@@ -63,31 +61,30 @@ else
                     @Html.ValidationMessage("tamanoPagina")
                 </div>
             </div>
-            <div class="panel-form-actions"><button type="submit" class="panel-button">Consultar candidatos</button></div>
+            <div class="panel-form-actions"><button type="submit" class="panel-button">Ver envíos</button></div>
         </form>
     </div>
 
     @if (listado.ViajeSeleccionado == null)
     {
-        <div class="panel-card"><p>Elegí un viaje para consultar envíos publicados. Aún no se consultaron candidatos.</p></div>
+        <div class="panel-card"><p>Elegí un viaje para ver los envíos disponibles.</p></div>
     }
     else
     {
         @if (TempData["ErrorSalida"] is string errorSalida) { <div class="panel-alert" role="alert">@errorSalida</div> }
         <div class="panel-card">
             <h2>¿Cuándo vas a realizar el viaje?</h2>
-            <p>Salís a las @Model.HoraSalida.ToString(@"hh\:mm"). Elegí una fecha de los días de tu viaje:
-                @string.Join(", ", Model.DiasHabilitados.OrderBy(d => d).Select(d => new[] { "", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo" }[d])).
-                Si ya elegiste esa fecha, se conserva la salida guardada.</p>
+            <p>Salís a las @Model.HoraSalida.ToString(@"hh\:mm"). Elegí una fecha de tus días de viaje:
+                @string.Join(", ", Model.DiasHabilitados.OrderBy(d => d).Select(d => new[] { "", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo" }[d])).</p>
             <form method="post" asp-controller="Oportunidades" asp-action="SeleccionarSalida" class="panel-form" data-form-salida>
                 <div asp-validation-summary="ModelOnly" role="alert"></div>
                 <input type="hidden" name="ViajeId" value="@listado.ViajeSeleccionado.Id" />
                 <div class="panel-form-grid">
                     <div class="panel-field"><label for="Fecha">Fecha de salida</label><input asp-for="Seleccion.Fecha" class="panel-input" type="date" id="Fecha" name="Fecha" data-dias="@string.Join(",", Model.DiasHabilitados)" required />@Html.ValidationMessage("Fecha")<span data-error-fecha role="status"></span></div>
-                    @if (Model.ZonaAutomatica != null) { <p>Para una salida nueva, usamos el horario de Argentina. Las salidas guardadas conservan su horario original.</p> }
+                    @if (Model.ZonaAutomatica != null) { <p class="panel-help">Los horarios se toman en hora de Argentina.</p> }
                     else {
                         <div class="panel-field"><label for="ZonaHorariaId">¿En qué zona horaria comienza el viaje?</label>
-                            <select asp-for="Seleccion.ZonaHorariaId" class="panel-select" name="ZonaHorariaId" id="ZonaHorariaId"><option value="">Elegí el lugar o zona del horario de salida</option>
+                            <select asp-for="Seleccion.ZonaHorariaId" class="panel-select" name="ZonaHorariaId" id="ZonaHorariaId"><option value="">Elegí la zona del horario de salida</option>
                                 @foreach (var zona in TimeZoneInfo.GetSystemTimeZones()) { <option value="@zona.Id">@zona.DisplayName</option> }
                             </select>
                             @Html.ValidationMessage("ZonaHorariaId")
@@ -96,87 +93,85 @@ else
                     <div class="panel-field"><label for="tipo-limite">Horario de llegada</label><select asp-for="Seleccion.LlegadaSinRestriccion" class="panel-select" id="tipo-limite" name="LlegadaSinRestriccion" data-tipo-limite><option value="true">Sin horario límite</option><option value="false">Establecer horario límite</option></select>@Html.ValidationMessage("LlegadaSinRestriccion")</div>
                     <div class="panel-field" data-campo-limite hidden="@Model.Seleccion.LlegadaSinRestriccion"><label for="LlegadaMaximaLocal">Llegar como máximo el (hora del lugar de salida)</label><input asp-for="Seleccion.LlegadaMaximaLocal" class="panel-input" type="datetime-local" id="LlegadaMaximaLocal" name="LlegadaMaximaLocal" disabled="@Model.Seleccion.LlegadaSinRestriccion" required="@(!Model.Seleccion.LlegadaSinRestriccion)" />@Html.ValidationMessage("LlegadaMaximaLocal")</div>
                 </div>
-                <button class="panel-button" type="submit">Seleccionar salida y evaluar</button>
+                <button class="panel-button" type="submit">Elegir salida y evaluar</button>
             </form>
             @if (listado.ViajeSeleccionado.SalidaSeleccionada is { } salida)
             {
+                <hr class="panel-divider" />
                 <partial name="_SalidaOportunidad" model="salida" />
             }
         </div>
+
         <div class="panel-card">
-            <h2>@listado.ViajeSeleccionado.Origen → @listado.ViajeSeleccionado.Destino</h2>
-            <a class="panel-button outline" asp-controller="Recorridos" asp-action="Index"
-               asp-route-viajeId="@listado.ViajeSeleccionado.Id">Previsualizar recorrido del viaje</a>
-            <p>Estado del viaje: @(listado.ViajeSeleccionado.Activo ? "Activo" : "Inactivo").
-                Este estado no confirma la disponibilidad de una salida concreta.</p>
-            <p>Envíos en búsqueda de conductor: <strong>@listado.TotalCandidatos</strong>.</p>
+            <div class="detail-head">
+                <div>
+                    <h2>@listado.ViajeSeleccionado.Origen → @listado.ViajeSeleccionado.Destino</h2>
+                    <p>@(listado.TotalCandidatos == 1 ? "1 envío busca conductor." : $"{listado.TotalCandidatos} envíos buscan conductor.")
+                        @if (!listado.ViajeSeleccionado.Activo) { <text> Tu viaje está inactivo.</text> }</p>
+                </div>
+                <a class="panel-button outline small" asp-controller="Recorridos" asp-action="Index"
+                   asp-route-viajeId="@listado.ViajeSeleccionado.Id">Ver recorrido en el mapa</a>
+            </div>
         </div>
 
         @if (listado.Candidatos.Count == 0)
         {
-            <div class="panel-card"><h2>No hay envíos candidatos</h2><p>No se encontraron envíos publicados en búsqueda de conductor para mostrar.</p></div>
+            <div class="panel-card"><h2>No hay envíos disponibles</h2><p>Cuando otros usuarios publiquen envíos, vas a verlos acá.</p></div>
         }
         else
         {
-            <div class="panel-card">
-                <div class="panel-table-wrap">
-                    <table class="panel-table">
-                        <thead><tr><th>Envío</th><th>Paquete</th><th>Fecha límite publicada</th><th>Monto ofrecido</th><th>Evaluación</th><th>Detalle</th></tr></thead>
-                        <tbody>
-                        @foreach (var envio in listado.Candidatos)
-                        {
-                            <tr>
-                                <td><strong>@envio.OrigenDir → @envio.DestinoDir</strong><p>@envio.Descripcion</p><small>Envío #@envio.Id</small></td>
-                                <td>@envio.PesoKg.ToString("0.##") kg · @envio.TamanoTexto</td>
-                                <td>@(envio.FechaLimite == default ? "No informada" : envio.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</td>
-                                <td>@envio.Monto.ToString("C")</td>
-                                <td>
-                                    @if (listado.Evaluaciones.TryGetValue(envio.Id, out var evaluacion))
-                                    {
-                                        var color = evaluacion.Estado == EstadoCompatibilidad.Incompatible ? "red" : evaluacion.Estado == EstadoCompatibilidad.Compatible ? "green" : "orange";
-                                        <span class="panel-pill @color">@(evaluacion.Estado == EstadoCompatibilidad.Indeterminado ? "Indeterminado" : evaluacion.Estado == EstadoCompatibilidad.Compatible ? "Compatible según evaluación" : "No compatible")</span>
-                                        @if (evaluacion.ResultadoMotor?.InsercionSeleccionada != null) {
-                                            var desvio = evaluacion.ResultadoMotor.InsercionSeleccionada.Desvio;
-                                            <p>Adicional: @((desvio.DistanciaAdicionalMetros / 1000m).ToString("0.###")) km · @((desvio.TiempoAdicionalSegundos / 60m).ToString("0.#")) min.</p>
-                                        }
-                                        <ul>
-                                            @foreach (var motivo in evaluacion.ResultadoMotor?.Motivos ?? Array.Empty<MotivoCompatibilidad>()) { <li>@MensajesEvaluacionOportunidad.Motivo(motivo)</li> }
-                                            @foreach (var pendiente in evaluacion.DatosPendientes) { <li>@MensajesEvaluacionOportunidad.DatoPendiente(pendiente)</li> }
-                                        </ul>
-                                    }
-                                    else { <span class="panel-pill orange">Pendiente de evaluación</span> }
-                                </td>
-                                <td>
-                                    <a class="panel-button outline small" asp-controller="Oportunidades" asp-action="Detalle"
-                                       asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-envioId="@envio.Id"
-                                       asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada?.Id"
-                                       asp-route-pagina="@listado.Pagina" asp-route-tamanoPagina="@listado.TamanoPagina">Ver detalle</a>
-                                </td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-                <p class="panel-note">Las fechas legadas sin offset siguen sin interpretación temporal; los horarios explícitos se evalúan en el motor.
-                    Solo se listan envíos de otros usuarios que siguen buscando conductor; la selección de candidatos no confirma compatibilidad.</p>
-                <nav class="panel-form-actions" aria-label="Páginas de candidatos">
-                    @if (listado.Pagina > 1)
-                    {
-                        <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
-                           asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-pagina="@(listado.Pagina - 1)"
+            <div class="opp-grid">
+                @foreach (var envio in listado.Candidatos)
+                {
+                    listado.Evaluaciones.TryGetValue(envio.Id, out var evaluacion);
+                    var estado = PresentacionOportunidad.Estado(evaluacion);
+                    var color = PresentacionOportunidad.Color(estado);
+                    var adicional = PresentacionOportunidad.Adicional(evaluacion);
+                    <article class="opp-card @color">
+                        <div class="opp-card-head">
+                            <h3>@envio.Descripcion</h3>
+                            <span class="opp-reward">@envio.Monto.ToString("C")</span>
+                        </div>
+                        <div class="opp-route">
+                            <div><small>Retiro</small>@envio.OrigenDir</div>
+                            <div><small>Entrega</small>@envio.DestinoDir</div>
+                        </div>
+                        <dl class="opp-meta">
+                            <div><dt>Peso</dt><dd>@envio.PesoKg.ToString("0.##") kg · @envio.TamanoTexto</dd></div>
+                            <div><dt>Fecha límite</dt><dd>@(envio.FechaLimite == default ? "Sin dato" : envio.FechaLimite.TimeOfDay == TimeSpan.Zero ? envio.FechaLimite.ToString("dd/MM/yyyy") : envio.FechaLimite.ToString("dd/MM/yyyy HH:mm"))</dd></div>
+                            @if (adicional.HasValue)
+                            {
+                                <div><dt>Desvío</dt><dd>@PresentacionOportunidad.Firmado(adicional.Value.Km, "0.#") km · @PresentacionOportunidad.Firmado(adicional.Value.Minutos, "0") min</dd></div>
+                            }
+                        </dl>
+                        <div class="opp-estado">
+                            <span class="panel-pill @color">@PresentacionOportunidad.Etiqueta(estado)</span>
+                            <p class="opp-msg">@PresentacionOportunidad.Resumen(evaluacion)</p>
+                        </div>
+                        <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Detalle"
+                           asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-envioId="@envio.Id"
                            asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada?.Id"
-                           asp-route-tamanoPagina="@listado.TamanoPagina">Anterior</a>
-                    }
-                    <span>Página @listado.Pagina de @listado.TotalPaginas</span>
-                    @if (listado.Pagina < listado.TotalPaginas)
-                    {
-                        <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
-                           asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-pagina="@(listado.Pagina + 1)"
-                           asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada?.Id"
-                           asp-route-tamanoPagina="@listado.TamanoPagina">Siguiente</a>
-                    }
-                </nav>
+                           asp-route-pagina="@listado.Pagina" asp-route-tamanoPagina="@listado.TamanoPagina">Ver detalle</a>
+                    </article>
+                }
             </div>
+            <nav class="panel-form-actions" aria-label="Páginas de candidatos">
+                @if (listado.Pagina > 1)
+                {
+                    <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
+                       asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-pagina="@(listado.Pagina - 1)"
+                       asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada?.Id"
+                       asp-route-tamanoPagina="@listado.TamanoPagina">Anterior</a>
+                }
+                <span>Página @listado.Pagina de @listado.TotalPaginas</span>
+                @if (listado.Pagina < listado.TotalPaginas)
+                {
+                    <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index"
+                       asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-pagina="@(listado.Pagina + 1)"
+                       asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada?.Id"
+                       asp-route-tamanoPagina="@listado.TamanoPagina">Siguiente</a>
+                }
+            </nav>
         }
     }
 }

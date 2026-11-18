@@ -175,26 +175,39 @@ public class OportunidadesController : Controller
             {
                 TempData["Exito"] = resultado.Estado == EstadoAceptacion.YaAceptado
                     ? $"El envío #{envioId} ya estaba asignado a esta salida. Podés consultarlo en tus transportes."
-                    : $"El envío #{envioId} quedó asignado correctamente a tu salida.";
+                    : $"El envío #{envioId} quedó asignado correctamente a tu salida." + await CapacidadRestanteAsync(conductorId, viajeId, salidaId.Value, cancellationToken);
                 return RedirectToAction("Index", "Transportes");
             }
             var mensaje = resultado.Estado switch
             {
                 EstadoAceptacion.EnvioNoDisponible => "El envío ya fue asignado o dejó de estar disponible.",
-                EstadoAceptacion.SalidaNoValida => "La salida ya no es válida, futura o disponible. Revisá el viaje y la fecha.",
-                EstadoAceptacion.CapacidadInsuficiente => "No hay capacidad suficiente de peso o cupos para aceptar este envío.",
+                EstadoAceptacion.SalidaNoValida => "La salida ya no es válida. Elegí otra fecha de salida.",
+                EstadoAceptacion.CapacidadInsuficiente => "No hay capacidad suficiente de peso o cupos en esta salida.",
                 EstadoAceptacion.Incompatible => "El envío no es compatible con esta salida.",
-                EstadoAceptacion.DatosPendientes => "No se puede aceptar: quedan datos pendientes para confirmar la compatibilidad.",
-                _ => "Hubo un conflicto de concurrencia al confirmar. Recargá los datos y volvé a intentar."
+                EstadoAceptacion.DatosPendientes => "Todavía no se puede confirmar que el envío sea compatible.",
+                _ => "Otro conductor modificó el envío al mismo tiempo. Recargá e intentá de nuevo."
             };
-            var motivos = (resultado.Evaluacion?.DatosPendientes ?? Array.Empty<DatoPendienteOportunidad>()).Select(MensajesEvaluacionOportunidad.DatoPendiente)
-                .Concat((resultado.Evaluacion?.ResultadoMotor?.Motivos ?? Array.Empty<MotivoCompatibilidad>()).Select(MensajesEvaluacionOportunidad.Motivo));
-            TempData["ErrorAceptacion"] = string.Join(" ", new[] { mensaje }.Concat(motivos));
+            var razon = resultado.Evaluacion == null ? null : PresentacionOportunidad.Razon(resultado.Evaluacion);
+            TempData["ErrorAceptacion"] = razon == null ? mensaje : $"{mensaje} {razon.Motivo} {razon.Solucion}".Trim();
+            if (resultado.Estado != EstadoAceptacion.EnvioNoDisponible)
+                return RedirectToAction(nameof(Detalle), new { viajeId, envioId, salidaId });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
         catch (Exception e) when (e is HttpRequestException or TimeoutException or InvalidOperationException or Microsoft.EntityFrameworkCore.DbUpdateException or DbException)
         { TempData["ErrorAceptacion"] = "No se pudo confirmar la asignación. Revisá la disponibilidad del servicio y recargá antes de reintentar."; }
         return RedirectToAction(nameof(Index), new { viajeId, salidaId });
+    }
+
+    private async Task<string> CapacidadRestanteAsync(int conductorId, int viajeId, int salidaId, CancellationToken ct)
+    {
+        if (_db == null) return "";
+        try
+        {
+            var salida = await new SalidasViajeServicio(_db).ObtenerAsync(conductorId, viajeId, salidaId, ct);
+            return salida?.CuposDisponibles == null || salida.PesoDisponibleKg == null ? ""
+                : $" En esa salida te quedan {salida.CuposDisponibles} cupos y {salida.PesoDisponibleKg:0.##} kg.";
+        }
+        catch (Exception e) when (e is DbException or TimeoutException or InvalidOperationException) { return ""; }
     }
 
     private int ObtenerConductorId()
