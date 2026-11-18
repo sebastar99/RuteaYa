@@ -8,6 +8,7 @@ using Microsoft.OpenApi;
 using RuteaYa.Api.Services;
 using RuteaYa.Entidades;
 using RuteaYa.Logica;
+using RuteaYa.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +30,28 @@ builder.Services.AddScoped<IViajesLogica, ViajesLogica>();
 // Validación y consumo sobre EF: no requiere un cliente ni una clave HERE en la API.
 builder.Services.AddScoped<IUbicacionesConfirmadasServicio, UbicacionesConfirmadasServicio>();
 builder.Services.AddScoped<ITokenServicio, TokenServicio>();
+
+// Optimizador y asignaciones: la misma lógica que el MVC. La clave HERE queda en configuración privada.
+builder.Services.Configure<HereRoutingOpciones>(builder.Configuration.GetSection("HereRouting"));
+builder.Services.AddHttpClient<RutasHereServicio>(client => client.Timeout = TimeSpan.FromSeconds(30))
+    .RemoveAllLoggers()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<IRutasServicio>(sp => new RutasConsultaServicio(sp.GetRequiredService<RutasHereServicio>()));
+builder.Services.AddScoped<IRecorridoCombinadoServicio, RecorridoCombinadoServicio>();
+builder.Services.AddScoped<IOptimizadorServicio, OptimizadorServicio>();
+builder.Services.AddScoped<IDatosConfirmadosOportunidadServicio, DatosConfirmadosOportunidadPersistidosServicio>();
+builder.Services.AddScoped<IDesviosServicio, DesviosServicio>();
+builder.Services.AddScoped<ICompatibilidadServicio, CompatibilidadServicio>();
+builder.Services.AddScoped<IEvaluacionOportunidadServicio>(sp => new EvaluacionOportunidadServicio(
+    sp.GetRequiredService<IDatosConfirmadosOportunidadServicio>(),
+    sp.GetRequiredService<ICompatibilidadServicio>(),
+    sp.GetService<IRecorridoCombinadoServicio>()));
+builder.Services.AddScoped<IOportunidadesLogica, OportunidadesLogica>();
+builder.Services.AddScoped<EnviosLogica>(sp => new EnviosLogica(
+    sp.GetRequiredService<RuteaYaDbContext>(), null!,
+    sp.GetService<IUbicacionesConfirmadasServicio>(),
+    sp.GetService<IOportunidadesLogica>(),
+    sp.GetService<IOptimizadorServicio>()));
 
 // JWT
 var issuer = builder.Configuration["Jwt:Issuer"]

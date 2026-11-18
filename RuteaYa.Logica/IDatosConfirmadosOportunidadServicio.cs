@@ -19,4 +19,12 @@ public interface IDatosConfirmadosOportunidadServicio
         foreach (var envio in envios) resultado.Add(envio.Id, await ObtenerAsync(viaje, envio, ct));
         return resultado;
     }
+
+    /// <summary>Paquetes ya asignados a la salida con sus puntos y restricciones verificadas. Null cuando alguno no puede verificarse.</summary>
+    Task<IReadOnlyList<PaqueteComprometidoDto>?> ObtenerComprometidosAsync(int viajeId, int salidaId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<PaqueteComprometidoDto>?>(null);
+
+    /// <summary>Recorrido original del viaje (origen, paradas en orden, destino). Null cuando no puede verificarse completo.</summary>
+    Task<RecorridoConfirmadoDto?> ObtenerRecorridoBaseAsync(int usuarioId, int viajeId, CancellationToken ct = default) =>
+        Task.FromResult<RecorridoConfirmadoDto?>(null);
 }

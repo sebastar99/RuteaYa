@@ -55,7 +55,12 @@ builder.Services.AddDbContext<RuteaYaDbContext>(options =>
 
 builder.Services.AddScoped<IOportunidadesLogica, OportunidadesLogica>();
 builder.Services.AddScoped<IDatosConfirmadosOportunidadServicio, DatosConfirmadosOportunidadPersistidosServicio>();
-builder.Services.AddScoped<IEvaluacionOportunidadServicio, EvaluacionOportunidadServicio>();
+builder.Services.AddScoped<IRecorridoCombinadoServicio, RecorridoCombinadoServicio>();
+builder.Services.AddScoped<IOptimizadorServicio, OptimizadorServicio>();
+builder.Services.AddScoped<IEvaluacionOportunidadServicio>(sp => new EvaluacionOportunidadServicio(
+    sp.GetRequiredService<IDatosConfirmadosOportunidadServicio>(),
+    sp.GetRequiredService<ICompatibilidadServicio>(),
+    sp.GetService<IRecorridoCombinadoServicio>()));
 builder.Services.AddScoped<IDesviosServicio, DesviosServicio>();
 builder.Services.AddScoped<ICompatibilidadServicio, CompatibilidadServicio>();
 builder.Services.AddScoped<EnviosLogica>();

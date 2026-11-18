@@ -14,7 +14,14 @@
         <h1>Candidatos para tu viaje</h1>
         <p>Elegí tu viaje y la fecha de salida para ver qué envíos entran en tu recorrido.</p>
     </div>
-    <a class="panel-button outline" asp-controller="Panel" asp-action="Viajes">Mis viajes</a>
+    <div class="panel-actions">
+        @if (listado.ViajeSeleccionado?.SalidaSeleccionada != null)
+        { <a class="panel-button" asp-controller="Optimizador" asp-action="Resultado" asp-route-viajeId="@listado.ViajeSeleccionado.Id" asp-route-salidaId="@listado.ViajeSeleccionado.SalidaSeleccionada.Id">Optimizar oportunidades</a> }
+        else if (listado.ViajeSeleccionado != null)
+        { <a class="panel-button" asp-controller="Optimizador" asp-action="Index" asp-route-viajeId="@listado.ViajeSeleccionado.Id">Optimizar oportunidades</a> }
+        else { <a class="panel-button" asp-controller="Optimizador" asp-action="Index">Optimizar oportunidades</a> }
+        <a class="panel-button outline" asp-controller="Panel" asp-action="Viajes">Mis viajes</a>
+    </div>
 </div>
 
 @if (TempData["ErrorAceptacion"] is string errorAceptacion) { <div class="panel-alert danger" role="alert">@errorAceptacion</div> }

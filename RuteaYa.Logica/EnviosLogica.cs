@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using RuteaYa.Entidades;
 using RuteaYa.Logica.DTOs;
 using System;
@@ -13,12 +13,14 @@ namespace RuteaYa.Logica
         private readonly RuteaYaDbContext _db;
         private readonly IUbicacionesConfirmadasServicio _ubicaciones;
         private readonly IOportunidadesLogica? _oportunidades;
+        private readonly IOptimizadorServicio? _optimizador;
 
         public EnviosLogica(RuteaYaDbContext db, IGeocodificacionServicio geocodificacion, IUbicacionesConfirmadasServicio? ubicaciones = null,
-            IOportunidadesLogica? oportunidades = null)
+            IOportunidadesLogica? oportunidades = null, IOptimizadorServicio? optimizador = null)
         {
             _db = db;
             _oportunidades = oportunidades;
+            _optimizador = optimizador;
             // El parámetro anterior se conserva para los consumidores existentes. Crear ya no geocodifica.
             _ubicaciones = ubicaciones ?? new UbicacionesConfirmadasServicio(db);
         }
