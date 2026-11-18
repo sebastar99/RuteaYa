@@ -18,6 +18,7 @@ public class EstadoSeleccionDireccion
 
 public class CampoDireccionViewModel
 {
+    public int LongitudMaxima { get; set; } = 200;
     public string? NombreTexto { get; set; }
     public string? TokenInicial { get; set; }
     public bool ConservarActual { get; set; }

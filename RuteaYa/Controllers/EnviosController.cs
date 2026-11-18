@@ -60,6 +60,7 @@ public class EnviosController : Controller
             if (_formularios == null) throw new InvalidOperationException("El formulario de direcciones no está configurado.");
             await _formularios.PrepararEnvioAsync(usuarioId, modelo, HttpContext.RequestAborted);
         }
+        catch (ErroresDireccionesFormularioException e) { foreach (var error in e.Errores) ModelState.AddModelError(error.Key, error.Value); }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException) { ModelState.AddModelError("", e.Message); }
         return View(VistaFormulario, modelo);
     }
@@ -75,6 +76,7 @@ public class EnviosController : Controller
             if (_formularios == null) throw new InvalidOperationException("Volvé a abrir el formulario y confirmá las dos direcciones.");
             _formularios.PrepararGuardadoEnvio(usuarioId, dto);
         }
+        catch (ErroresDireccionesFormularioException e) { foreach (var error in e.Errores) ModelState.AddModelError(error.Key, error.Value); }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException) { ModelState.AddModelError("", e.Message); }
         if (!ModelState.IsValid) { Rellenar(usuarioId, dto); return View(VistaFormulario, dto); }
 

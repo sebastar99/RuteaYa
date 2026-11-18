@@ -13,9 +13,9 @@ public sealed class SalidasViajeServicio(RuteaYaDbContext db)
         if (viaje == null) return null;
         if (!viaje.Activo) throw new ArgumentException("El viaje debe estar activo.");
         if (!dto.Fecha.HasValue || dto.Fecha == DateOnly.MinValue)
-            throw new ArgumentException("Elegí una fecha concreta.");
+            throw new ArgumentException("Elegí una fecha concreta.", nameof(dto.Fecha));
         if (!viaje.Dias.Any(d => d.DiaSemana == DiaRecurrente(dto.Fecha.Value)))
-            throw new ArgumentException("La fecha no corresponde a un día habilitado del viaje.");
+            throw new ArgumentException("La fecha no corresponde a un día habilitado del viaje.", nameof(dto.Fecha));
         var existente = await db.SalidasViaje.AsNoTracking().SingleOrDefaultAsync(s => s.ViajeId == viaje.Id && s.Fecha == dto.Fecha, ct);
         if (existente != null)
         {
@@ -28,12 +28,12 @@ public sealed class SalidasViajeServicio(RuteaYaDbContext db)
         if (viaje.HoraSalida < TimeSpan.Zero || viaje.HoraSalida >= TimeSpan.FromDays(1))
             throw new ArgumentException("El horario de salida del viaje no es válido.");
         var salida = ZonaHorariaViaje.Convertir(dto.Fecha.Value.ToDateTime(TimeOnly.FromTimeSpan(viaje.HoraSalida)), zona);
-        if (salida <= DateTimeOffset.UtcNow) throw new ArgumentException("La salida debe ser futura.");
+        if (salida <= DateTimeOffset.UtcNow) throw new ArgumentException("La salida debe ser futura.", nameof(dto.Fecha));
         if (dto.LlegadaSinRestriccion && dto.LlegadaMaximaLocal.HasValue)
-            throw new ArgumentException("Informá una llegada máxima o marcá sin límite, no ambas.");
+            throw new ArgumentException("Informá una llegada máxima o marcá sin límite, no ambas.", nameof(dto.LlegadaMaximaLocal));
         DateTimeOffset? llegada = dto.LlegadaMaximaLocal.HasValue
             ? ZonaHorariaViaje.Convertir(dto.LlegadaMaximaLocal.Value, zona) : null;
-        if (llegada < salida) throw new ArgumentException("La llegada máxima no puede ser anterior a la salida.");
+        if (llegada < salida) throw new ArgumentException("La llegada máxima no puede ser anterior a la salida.", nameof(dto.LlegadaMaximaLocal));
         var nueva = new SalidaViaje { ViajeId = viaje.Id, Fecha = dto.Fecha.Value, FechaHora = salida,
             LlegadaMaxima = llegada, LlegadaSinRestriccion = dto.LlegadaSinRestriccion };
         db.SalidasViaje.Add(nueva);

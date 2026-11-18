@@ -96,14 +96,17 @@ public class OportunidadesControllerTest
     }
 
     [Fact]
-    public async Task Index_ParametroMalFormado_NoConsulta()
+    public async Task Index_ParametroMalFormado_ConservaErroresYRecargaSoloSelectorPropio()
     {
         var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
         var controlador = Controlador(logica);
         controlador.ModelState.AddModelError("pagina", "Formato inválido.");
+        logica.Setup(l => l.ConsultarAsync(7, null, 1, 10, default)).ReturnsAsync(new ListadoCandidatosDto());
 
-        Assert.IsType<BadRequestObjectResult>(await controlador.Index(10));
+        Assert.IsType<ViewResult>(await controlador.Index(10));
+        Assert.Equal(400, controlador.Response.StatusCode);
 
+        logica.Verify(l => l.ConsultarAsync(7, null, 1, 10, default), Times.Once);
         logica.VerifyNoOtherCalls();
     }
 
@@ -123,8 +126,12 @@ public class OportunidadesControllerTest
         var logica = new Mock<IOportunidadesLogica>(MockBehavior.Strict);
         logica.Setup(l => l.ConsultarAsync(7, 10, 1, 51, default))
             .ThrowsAsync(new ArgumentOutOfRangeException("tamanoPagina"));
+        logica.Setup(l => l.ConsultarAsync(7, null, 1, 10, default)).ReturnsAsync(new ListadoCandidatosDto());
 
-        Assert.IsType<BadRequestObjectResult>(await Controlador(logica).Index(10, tamanoPagina: 51));
+        var controlador = Controlador(logica);
+        Assert.IsType<ViewResult>(await controlador.Index(10, tamanoPagina: 51));
+        Assert.Equal(400, controlador.Response.StatusCode);
+        Assert.False(controlador.ModelState.IsValid);
     }
 
     [Fact]

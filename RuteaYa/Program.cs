@@ -7,7 +7,7 @@ using RuteaYa.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options => RuteaYa.Web.Models.MensajesValidacionMvc.Configurar(options.ModelBindingMessageProvider));
 
 builder.Services.Configure<HereRoutingOpciones>(builder.Configuration.GetSection("HereRouting"));
 builder.Services.AddMemoryCache();

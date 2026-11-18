@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RuteaYa.Entidades;
+using RuteaYa.Logica;
 using RuteaYa.Web.Models;
 using RuteaYa.Web.Services;
 
@@ -80,6 +81,7 @@ namespace RuteaYa.Web.Controllers
             var actor = ObtenerUsuarioId(); if (actor <= 0) return Forbid();
             if (modelo.Id != 0) return BadRequest("El formulario de alta no admite un viaje existente.");
             try { _formulariosViaje?.PrepararGuardado(actor, modelo); }
+            catch (ErroresDireccionesFormularioException e) { foreach (var error in e.Errores) ModelState.AddModelError(error.Key, error.Value); }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException) { ModelState.AddModelError("", e.Message); }
             RellenarCamposViaje(actor, modelo);
             if (modelo.DiasSemana == null || modelo.DiasSemana.Count == 0)
@@ -187,6 +189,7 @@ namespace RuteaYa.Web.Controllers
             var actor = ObtenerUsuarioId(); if (actor <= 0) return Forbid();
             if (modelo.Id <= 0) return NotFound();
             try { _formulariosViaje?.PrepararGuardado(actor, modelo); }
+            catch (ErroresDireccionesFormularioException e) { foreach (var error in e.Errores) ModelState.AddModelError(error.Key, error.Value); }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException) { ModelState.AddModelError("", e.Message); }
             RellenarCamposViaje(actor, modelo);
             if(modelo.DiasSemana == null || modelo.DiasSemana.Count == 0 ) 
@@ -284,11 +287,13 @@ namespace RuteaYa.Web.Controllers
                 return Forbid();
             }
            
-            if (string.IsNullOrWhiteSpace(ubicacion))
-            {
-                TempData["MensajeError"] = "Ingresar la ubicacion de la parada.";
-                return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
-            }
+            var detalle = await _viajesApiServicio.ObtenerViajePorIdAsync(usuarioId, viajeId);
+            if (!detalle.Exito || detalle.Viaje == null) return NotFound();
+            var errorParada = ViajesLogica.ValidarParada(ubicacion, detalle.Viaje.Origen, detalle.Viaje.Destino, detalle.Viaje.Paradas.Select(p => p.Ubicacion));
+            if (errorParada != null) ModelState.AddModelError(nameof(ubicacion), errorParada);
+            if (orden < 1 || orden > detalle.Viaje.Paradas.Count + 1)
+                ModelState.AddModelError(nameof(orden), $"El orden debe estar entre 1 y {detalle.Viaje.Paradas.Count + 1}.");
+            if (!ModelState.IsValid) return View(nameof(DetalleViaje), detalle.Viaje);
 
             var resultado = await _viajesApiServicio.AgregarParadaAsync(
                 usuarioId,
@@ -299,7 +304,8 @@ namespace RuteaYa.Web.Controllers
 
             if (!resultado.Exito)
             {
-                TempData["MensajeError"] = resultado.Mensaje;
+                ModelState.AddModelError("", resultado.Mensaje);
+                return View(nameof(DetalleViaje), detalle.Viaje);
             }
             else
             {
@@ -364,9 +370,13 @@ namespace RuteaYa.Web.Controllers
                 ordenes.Distinct().Count() != ordenes.Count ||
                 ordenes.Any(o => o < 1 || o > paradasIds.Count)
             ) {
-                TempData["MensajeError"] = "La lista de paradas o su orden, no es valido.";
-                return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
+                ModelState.AddModelError("", "Revisá el orden de las paradas: cada número debe ser único y estar dentro del rango indicado.");
+                if (ordenes != null) for (var i = 0; i < ordenes.Count; i++)
+                    if (ordenes[i] < 1 || ordenes[i] > (paradasIds?.Count ?? 0) || ordenes.Count(o => o == ordenes[i]) > 1)
+                        ModelState.AddModelError($"ordenes[{i}]", "Ingresá un orden válido y sin repetir.");
+                return await DetalleConErrores(usuarioId, viajeId);
             }
+            if (!ModelState.IsValid) return await DetalleConErrores(usuarioId, viajeId);
 
             var IdOrdenadas = paradasIds
                 .Select((id, indice) => new 
@@ -386,7 +396,8 @@ namespace RuteaYa.Web.Controllers
 
             if (!resultado.Exito)
             {
-                TempData["MensajeError"] = resultado.Mensaje;
+                ModelState.AddModelError("", resultado.Mensaje);
+                return await DetalleConErrores(usuarioId, viajeId);
             }
             else
             {
@@ -394,6 +405,13 @@ namespace RuteaYa.Web.Controllers
             }
                 
             return RedirectToAction(nameof(DetalleViaje), new { id = viajeId });
+        }
+
+        private async Task<IActionResult> DetalleConErrores(int usuario, int viajeId)
+        {
+            var detalle = await _viajesApiServicio.ObtenerViajePorIdAsync(usuario, viajeId);
+            if (!detalle.Exito || detalle.Viaje == null) return NotFound();
+            return View(nameof(DetalleViaje), detalle.Viaje);
         }
 
    // ============================= Historial usuario ==========================================
@@ -425,7 +443,7 @@ namespace RuteaYa.Web.Controllers
                 modelo.Desde.Value > modelo.Hasta.Value)
             {
                 ModelState.AddModelError(
-                    string.Empty,
+                    nameof(hasta),
                     "La fecha inicial no puede ser posterior a la fecha final.");
 
                 (modelo.Desde, modelo.Hasta) =

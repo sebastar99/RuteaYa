@@ -102,6 +102,7 @@
                        type="date"
                        class="panel-input"
                        value="@(Model.Desde?.ToString("yyyy-MM-dd"))" />
+                @Html.ValidationMessage("desde")
             </div>
 
             <div class="panel-field">
@@ -111,6 +112,7 @@
                        type="date"
                        class="panel-input"
                        value="@(Model.Hasta?.ToString("yyyy-MM-dd"))" />
+                @Html.ValidationMessage("hasta")
             </div>
         </div>
 

@@ -32,7 +32,7 @@
         <a class="panel-button outline" asp-controller="Oportunidades" asp-action="Index">Volver a intentar</a>
     </div>
 }
-else if (listado.Viajes.Count == 0)
+else if (listado.Viajes.Count == 0 && ViewData.ModelState.IsValid)
 {
     <div class="panel-card"><h2>No tenés viajes registrados</h2><p>Consultá tus viajes para comenzar.</p></div>
 }
@@ -40,6 +40,8 @@ else
 {
     <div class="panel-card">
         <form method="get" asp-controller="Oportunidades" asp-action="Index" class="panel-form">
+            <div asp-validation-summary="ModelOnly" role="alert"></div>
+            @Html.ValidationMessage("pagina")
             <div class="panel-form-grid">
                 <div class="panel-field">
                     <label for="viajeId">Seleccioná uno de tus viajes</label>
@@ -47,16 +49,18 @@ else
                         <option value="">Elegí un viaje</option>
                         @foreach (var viaje in listado.Viajes)
                         {
-                            <option value="@viaje.Id" selected="@(viaje.Id == listado.ViajeSeleccionado?.Id)">
+                            <option value="@viaje.Id" selected="@(viaje.Id == listado.ViajeSeleccionado?.Id || ViewData.ModelState["viajeId"]?.AttemptedValue == viaje.Id.ToString())">
                                 @viaje.Origen → @viaje.Destino @(viaje.Activo ? "" : "(inactivo)")
                             </option>
                         }
                     </select>
+                    @Html.ValidationMessage("viajeId")
                 </div>
                 <div class="panel-field">
                     <label for="tamanoPagina">Envíos por página (1 a 50)</label>
                     <input id="tamanoPagina" name="tamanoPagina" class="panel-input" type="number"
                            min="1" max="50" value="@listado.TamanoPagina" required />
+                    @Html.ValidationMessage("tamanoPagina")
                 </div>
             </div>
             <div class="panel-form-actions"><button type="submit" class="panel-button">Consultar candidatos</button></div>
@@ -76,19 +80,21 @@ else
                 @string.Join(", ", Model.DiasHabilitados.OrderBy(d => d).Select(d => new[] { "", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo" }[d])).
                 Si ya elegiste esa fecha, se conserva la salida guardada.</p>
             <form method="post" asp-controller="Oportunidades" asp-action="SeleccionarSalida" class="panel-form" data-form-salida>
+                <div asp-validation-summary="ModelOnly" role="alert"></div>
                 <input type="hidden" name="ViajeId" value="@listado.ViajeSeleccionado.Id" />
                 <div class="panel-form-grid">
-                    <div class="panel-field"><label for="Fecha">Fecha de salida</label><input class="panel-input" type="date" id="Fecha" name="Fecha" data-dias="@string.Join(",", Model.DiasHabilitados)" required /><span data-error-fecha role="status"></span></div>
+                    <div class="panel-field"><label for="Fecha">Fecha de salida</label><input asp-for="Seleccion.Fecha" class="panel-input" type="date" id="Fecha" name="Fecha" data-dias="@string.Join(",", Model.DiasHabilitados)" required />@Html.ValidationMessage("Fecha")<span data-error-fecha role="status"></span></div>
                     @if (Model.ZonaAutomatica != null) { <p>Para una salida nueva, usamos el horario de Argentina. Las salidas guardadas conservan su horario original.</p> }
                     else {
                         <div class="panel-field"><label for="ZonaHorariaId">¿En qué zona horaria comienza el viaje?</label>
-                            <select class="panel-select" name="ZonaHorariaId" id="ZonaHorariaId"><option value="">Elegí el lugar o zona del horario de salida</option>
+                            <select asp-for="Seleccion.ZonaHorariaId" class="panel-select" name="ZonaHorariaId" id="ZonaHorariaId"><option value="">Elegí el lugar o zona del horario de salida</option>
                                 @foreach (var zona in TimeZoneInfo.GetSystemTimeZones()) { <option value="@zona.Id">@zona.DisplayName</option> }
                             </select>
+                            @Html.ValidationMessage("ZonaHorariaId")
                         </div>
                     }
-                    <div class="panel-field"><label for="tipo-limite">Horario de llegada</label><select class="panel-select" id="tipo-limite" name="LlegadaSinRestriccion" data-tipo-limite><option value="true">Sin horario límite</option><option value="false">Establecer horario límite</option></select></div>
-                    <div class="panel-field" data-campo-limite hidden><label for="LlegadaMaximaLocal">Llegar como máximo el (hora del lugar de salida)</label><input class="panel-input" type="datetime-local" id="LlegadaMaximaLocal" name="LlegadaMaximaLocal" disabled /></div>
+                    <div class="panel-field"><label for="tipo-limite">Horario de llegada</label><select asp-for="Seleccion.LlegadaSinRestriccion" class="panel-select" id="tipo-limite" name="LlegadaSinRestriccion" data-tipo-limite><option value="true">Sin horario límite</option><option value="false">Establecer horario límite</option></select>@Html.ValidationMessage("LlegadaSinRestriccion")</div>
+                    <div class="panel-field" data-campo-limite hidden="@Model.Seleccion.LlegadaSinRestriccion"><label for="LlegadaMaximaLocal">Llegar como máximo el (hora del lugar de salida)</label><input asp-for="Seleccion.LlegadaMaximaLocal" class="panel-input" type="datetime-local" id="LlegadaMaximaLocal" name="LlegadaMaximaLocal" disabled="@Model.Seleccion.LlegadaSinRestriccion" required="@(!Model.Seleccion.LlegadaSinRestriccion)" />@Html.ValidationMessage("LlegadaMaximaLocal")</div>
                 </div>
                 <button class="panel-button" type="submit">Seleccionar salida y evaluar</button>
             </form>

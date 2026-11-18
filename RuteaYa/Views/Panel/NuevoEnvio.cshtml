@@ -31,13 +31,11 @@
             <div class="panel-field">
                 @if (Model.RetiroCampo != null) { <partial name="_CampoDireccionHere" model="Model.RetiroCampo" /> }
                 else { <p role="alert">No se pudo preparar la dirección de retiro. Volvé a abrir Crear Envío.</p> }
-                <span asp-validation-for="OrigenDir" class="text-danger"></span>
             </div>
 
             <div class="panel-field">
                 @if (Model.EntregaCampo != null) { <partial name="_CampoDireccionHere" model="Model.EntregaCampo" /> }
                 else { <p role="alert">No se pudo preparar la dirección de entrega. Volvé a abrir Crear Envío.</p> }
-                <span asp-validation-for="DestinoDir" class="text-danger"></span>
             </div>
 
             <div class="panel-field">
@@ -49,15 +47,19 @@
             <div class="panel-field">
                 <label asp-for="EntregaLimiteLocal">Horario límite de entrega (opcional, en la fecha indicada)</label>
                 <input class="panel-input" asp-for="EntregaLimiteLocal" type="datetime-local" />
+                <span asp-validation-for="EntregaLimiteLocal"></span>
             </div>
             <div class="panel-field">
                 <label asp-for="RetiroDisponibleDesdeLocal">Disponible para retirar desde (opcional)</label>
                 <input class="panel-input" asp-for="RetiroDisponibleDesdeLocal" type="datetime-local" />
+                <span asp-validation-for="RetiroDisponibleDesdeLocal"></span>
                 <label><input asp-for="RetiroSinRestriccion" /> El retiro no tiene restricción de horario</label>
+                <span asp-validation-for="RetiroSinRestriccion"></span>
             </div>
             <div class="panel-field">
                 <label asp-for="OffsetUtcMinutos">Offset UTC de estos horarios, en minutos</label>
                 <input class="panel-input" asp-for="OffsetUtcMinutos" type="number" min="-840" max="840" step="1" />
+                <span asp-validation-for="OffsetUtcMinutos"></span>
                 <small>Ingresalo explícitamente: UTC−03:00 = −180; UTC = 0. Sin horarios explícitos la compatibilidad temporal queda indeterminada.</small>
             </div>
 
@@ -102,7 +104,6 @@
 </div>
 <link rel="stylesheet" href="~/css/direcciones-here.css" asp-append-version="true" />
 @section Scripts {
-    <partial name="_ValidationScriptsPartial" />
     <script src="~/js/here-http.js" asp-append-version="true"></script>
     <script src="~/js/direcciones-here.js" asp-append-version="true"></script>
     <script src="~/js/viajes-direcciones.js" asp-append-version="true"></script>

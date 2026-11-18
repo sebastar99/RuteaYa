@@ -19,9 +19,9 @@ public static class ZonaHorariaViaje
     public static TimeZoneInfo Resolver(Viaje viaje, string? seleccion)
     {
         var id = Automatica(viaje) ?? seleccion;
-        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Elegí la zona horaria del lugar de salida.");
+        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Elegí la zona horaria del lugar de salida.", "ZonaHorariaId");
         try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
-        catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException) { throw new ArgumentException("Elegí una zona horaria válida de la lista."); }
+        catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException) { throw new ArgumentException("Elegí una zona horaria válida de la lista.", "ZonaHorariaId"); }
     }
 
     public static DateTimeOffset Convertir(DateTime local, TimeZoneInfo zona)

@@ -258,7 +258,7 @@ public class ViajesDireccionesIntegracionTest
         public int LlamadasGateway;
         public RelojPrueba Reloj = new();
         public RuteaYaDbContext Db() => new DbPrueba(new DbContextOptionsBuilder<RuteaYaDbContext>().UseSqlite(_connection).Options);
-        public static async Task<Host> Crear(bool navegador = false, bool navegadorEnvios = false, [CallerFilePath] string archivo = "") {
+        public static async Task<Host> Crear(bool navegador = false, bool navegadorEnvios = false, bool validacion = false, [CallerFilePath] string archivo = "") {
             var f = new Host(); await f._connection.OpenAsync();
             await using (var db = f.Db()) { await db.Database.EnsureCreatedAsync(); db.Usuarios.AddRange(
                 new Usuario { Id = 7, Nombre = "Siete", Apellido = "Test", Email = "siete@test.invalid", PasswordHash = "ficticio" },
@@ -270,6 +270,14 @@ public class ViajesDireccionesIntegracionTest
             var mvc = Builder(typeof(MvcController)); mvc.Services.AddScoped(_ => f.Db()); mvc.Services.AddMemoryCache(); mvc.Services.AddHttpContextAccessor(); mvc.Services.AddSingleton<TimeProvider>(f.Reloj);
             mvc.Services.AddScoped<IViajesApiServicio>(sp => new ViajesApiServicio(new HttpClient(new IdentidadApi(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), () => Interlocked.Increment(ref f.LlamadasGateway))) { BaseAddress = new Uri(url) }));
             mvc.Services.AddSingleton(f.Geo.Object); mvc.Services.AddScoped<EnviosLogica>();
+            if (validacion) {
+                mvc.Services.AddSingleton(Mock.Of<IUsuariosApiServicio>(MockBehavior.Strict));
+                var oportunidades = new Mock<IOportunidadesLogica>();
+                oportunidades.Setup(o => o.ConsultarAsync(7, 1, 1, 10, It.IsAny<CancellationToken>())).ReturnsAsync(new ListadoCandidatosDto {
+                    Viajes = new[] { new ViajeOportunidadesDto { Id = 1, UsuarioId = 7, Origen = "Origen guardado", Destino = "Destino guardado", Activo = true } },
+                    ViajeSeleccionado = new() { Id = 1, UsuarioId = 7, Origen = "Origen guardado", Destino = "Destino guardado", Activo = true } });
+                mvc.Services.AddSingleton(oportunidades.Object);
+            }
             mvc.Services.AddScoped<IViajesLogica, ViajesLogica>(); mvc.Services.AddScoped<PrevisualizacionRecorridoServicio>();
             var rutas = new Mock<IRutasGeometriaServicio>();
             rutas.Setup(r => r.CalcularGeometriaAsync(It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<CancellationToken>()))
@@ -286,7 +294,7 @@ public class ViajesDireccionesIntegracionTest
             mvc.Services.AddSingleton(busqueda.Object); mvc.Services.AddScoped<SeleccionDireccionServicio>();
             mvc.Services.AddScoped<IFuenteSeleccionUbicacionVerificada, FuenteSeleccionUbicacionVerificada>();
             mvc.Services.AddScoped<IUbicacionesConfirmadasServicio, UbicacionesConfirmadasServicio>(); mvc.Services.AddScoped<FormulariosDireccionesServicio>();
-            f._mvc = Aplicacion(mvc, navegador, archivo, navegadorEnvios); await f._mvc.StartAsync();
+            f._mvc = Aplicacion(mvc, navegador, archivo, navegadorEnvios, validacion); await f._mvc.StartAsync();
             f.Mvc = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = new Uri(Direccion(f._mvc)) };
             f.Mvc.DefaultRequestHeaders.Add("X-Usuario-Prueba", "7"); return f;
         }
@@ -310,21 +318,24 @@ public class ViajesDireccionesIntegracionTest
             var b = WebApplication.CreateBuilder(new WebApplicationOptions { ApplicationName = controller.Assembly.GetName().Name, EnvironmentName = "Testing" });
             b.Logging.ClearProviders(); b.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, 0));
             b.Services.AddDataProtection().UseEphemeralDataProtectionProvider(); b.Services.AddControllersWithViews().AddApplicationPart(controller.Assembly);
+            b.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(o => RuteaYa.Web.Models.MensajesValidacionMvc.Configurar(o.ModelBindingMessageProvider));
             b.Services.AddAuthentication("Prueba").AddScheme<AuthenticationSchemeOptions, Auth>("Prueba", _ => { }); b.Services.AddAuthorization(); return b; }
-        private static WebApplication Aplicacion(WebApplicationBuilder b, bool navegador = false, string archivo = "", bool navegadorEnvios = false) {
+        private static WebApplication Aplicacion(WebApplicationBuilder b, bool navegador = false, string archivo = "", bool navegadorEnvios = false, bool validacion = false) {
             var a = b.Build();
             if (navegador) {
                 a.Use(async (context, next) => {
-                    context.Request.Headers["X-Usuario-Prueba"] = "7";
-                    if (context.Request.Method != "GET" || !(navegadorEnvios ? context.Request.Path.StartsWithSegments("/Envios") : context.Request.Path.StartsWithSegments("/Panel") || Regex.IsMatch(context.Request.Path.Value ?? "", @"^/Recorridos/\d+$"))) { await next(); return; }
+                    if (!validacion || !context.Request.Path.StartsWithSegments("/Acceso")) context.Request.Headers["X-Usuario-Prueba"] = "7";
+                    if (context.Request.Method != "GET" || !(validacion || (navegadorEnvios ? context.Request.Path.StartsWithSegments("/Envios") : context.Request.Path.StartsWithSegments("/Panel") || Regex.IsMatch(context.Request.Path.Value ?? "", @"^/Recorridos/\d+$")))) { await next(); return; }
                     var original = context.Response.Body; await using var buffer = new MemoryStream(); context.Response.Body = buffer;
                     await next(); buffer.Position = 0; var html = await new StreamReader(buffer).ReadToEndAsync();
-                    html = Helpers.LeafletPrueba.Reescribir(html).Replace("</body>", context.Request.Path.StartsWithSegments("/Recorridos") ? "<script src=\"/pruebas/recorrido-browser.js\"></script></body>" : "<script src=\"/pruebas/formulario-browser.js\"></script></body>");
+                    html = Helpers.LeafletPrueba.Reescribir(html).Replace("</body>", validacion ? "<script src=\"/pruebas/validacion-browser.js\"></script></body>" : context.Request.Path.StartsWithSegments("/Recorridos") ? "<script src=\"/pruebas/recorrido-browser.js\"></script></body>" : "<script src=\"/pruebas/formulario-browser.js\"></script></body>");
                     context.Response.Body = original; context.Response.ContentLength = null; await context.Response.WriteAsync(html);
                 });
                 a.MapGet("/js/{nombre}", (string nombre) => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "..", "RuteaYa", "wwwroot", "js", Path.GetFileName(nombre))), "application/javascript"));
                 a.MapGet("/pruebas/formulario-browser.js", () => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "Fixtures", navegadorEnvios ? "envios-browser.js" : "viajes-browser.js")), "application/javascript"));
                 a.MapGet("/pruebas/recorrido-browser.js", () => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "Fixtures", "direcciones-browser.js")), "application/javascript"));
+                a.MapGet("/pruebas/validacion-browser.js", () => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "Fixtures", "validacion-browser.js")), "application/javascript"));
+                a.UseStaticFiles(new StaticFileOptions { FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.GetFullPath(Path.Combine(Path.GetDirectoryName(archivo)!, "..", "RuteaYa", "wwwroot"))) });
                 Helpers.LeafletPrueba.Mapear(a);
             }
             a.UseRouting(); a.UseAuthentication(); a.UseAuthorization();

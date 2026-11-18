@@ -89,20 +89,22 @@ public sealed class FormulariosDireccionesServicio(IViajesApiServicio api, IUbic
         var f = Leer(usuario, modelo.FormularioDirecciones!);
         if (f.Tipo != TipoRecursoUbicacion.Viaje) throw new ArgumentException("El formulario no corresponde a Viajes.");
         if (f.Viaje != (modelo.Id > 0 ? modelo.Id : null)) throw new ArgumentException("El formulario no corresponde al viaje.");
-        CampoViajeUbicacionDto Entrada(string clave, string texto, string? token, int paradaId = 0)
+        var errores = new Dictionary<string, string>();
+        CampoViajeUbicacionDto Entrada(string clave, string nombre, string texto, string? token, int paradaId = 0)
         {
             var c = ObtenerCampo(usuario, modelo.FormularioDirecciones!, clave);
             if (paradaId != c.ParadaId || (!string.IsNullOrEmpty(token) && (token != c.Token || texto != c.Canonica || c.Vence <= _reloj.GetUtcNow())) ||
                 string.IsNullOrEmpty(token) && (!f.Viaje.HasValue || texto != c.Original))
-                throw new ArgumentException("Elegí y confirmá cada dirección nueva o modificada.");
+                errores[nombre] = c.Vence <= _reloj.GetUtcNow() ? "La selección de esta dirección venció. Elegila nuevamente de la lista." : "Elegí esta dirección de la lista de sugerencias.";
             return new() { Contexto = c.Contexto, Comprobante = token, Texto = texto, IdParada = paradaId };
         }
         if (modelo.Paradas == null || modelo.Paradas.Count > 50 || modelo.Paradas.Select(p => p.ClaveCampo).Distinct().Count() != modelo.Paradas.Count)
             throw new ArgumentException("La lista de paradas no es válida.");
         modelo.Ubicaciones = new() {
-            Origen = Entrada("origen", modelo.Origen, modelo.OrigenComprobante), Destino = Entrada("destino", modelo.Destino, modelo.DestinoComprobante),
-            Paradas = modelo.Paradas.Select(p => Entrada(p.ClaveCampo, p.Ubicacion, p.Comprobante, p.Id)).ToList()
+            Origen = Entrada("origen", nameof(modelo.Origen), modelo.Origen, modelo.OrigenComprobante), Destino = Entrada("destino", nameof(modelo.Destino), modelo.Destino, modelo.DestinoComprobante),
+            Paradas = modelo.Paradas.Select(p => Entrada(p.ClaveCampo, $"Paradas[{p.ClaveCampo}].Ubicacion", p.Ubicacion, p.Comprobante, p.Id)).ToList()
         };
+        if (errores.Count > 0) { modelo.Ubicaciones = null; throw new ErroresDireccionesFormularioException(errores); }
     }
     public void Rellenar(int usuario, ViajeViewModel modelo)
     {
@@ -113,13 +115,14 @@ public sealed class FormulariosDireccionesServicio(IViajesApiServicio api, IUbic
         foreach (var p in modelo.Paradas)
             p.CampoDireccion = CampoVisual(f, modelo.FormularioDirecciones!, p.ClaveCampo, $"Paradas[{p.ClaveCampo}].Ubicacion", $"Paradas[{p.ClaveCampo}].Comprobante", "Parada", p.Comprobante);
     }
-    private static CampoDireccionViewModel CampoVisual(Formulario f, string token, string clave, string texto, string comprobante, string etiqueta, string? publicado)
+    private CampoDireccionViewModel CampoVisual(Formulario f, string token, string clave, string texto, string comprobante, string etiqueta, string? publicado)
     {
         if (!f.Campos.TryGetValue(clave, out var c)) throw new ArgumentException("El campo no pertenece al formulario.");
         var prefijo = (f.Tipo == TipoRecursoUbicacion.Viaje ? "/DireccionesViaje/" : "/DireccionesEnvio/") + token + "/";
         return new() { IdHtml = (f.Tipo == TipoRecursoUbicacion.Viaje ? "viaje-" : "envio-") + clave, Etiqueta = etiqueta, NombreTexto = texto, NombreToken = comprobante,
+            LongitudMaxima = f.Tipo == TipoRecursoUbicacion.Viaje ? 150 : 200,
             TextoInicial = publicado != null && publicado == c.Token ? c.Canonica! : c.Original,
-            TokenInicial = publicado != null && publicado == c.Token ? c.Token : null,
+            TokenInicial = publicado != null && publicado == c.Token && c.Vence > _reloj.GetUtcNow() ? c.Token : null,
             ConservarActual = f.Viaje.HasValue && c.Token == null && (clave is "origen" or "destino" || c.ParadaId > 0),
             ConfirmadaPersistida = c.Confirmada,
             UrlSugerencias = prefijo + "Sugerencias?campo=" + clave, UrlResolver = prefijo + "Resolver?campo=" + clave,
@@ -141,14 +144,16 @@ public sealed class FormulariosDireccionesServicio(IViajesApiServicio api, IUbic
         modelo.Ubicaciones = null; // jamás utilizar el contexto o los flags ligados libremente por MVC.
         var f = Leer(usuario, modelo.FormularioDirecciones!);
         if (f.Tipo != TipoRecursoUbicacion.Envio) throw new ArgumentException("El formulario no corresponde a Crear Envío.");
-        Campo Verificar(string clave, string texto, string? token) {
+        var errores = new Dictionary<string, string>();
+        Campo Verificar(string clave, string nombre, string texto, string? token) {
             var campo = ObtenerCampo(usuario, modelo.FormularioDirecciones!, clave);
             if (string.IsNullOrEmpty(token) || campo.Token != token || campo.Canonica != texto || campo.Vence <= _reloj.GetUtcNow())
-                throw new ArgumentException("Elegí y confirmá las direcciones de retiro y entrega.");
+                errores[nombre] = campo.Vence <= _reloj.GetUtcNow() ? "La selección de esta dirección venció. Elegila nuevamente de la lista." : "Elegí esta dirección de la lista de sugerencias.";
             return campo;
         }
-        var retiro = Verificar("retiro", modelo.OrigenDir, modelo.RetiroComprobante);
-        var entrega = Verificar("entrega", modelo.DestinoDir, modelo.EntregaComprobante);
+        var retiro = Verificar("retiro", nameof(modelo.OrigenDir), modelo.OrigenDir, modelo.RetiroComprobante);
+        var entrega = Verificar("entrega", nameof(modelo.DestinoDir), modelo.DestinoDir, modelo.EntregaComprobante);
+        if (errores.Count > 0) throw new ErroresDireccionesFormularioException(errores);
         modelo.Ubicaciones = new() { Retiro = retiro.Contexto, Entrega = entrega.Contexto,
             ComprobanteRetiro = modelo.RetiroComprobante!, ComprobanteEntrega = modelo.EntregaComprobante! };
     }

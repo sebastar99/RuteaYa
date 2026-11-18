@@ -37,29 +37,21 @@ public class OportunidadesController : Controller
         if (User.Identity?.IsAuthenticated != true) return Challenge();
         var conductorId = ObtenerConductorId();
         if (conductorId <= 0) return Forbid();
-        if (!ModelState.IsValid) return BadRequest("Los parámetros de la consulta no son válidos.");
+        if (!ModelState.IsValid) return await ConsultaInvalida();
         if (viajeId.HasValue && viajeId.Value <= 0) return NotFound();
         if (salidaId.HasValue && (!viajeId.HasValue || salidaId <= 0)) return NotFound();
 
         try
         {
-            var listado = salidaId.HasValue
-                ? await _oportunidades.ConsultarSalidaAsync(conductorId, viajeId!.Value, salidaId.Value, pagina, tamanoPagina, cancellationToken)
-                : await _oportunidades.ConsultarAsync(conductorId, viajeId, pagina, tamanoPagina, cancellationToken);
-            if (listado == null) return NotFound();
-            var modelo = new OportunidadesViewModel { Listado = listado };
-            if (_db != null && listado.ViajeSeleccionado != null)
-            {
-                var v = await _db.Viajes.AsNoTracking().Include(v => v.Dias).Include(v => v.OrigenUbicacion)
-                    .SingleAsync(v => v.Id == listado.ViajeSeleccionado.Id && v.UsuarioId == conductorId, cancellationToken);
-                modelo.DiasHabilitados = v.Dias.Select(d => d.DiaSemana).ToArray(); modelo.HoraSalida = v.HoraSalida;
-                modelo.ZonaAutomatica = ZonaHorariaViaje.Automatica(v);
-            }
+            var modelo = await PrepararListado(conductorId, viajeId, salidaId, pagina, tamanoPagina, cancellationToken);
+            if (modelo == null) return NotFound();
             return View(Vista, modelo);
         }
         catch (ArgumentOutOfRangeException)
         {
-            return BadRequest("La página debe ser positiva y el tamaño de página debe estar entre 1 y 50.");
+            if (pagina < 1) ModelState.AddModelError(nameof(pagina), "La página debe ser mayor o igual a 1.");
+            if (tamanoPagina is < 1 or > 50) ModelState.AddModelError(nameof(tamanoPagina), "Ingresá entre 1 y 50 envíos por página.");
+            return await ConsultaInvalida();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
         catch (Exception error) when (error is DbException or TimeoutException or HttpRequestException or InvalidOperationException)
@@ -71,6 +63,30 @@ public class OportunidadesController : Controller
                 Error = "No se pudieron cargar o evaluar los candidatos. Revisá la disponibilidad de datos y del servicio de rutas e intentá nuevamente."
             });
         }
+
+        async Task<IActionResult> ConsultaInvalida()
+        {
+            var propios = await _oportunidades.ConsultarAsync(conductorId, null, 1, 10, cancellationToken);
+            Response.StatusCode = 400;
+            return View(Vista, new OportunidadesViewModel { Listado = propios ?? new() });
+        }
+    }
+
+    private async Task<OportunidadesViewModel?> PrepararListado(int conductorId, int? viajeId, int? salidaId, int pagina, int tamanoPagina, CancellationToken ct)
+    {
+        var listado = salidaId.HasValue
+            ? await _oportunidades.ConsultarSalidaAsync(conductorId, viajeId!.Value, salidaId.Value, pagina, tamanoPagina, ct)
+            : await _oportunidades.ConsultarAsync(conductorId, viajeId, pagina, tamanoPagina, ct);
+        if (listado == null) return null;
+        var modelo = new OportunidadesViewModel { Listado = listado, Seleccion = new() { ViajeId = viajeId ?? 0, LlegadaSinRestriccion = true } };
+        if (_db != null && listado.ViajeSeleccionado != null)
+        {
+            var v = await _db.Viajes.AsNoTracking().Include(v => v.Dias).Include(v => v.OrigenUbicacion)
+                .SingleAsync(v => v.Id == listado.ViajeSeleccionado.Id && v.UsuarioId == conductorId, ct);
+            modelo.DiasHabilitados = v.Dias.Select(d => d.DiaSemana).ToArray(); modelo.HoraSalida = v.HoraSalida;
+            modelo.ZonaAutomatica = ZonaHorariaViaje.Automatica(v);
+        }
+        return modelo;
     }
 
     [HttpGet("Detalle")]
@@ -114,17 +130,30 @@ public class OportunidadesController : Controller
         if (User.Identity?.IsAuthenticated != true) return Challenge();
         var conductorId = ObtenerConductorId();
         if (conductorId <= 0) return Forbid();
-        if (!ModelState.IsValid) return BadRequest("La fecha y los horarios de salida no son válidos.");
+        if (seleccion.ViajeId <= 0) return NotFound();
         try
         {
+            if (!ModelState.IsValid) return await MostrarSalidaInvalida();
             var id = await _oportunidades.SeleccionarSalidaAsync(conductorId, seleccion, cancellationToken);
             if (!id.HasValue) return NotFound();
             return RedirectToAction(nameof(Index), new { viajeId = seleccion.ViajeId, salidaId = id.Value });
         }
-        catch (ArgumentException e) { TempData["ErrorSalida"] = e.Message; return RedirectToAction(nameof(Index), new { viajeId = seleccion.ViajeId }); }
+        catch (ArgumentException e) {
+            ModelState.AddModelError(e.ParamName ?? "", e.Message.Split(" (Parameter", StringSplitOptions.None)[0]);
+            return await MostrarSalidaInvalida();
+        }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return StatusCode(499); }
         catch (Exception e) when (e is DbException or Microsoft.EntityFrameworkCore.DbUpdateException or TimeoutException)
         { return StatusCode(503, "No se pudo guardar la salida. Recargá e intentá nuevamente."); }
+
+        async Task<IActionResult> MostrarSalidaInvalida()
+        {
+            var modelo = await PrepararListado(conductorId, seleccion.ViajeId, null, 1, 10, cancellationToken);
+            if (modelo == null) return NotFound();
+            modelo.Seleccion = seleccion;
+            return View(Vista, modelo);
+        }
+
     }
 
     [HttpPost("Aceptar")]

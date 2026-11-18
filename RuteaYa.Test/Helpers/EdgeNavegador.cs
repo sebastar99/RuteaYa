@@ -24,6 +24,7 @@ internal static class EdgeNavegador
         using var process = Process.Start(start)!;
         using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         using var http = new HttpClient();
+        var ultimaPagina = url;
         try
         {
             string? ws = null;
@@ -43,7 +44,7 @@ internal static class EdgeNavegador
             {
                 var requestId = ++id;
                 var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { id = requestId, method = "Runtime.evaluate",
-                    @params = new { expression = "window.resultadoPruebaDirecciones || ''", returnByValue = true } }));
+                    @params = new { expression = "JSON.stringify({resultado:window.resultadoPruebaDirecciones||'',pagina:location.pathname,paso:sessionStorage.getItem('validacion-paso')||''})", returnByValue = true } }));
                 await socket.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, limite.Token);
                 using var buffer = new MemoryStream();
                 while (true)
@@ -55,8 +56,16 @@ internal static class EdgeNavegador
                     using var message = JsonDocument.Parse(buffer.ToArray());
                     if (message.RootElement.TryGetProperty("id", out var responseId) && responseId.GetInt32() == requestId)
                     {
-                        var value = message.RootElement.GetProperty("result").GetProperty("result").GetProperty("value").GetString();
-                        if (!string.IsNullOrEmpty(value)) return value;
+                        // La navegación puede destruir el contexto entre la orden y la respuesta.
+                        if (!message.RootElement.TryGetProperty("result", out var evaluacion) || !evaluacion.TryGetProperty("result", out var remoto) ||
+                            !remoto.TryGetProperty("value", out var valor)) break;
+                        var value = valor.GetString();
+                        if (!string.IsNullOrEmpty(value)) {
+                            using var estado = JsonDocument.Parse(value);
+                            ultimaPagina = estado.RootElement.GetProperty("pagina").GetString() + " / " + estado.RootElement.GetProperty("paso").GetString();
+                            var resultadoPrueba = estado.RootElement.GetProperty("resultado").GetString();
+                            if (!string.IsNullOrEmpty(resultadoPrueba)) return resultadoPrueba;
+                        }
                         break;
                     }
                     buffer.SetLength(0);
@@ -64,6 +73,7 @@ internal static class EdgeNavegador
                 await Task.Delay(100, limite.Token);
             }
         }
+        catch (OperationCanceledException) { throw new TimeoutException("El navegador no terminó en: " + ultimaPagina); }
         finally { if (!process.HasExited) process.Kill(entireProcessTree: true); }
     }
 }
