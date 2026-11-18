@@ -20,9 +20,7 @@ public class RecorridosController(PrevisualizacionRecorridoServicio recorridos, 
     [HttpGet("")]
     public Task<IActionResult> Index(int viajeId, string? sesion, CancellationToken ct) => Ejecutar(viajeId, async () =>
     {
-        var modelo = string.IsNullOrEmpty(sesion)
-            ? await recorridos.IniciarAutocompletadoAsync(UsuarioId, viajeId, ct)
-            : await recorridos.ObtenerAsync(UsuarioId, viajeId, sesion, ct);
+        var modelo = await recorridos.IniciarGuardadoAsync(UsuarioId, viajeId, ct);
         return modelo == null ? NotFound() : View(Vista, modelo);
     });
 
@@ -70,7 +68,7 @@ public class RecorridosController(PrevisualizacionRecorridoServicio recorridos, 
     public Task<IActionResult> ConfirmarDireccion(int viajeId, string sesion, int ubicacion, string token, int? acceso,
         [FromServices] SeleccionDireccionServicio direcciones, CancellationToken ct) =>
         EjecutarDireccion(viajeId, sesion, ubicacion, ambito =>
-            Task.FromResult<IActionResult>(Json(direcciones.Confirmar(UsuarioId, ambito, token, acceso))), ct);
+            Task.FromResult<IActionResult>(Json(direcciones.ConfirmarAutomaticamente(UsuarioId, ambito, token))), ct);
 
     [HttpPost("ConfirmarDirecciones")]
     [ValidateAntiForgeryToken]

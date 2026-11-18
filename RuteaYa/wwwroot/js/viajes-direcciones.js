@@ -8,7 +8,7 @@ document.querySelectorAll('[data-viaje-direcciones], [data-envio-direcciones]').
             root.dataset.conservarActual === 'true' && root.querySelector('[data-texto-direccion]').value === root.dataset.textoOriginal);
     };
     form.addEventListener('submit', event => {
-        if (saving || !ready()) { event.preventDefault(); status.textContent = 'Elegí y confirmá todas las direcciones nuevas o modificadas.'; return; }
+        if (saving || !ready()) { event.preventDefault(); status.textContent = 'Elegí cada dirección nueva o modificada de su lista de sugerencias.'; return; }
         saving = true; status.textContent = form.matches('[data-envio-direcciones]') ? 'Publicando envío y ubicaciones verificadas…' : 'Guardando viaje y ubicaciones verificadas…';
         form.querySelectorAll('button[type=submit]').forEach(b => b.disabled = true);
     });
@@ -37,7 +37,7 @@ document.querySelectorAll('[data-viaje-direcciones], [data-envio-direcciones]').
             const row = template.content.firstElementChild;
             if (!row?.matches('[data-parada-viaje]')) throw new Error('La respuesta del formulario no es válida.');
             list.append(row); row.querySelectorAll('[data-direccion-here]').forEach(window.RuteaYaDirecciones.inicializar);
-            row.querySelector('input[type=search]').focus(); status.textContent = 'Escribí y confirmá la dirección de la parada.';
+            row.querySelector('input[type=search]').focus(); status.textContent = 'Escribí la dirección de la parada y elegila de la lista.';
         } catch (error) { status.textContent = window.RuteaYaHere.message(error); }
         finally { add.disabled = false; }
     });

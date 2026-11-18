@@ -196,7 +196,7 @@ public class ViajesDireccionesIntegracionTest
             db.Viajes.Add(v); await db.SaveChangesAsync(); id = v.Id; p1 = v.Paradas.Single(p => p.Orden == 1).Id; p2 = v.Paradas.Single(p => p.Orden == 2).Id;
         }
         var html = await f.Mvc.GetStringAsync("/Panel/EditarViaje/" + id);
-        Assert.Contains("pendiente de confirmaci", WebUtility.HtmlDecode(html));
+        Assert.Contains("Actualizá esta dirección", WebUtility.HtmlDecode(html));
         var csrf = Valor(html, "__RequestVerificationToken"); var form = Valor(html, "FormularioDirecciones");
         var claves = Regex.Matches(html, "name=\"Paradas.Index\"[^>]*value=\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
         var valores = Datos(csrf, form, "Origen legado", "Destino legado", "", ""); valores.Add(new("Id", id.ToString()));
@@ -269,12 +269,19 @@ public class ViajesDireccionesIntegracionTest
             var mvc = Builder(typeof(MvcController)); mvc.Services.AddScoped(_ => f.Db()); mvc.Services.AddMemoryCache(); mvc.Services.AddHttpContextAccessor(); mvc.Services.AddSingleton<TimeProvider>(f.Reloj);
             mvc.Services.AddScoped<IViajesApiServicio>(sp => new ViajesApiServicio(new HttpClient(new IdentidadApi(sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), () => Interlocked.Increment(ref f.LlamadasGateway))) { BaseAddress = new Uri(url) }));
             mvc.Services.AddSingleton(f.Geo.Object); mvc.Services.AddScoped<EnviosLogica>();
+            mvc.Services.AddScoped<IViajesLogica, ViajesLogica>(); mvc.Services.AddScoped<PrevisualizacionRecorridoServicio>();
+            var rutas = new Mock<IRutasGeometriaServicio>();
+            rutas.Setup(r => r.CalcularGeometriaAsync(It.IsAny<IReadOnlyList<PuntoRutaDto>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IReadOnlyList<PuntoRutaDto> p, CancellationToken _) => new ResultadoRutaGeometriaDto {
+                    Totales = new() { DistanciaMetros = 3210, DuracionSegundos = 123 }, Secciones = new() { p.ToList() } });
+            mvc.Services.AddSingleton(rutas.Object);
+            mvc.Services.AddSingleton(new MapasHereServicio(new HttpClient(new MapaHandler()), Options.Create(new HereRoutingOpciones { ApiKey = "simulada" })));
             var busqueda = new Mock<IBusquedaDireccionesServicio>();
             busqueda.Setup(b => b.SugerirAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((string t, CancellationToken _) =>
                 new[] { new SugerenciaDireccionDto { IdHere = "here:af:" + t, Nombre = t, Localidad = "Morón", Direccion = t + ", Morón" } });
             busqueda.Setup(b => b.ResolverAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((string id, CancellationToken _) =>
                 new ResultadoGeocodificacionDto { IdHere = id, DireccionNormalizada = id[8..] + ", Morón, Argentina", TipoResultado = "houseNumber",
-                    Posicion = new() { Latitud = -34, Longitud = -58 }, Accesos = new() { new() { Latitud = -35, Longitud = -59 } } });
+                    Posicion = new() { Latitud = -34, Longitud = -58 }, Accesos = new() { new() { Latitud = id.Contains("Destino") || id.Contains("Entrega") ? -35.01m : id.Contains("Parada") ? -35.005m : -35, Longitud = -59 } } });
             mvc.Services.AddSingleton(busqueda.Object); mvc.Services.AddScoped<SeleccionDireccionServicio>();
             mvc.Services.AddScoped<IFuenteSeleccionUbicacionVerificada, FuenteSeleccionUbicacionVerificada>();
             mvc.Services.AddScoped<IUbicacionesConfirmadasServicio, UbicacionesConfirmadasServicio>(); mvc.Services.AddScoped<FormulariosDireccionesServicio>();
@@ -308,20 +315,26 @@ public class ViajesDireccionesIntegracionTest
             if (navegador) {
                 a.Use(async (context, next) => {
                     context.Request.Headers["X-Usuario-Prueba"] = "7";
-                    if (context.Request.Method != "GET" || !(navegadorEnvios ? context.Request.Path.StartsWithSegments("/Envios") : context.Request.Path.StartsWithSegments("/Panel"))) { await next(); return; }
+                    if (context.Request.Method != "GET" || !(navegadorEnvios ? context.Request.Path.StartsWithSegments("/Envios") : context.Request.Path.StartsWithSegments("/Panel") || Regex.IsMatch(context.Request.Path.Value ?? "", @"^/Recorridos/\d+$"))) { await next(); return; }
                     var original = context.Response.Body; await using var buffer = new MemoryStream(); context.Response.Body = buffer;
                     await next(); buffer.Position = 0; var html = await new StreamReader(buffer).ReadToEndAsync();
-                    html = html.Replace("</body>", "<script src=\"/pruebas/formulario-browser.js\"></script></body>");
+                    html = Helpers.LeafletPrueba.Reescribir(html).Replace("</body>", context.Request.Path.StartsWithSegments("/Recorridos") ? "<script src=\"/pruebas/recorrido-browser.js\"></script></body>" : "<script src=\"/pruebas/formulario-browser.js\"></script></body>");
                     context.Response.Body = original; context.Response.ContentLength = null; await context.Response.WriteAsync(html);
                 });
                 a.MapGet("/js/{nombre}", (string nombre) => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "..", "RuteaYa", "wwwroot", "js", Path.GetFileName(nombre))), "application/javascript"));
                 a.MapGet("/pruebas/formulario-browser.js", () => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "Fixtures", navegadorEnvios ? "envios-browser.js" : "viajes-browser.js")), "application/javascript"));
+                a.MapGet("/pruebas/recorrido-browser.js", () => Results.Text(File.ReadAllText(Path.Combine(Path.GetDirectoryName(archivo)!, "Fixtures", "direcciones-browser.js")), "application/javascript"));
+                Helpers.LeafletPrueba.Mapear(a);
             }
             a.UseRouting(); a.UseAuthentication(); a.UseAuthorization();
             a.MapControllerRoute("default", "{controller=Acceso}/{action=Login}/{id?}"); return a; }
         private static string Direccion(WebApplication app) => app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
         public async ValueTask DisposeAsync() { Mvc?.Dispose(); Api?.Dispose(); if (_mvc != null) { await _mvc.StopAsync(); await _mvc.DisposeAsync(); }
             if (_api != null) { await _api.StopAsync(); await _api.DisposeAsync(); } await _connection.DisposeAsync(); }
+    }
+    private sealed class MapaHandler : HttpMessageHandler {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
+            Content = new StringContent("{\"resources\":{\"base\":{\"styles\":{\"explore.day\":[]}}},\"copyrights\":{}}", System.Text.Encoding.UTF8, "application/json") });
     }
     internal sealed class RelojPrueba : TimeProvider { public DateTimeOffset Ahora = DateTimeOffset.UtcNow; public override DateTimeOffset GetUtcNow() => Ahora; }
     private sealed class IdentidadApi(Microsoft.AspNetCore.Http.IHttpContextAccessor accessor, Action llamada) : DelegatingHandler(new HttpClientHandler())

@@ -9,12 +9,6 @@
            aria-controls="@(Model.IdHtml)-sugerencias" aria-describedby="@(Model.IdHtml)-estado" data-texto-direccion />
     <ul id="@(Model.IdHtml)-sugerencias" role="listbox" aria-label="Sugerencias de dirección" data-sugerencias></ul>
     </div>
-    <p id="@(Model.IdHtml)-estado" role="status" aria-live="polite" data-estado-direccion>@(Model.TokenInicial != null ? "Ubicación confirmada para este formulario." : Model.ConservarActual ? (Model.ConfirmadaPersistida ? "Ubicación guardada y confirmada. Si no cambia, se conserva." : "Dirección anterior pendiente de confirmación. Podés conservarla sin modificarla o elegir una sugerencia.") : "Escribí al menos 3 caracteres y confirmá una sugerencia.")</p>
-    <div data-detalle-direccion hidden>
-        <p data-resumen-direccion></p>
-        <label for="@(Model.IdHtml)-acceso">Punto para navegar (selección explícita)</label>
-        <select id="@(Model.IdHtml)-acceso" data-acceso-direccion disabled><option value="">Seleccioná position o access</option></select>
-        <button type="button" class="panel-button outline" data-confirmar-direccion disabled>Confirmar ubicación</button>
-    </div>
+    <p id="@(Model.IdHtml)-estado" role="status" aria-live="polite" data-estado-direccion>@(Model.TokenInicial != null ? "✓ Dirección seleccionada" : Model.ConservarActual ? (Model.ConfirmadaPersistida ? "✓ Dirección guardada" : "Actualizá esta dirección eligiendo una opción de la lista para poder ver su recorrido.") : "Escribí la dirección y elegí una opción de la lista.")</p>
     <input type="hidden" name="@Model.NombreToken" value="@Model.TokenInicial" data-confirmacion-direccion />
 </div>

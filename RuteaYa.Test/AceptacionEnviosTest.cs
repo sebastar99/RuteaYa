@@ -26,7 +26,7 @@ public class AceptacionEnviosTest
         var fecha = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(2));
         while (fecha.DayOfWeek != DayOfWeek.Monday) fecha = fecha.AddDays(1);
         var id = (await new SalidasViajeServicio(db).SeleccionarAsync(7, new() { ViajeId = f.ViajeId, Fecha = fecha,
-            OffsetUtcMinutos = -180, LlegadaSinRestriccion = true }))!.Value;
+            ZonaHorariaId = ZonaHorariaViaje.Argentina, LlegadaSinRestriccion = true }))!.Value;
         foreach (var e in await db.Envios.Where(e => e.Estado == EstadoEnvio.BuscandoConductor).ToListAsync()) {
             e.FechaLimite = fecha.AddDays(14).ToDateTime(new TimeOnly(18, 0));
             e.EntregaLimiteConOffset = new DateTimeOffset(e.FechaLimite, TimeSpan.FromHours(-3)); e.RetiroSinRestriccion = true;
@@ -187,7 +187,7 @@ public class AceptacionEnviosTest
                 Dias = new List<DiaViaje> { new() { DiaSemana = 1 } } };
             inicial.Viajes.Add(viaje); await inicial.SaveChangesAsync(); viaje2 = viaje.Id;
             var fecha = (await inicial.SalidasViaje.SingleAsync()).Fecha;
-            salida2 = (await new SalidasViajeServicio(inicial).SeleccionarAsync(9, new() { ViajeId = viaje2, Fecha = fecha, OffsetUtcMinutos = -180, LlegadaSinRestriccion = true }))!.Value;
+            salida2 = (await new SalidasViajeServicio(inicial).SeleccionarAsync(9, new() { ViajeId = viaje2, Fecha = fecha, ZonaHorariaId = ZonaHorariaViaje.Argentina, LlegadaSinRestriccion = true }))!.Value;
             Assert.Equal(EstadoCompatibilidad.Compatible, (await Oportunidades(inicial).ObtenerDetalleSalidaAsync(9, viaje2, salida2, f.EnvioId))!.Evaluacion.Estado);
         }
         await using var db1 = f.DbIndependiente(); await using var db2 = f.DbIndependiente();

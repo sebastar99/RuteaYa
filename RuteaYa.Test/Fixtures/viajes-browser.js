@@ -5,7 +5,8 @@
     try {
         if (location.pathname === '/Panel/Viajes' && sessionStorage.getItem('viaje-enviado') === 'si') {
             assert(document.body.textContent.includes('Origen UI, Morón, Argentina'), 'Lista de viajes debe reflejar dirección canónica guardada.');
-            window.resultadoPruebaDirecciones = 'OK'; return;
+            const enlace = [...document.querySelectorAll('a[href]')].find(a => /\/DetalleViaje\/\d+/.test(a.getAttribute('href')));
+            assert(enlace, 'Debe existir el viaje guardado.'); location.href = '/Recorridos/' + enlace.href.match(/\/DetalleViaje\/(\d+)/)[1]; return;
         }
         assert(location.pathname === '/Panel/NuevoViaje', 'Pantalla inesperada: ' + location.pathname);
         const form = document.querySelector('[data-viaje-direcciones]');
@@ -13,13 +14,16 @@
         async function elegir(root, texto) {
             const input = root.querySelector('input[type=search]'); input.value = texto; input.dispatchEvent(new Event('input', { bubbles: true }));
             await wait(() => root.querySelector('[data-sugerencias] button'), 'No hay sugerencias');
-            root.querySelector('[data-sugerencias] button').click();
-            await wait(() => !root.querySelector('[data-detalle-direccion]').hidden, 'Lookup falló');
-            const access = root.querySelector('select'); access.value = '0'; access.dispatchEvent(new Event('change'));
-            root.querySelector('[data-confirmar-direccion]').click();
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
             await wait(() => root.querySelector('[data-confirmacion-direccion]').value, 'Confirmación persistente falló: ' + root.textContent);
         }
         await elegir(form.querySelector('#viaje-origen').closest('[data-direccion-here]'), 'Origen UI');
+        const origen = form.querySelector('#viaje-origen'), rootOrigen = origen.closest('[data-direccion-here]');
+        origen.value = 'Otra dirección'; origen.dispatchEvent(new Event('input', { bubbles: true }));
+        assert(!rootOrigen.querySelector('[data-confirmacion-direccion]').value, 'Editar debe invalidar la dirección anterior.');
+        assert(!rootOrigen.querySelector('select') && !rootOrigen.querySelector('[data-confirmar-direccion]'), 'Sin pasos técnicos.');
+        await elegir(rootOrigen, 'Origen UI');
         await elegir(form.querySelector('#viaje-destino').closest('[data-direccion-here]'), 'Destino UI');
         form.querySelector('[data-agregar-parada]').click();
         await wait(() => form.querySelector('[data-parada-viaje]'), 'No se agregó parada');

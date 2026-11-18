@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
+using Microsoft.EntityFrameworkCore;
+using RuteaYa.Entidades;
 using RuteaYa.Web.Models;
 
 namespace RuteaYa.Web.Controllers;
@@ -16,12 +18,14 @@ public class OportunidadesController : Controller
     private const string Vista = "~/Views/Panel/Oportunidades.cshtml";
     private readonly IOportunidadesLogica _oportunidades;
     private readonly EnviosLogica? _envios;
+    private readonly RuteaYaDbContext? _db;
 
-    public OportunidadesController(IOportunidadesLogica oportunidades, EnviosLogica? envios = null)
+    public OportunidadesController(IOportunidadesLogica oportunidades, EnviosLogica? envios = null, RuteaYaDbContext? db = null)
     {
         ArgumentNullException.ThrowIfNull(oportunidades);
         _oportunidades = oportunidades;
         _envios = envios;
+        _db = db;
     }
 
     [HttpGet("")]
@@ -43,7 +47,15 @@ public class OportunidadesController : Controller
                 ? await _oportunidades.ConsultarSalidaAsync(conductorId, viajeId!.Value, salidaId.Value, pagina, tamanoPagina, cancellationToken)
                 : await _oportunidades.ConsultarAsync(conductorId, viajeId, pagina, tamanoPagina, cancellationToken);
             if (listado == null) return NotFound();
-            return View(Vista, new OportunidadesViewModel { Listado = listado });
+            var modelo = new OportunidadesViewModel { Listado = listado };
+            if (_db != null && listado.ViajeSeleccionado != null)
+            {
+                var v = await _db.Viajes.AsNoTracking().Include(v => v.Dias).Include(v => v.OrigenUbicacion)
+                    .SingleAsync(v => v.Id == listado.ViajeSeleccionado.Id && v.UsuarioId == conductorId, cancellationToken);
+                modelo.DiasHabilitados = v.Dias.Select(d => d.DiaSemana).ToArray(); modelo.HoraSalida = v.HoraSalida;
+                modelo.ZonaAutomatica = ZonaHorariaViaje.Automatica(v);
+            }
+            return View(Vista, modelo);
         }
         catch (ArgumentOutOfRangeException)
         {

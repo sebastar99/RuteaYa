@@ -7,6 +7,7 @@ public class PrevisualizacionRecorridoViewModel
     public int ViajeId { get; set; }
     public string? Sesion { get; set; }
     public string? Error { get; set; }
+    public bool UsaUbicacionesGuardadas { get; set; }
     public string Origen { get; set; } = "";
     public string Destino { get; set; } = "";
     public List<UbicacionPrevisualizacion> Ubicaciones { get; set; } = new();

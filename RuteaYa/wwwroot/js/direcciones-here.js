@@ -5,10 +5,6 @@ function inicializarDireccionHere(root) {
     const input = root.querySelector('[data-texto-direccion]');
     const list = root.querySelector('[data-sugerencias]');
     const status = root.querySelector('[data-estado-direccion]');
-    const detail = root.querySelector('[data-detalle-direccion]');
-    const summary = root.querySelector('[data-resumen-direccion]');
-    const access = root.querySelector('[data-acceso-direccion]');
-    const confirm = root.querySelector('[data-confirmar-direccion]');
     const hidden = root.querySelector('[data-confirmacion-direccion]');
     let timer, controller, version = 0, resolved = '', active = -1;
     const changed = () => root.dispatchEvent(new CustomEvent('direccion:estado', { bubbles: true, detail: { confirmada: !!hidden.value } }));
@@ -20,29 +16,27 @@ function inicializarDireccionHere(root) {
     function begin() { cancel(); controller = new AbortController(); return { current: version, signal: controller.signal }; }
     async function choose(token) {
         const { current, signal } = begin();
-        invalidate(); resolved = ''; detail.hidden = true; list.replaceChildren(); active = -1;
+        invalidate(); resolved = ''; list.replaceChildren(); active = -1;
         input.setAttribute('aria-expanded', 'false');
         input.removeAttribute('aria-activedescendant');
-        status.textContent = 'Resolviendo la sugerencia con HERE…';
+        status.textContent = 'Seleccionando dirección…';
         try {
             const result = await request(root.dataset.resolverUrl, { token }, signal);
             if (current !== version) return;
             resolved = result.token;
-            const u = result.ubicacion;
-            input.value = u.direccionNormalizada;
-            summary.textContent = `${u.direccionNormalizada} · HERE ${u.idHere} · Tipo ${u.tipoResultado} · Puerta ${u.tipoNumeroPuerta ?? 'sin información'} · ${u.posicionEstimada || u.tipoNumeroPuerta === 'interpolated' ? 'posición estimada/interpolada' : 'posición informada'}.`;
-            access.replaceChildren(new Option('Seleccioná position o access', ''));
-            access.add(new Option(`Position (referencia): ${u.posicion.latitud}, ${u.posicion.longitud}`, '-1'));
-            u.accesos.forEach((p, i) => access.add(new Option(`Access ${i + 1} (navegación): ${p.latitud}, ${p.longitud}`, String(i))));
-            access.disabled = false; confirm.disabled = true; detail.hidden = false;
-            status.textContent = 'Ubicación resuelta, todavía sin confirmar. Elegí position o un access.';
-            access.focus();
+            const confirmed = await request(root.dataset.confirmarUrl, { token: resolved }, signal);
+            if (current !== version) return;
+            if (!confirmed.confirmada || !confirmed.token) throw new Error('No se pudo seleccionar la dirección. Volvé a intentarlo.');
+            input.value = confirmed.ubicacion.direccionNormalizada;
+            hidden.value = confirmed.token;
+            status.textContent = '✓ Dirección seleccionada';
+            changed(); input.focus();
         } catch (error) {
             if (current === version && error.name !== 'AbortError') status.textContent = window.RuteaYaHere.message(error);
         }
     }
     input.addEventListener('input', () => {
-        cancel(); invalidate(); resolved = ''; detail.hidden = true; confirm.disabled = true; list.replaceChildren(); active = -1;
+        cancel(); invalidate(); resolved = ''; list.replaceChildren(); active = -1;
         input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant');
         const text = input.value.trim();
         status.textContent = text.length < 3 ? 'Escribí al menos 3 caracteres.' : 'Buscando sugerencias…';
@@ -66,7 +60,7 @@ function inicializarDireccionHere(root) {
                     li.append(button); list.append(li);
                 });
                 input.setAttribute('aria-expanded', items.length ? 'true' : 'false');
-                status.textContent = items.length ? 'Elegí una sugerencia. Ninguna está confirmada.' : 'No se encontraron sugerencias. Agregá calle, número y localidad.';
+                status.textContent = items.length ? 'Elegí una dirección de la lista.' : 'No se encontraron direcciones. Agregá calle, número y localidad.';
             } catch (error) {
                 if (current === version && error.name !== 'AbortError') status.textContent = window.RuteaYaHere.message(error);
             }
@@ -85,24 +79,8 @@ function inicializarDireccionHere(root) {
         if (e.key === 'Enter') { e.preventDefault(); if (active >= 0) items[active]?.querySelector('button').click(); }
         if (e.key === 'Escape') { cancel(); list.replaceChildren(); active = -1; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); }
     });
-    access.addEventListener('change', () => { cancel(); invalidate(); confirm.disabled = !resolved || access.value === ''; status.textContent = 'Punto pendiente de confirmación.'; });
-    confirm.addEventListener('click', async () => {
-        if (!resolved || access.value === '') return;
-        const { current, signal } = begin();
-        invalidate(); confirm.disabled = true;
-        try {
-            const result = await request(root.dataset.confirmarUrl, { token: resolved, acceso: access.value }, signal);
-            if (current !== version) return;
-            if (!result.confirmada) throw new Error('confirmacion');
-            hidden.value = result.token;
-            status.textContent = `Ubicación confirmada: ${result.ubicacion.direccionNormalizada} · ${result.acceso === -1 ? 'position' : 'access ' + (result.acceso + 1)}.`;
-            changed();
-        } catch (error) {
-            if (current === version && error.name !== 'AbortError') { status.textContent = window.RuteaYaHere.message(error); confirm.disabled = false; }
-        }
-    });
     // No restaurar confirmaciones de un formulario recuperado de la caché del navegador.
-    window.addEventListener('pageshow', event => { if (event.persisted) { cancel(); invalidate(); resolved = ''; detail.hidden = true; } });
+    window.addEventListener('pageshow', event => { if (event.persisted) { cancel(); invalidate(); resolved = ''; } });
 }
 document.querySelectorAll('[data-direccion-here]').forEach(inicializarDireccionHere);
 window.RuteaYaDirecciones = { inicializar: inicializarDireccionHere };

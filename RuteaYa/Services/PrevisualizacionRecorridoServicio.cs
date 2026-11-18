@@ -5,17 +5,61 @@ using Microsoft.Extensions.Caching.Memory;
 using RuteaYa.Logica;
 using RuteaYa.Logica.DTOs;
 using RuteaYa.Web.Models;
+using Microsoft.EntityFrameworkCore;
+using RuteaYa.Entidades;
 
 namespace RuteaYa.Web.Services;
 
 /// <summary>Estado efímero de la pantalla. No es una fuente de datos confirmados del motor.</summary>
 public class PrevisualizacionRecorridoServicio(
     IViajesLogica viajes, IGeocodificacionServicio geocodificacion,
-    IRutasGeometriaServicio rutas, IMemoryCache cache, TimeProvider? reloj = null)
+    IRutasGeometriaServicio rutas, IMemoryCache cache, TimeProvider? reloj = null, RuteaYaDbContext? db = null)
 {
     private readonly TimeProvider _reloj = reloj ?? TimeProvider.System;
     private sealed record Sesion(int UsuarioId, int ViajeId, string Huella, DateTimeOffset Vence, string Modelo);
     private static string Clave(string token) => "previsualizacion-recorrido:" + token;
+
+    public async Task<PrevisualizacionRecorridoViewModel?> IniciarGuardadoAsync(int usuarioId, int viajeId, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var viaje = await viajes.ObtenerPorIdAsync(usuarioId, viajeId);
+        if (viaje == null || viaje.UsuarioId != usuarioId) return null;
+        var modelo = new PrevisualizacionRecorridoViewModel { ViajeId = viaje.Id, Origen = viaje.Origen, Destino = viaje.Destino,
+            UsaUbicacionesGuardadas = true, Sesion = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) };
+        var v = db == null ? null : await db.Viajes.AsNoTracking().Include(v => v.OrigenUbicacion).Include(v => v.DestinoUbicacion)
+            .Include(v => v.Paradas).ThenInclude(p => p.UbicacionConfirmada).SingleOrDefaultAsync(v => v.Id == viajeId && v.UsuarioId == usuarioId, ct);
+        var puntos = new List<(string Etiqueta, string Texto, CampoUbicacion Campo, UbicacionConfirmada? U)>();
+        if (v != null) {
+            puntos.Add(("Origen", v.Origen, CampoUbicacion.OrigenViaje, v.OrigenUbicacion));
+            puntos.AddRange(v.Paradas.OrderBy(p => p.Orden).Select(p => ($"Parada {p.Orden}", p.Ubicacion, CampoUbicacion.Parada, p.UbicacionConfirmada)));
+            puntos.Add(("Destino", v.Destino, CampoUbicacion.DestinoViaje, v.DestinoUbicacion));
+        }
+        bool Valida(UbicacionConfirmada? u, CampoUbicacion campo, string texto) => u != null && u.UsuarioId == usuarioId &&
+            u.TipoRecurso == TipoRecursoUbicacion.Viaje && u.Campo == campo && (!u.RecursoId.HasValue || u.RecursoId == viajeId) &&
+            u.DireccionNormalizada == texto && u.Proveedor == "HERE-v7" && u.IdHere.StartsWith("here:", StringComparison.Ordinal) &&
+            u.ConsumidaEnUtc.HasValue && u.ConfirmadaEnUtc != default && u.ConfirmadaEnUtc <= u.ConsumidaEnUtc && u.ConsumidaEnUtc <= u.VenceEnUtc &&
+            u.NavegacionLatitud is >= -90 and <= 90 && u.NavegacionLongitud is >= -180 and <= 180 &&
+            u.PosicionLatitud is >= -90 and <= 90 && u.PosicionLongitud is >= -180 and <= 180 && u.AccesoElegido >= -1 &&
+            (u.AccesoElegido != -1 || u.NavegacionLatitud == u.PosicionLatitud && u.NavegacionLongitud == u.PosicionLongitud);
+        if (v == null || v.Paradas.Count > 18 || v.Paradas.Any(p => p.Orden <= 0) || v.Paradas.Select(p => p.Orden).Distinct().Count() != v.Paradas.Count ||
+            puntos.Any(p => !Valida(p.U, p.Campo, p.Texto))) {
+            modelo.Error = "Este viaje necesita actualizar sus direcciones. Entrá a Editar Viaje, elegí origen, destino y paradas de la lista y guardalos una sola vez.";
+            return modelo;
+        }
+        foreach (var p in puntos) {
+            modelo.Ubicaciones.Add(new() { Etiqueta = p.Etiqueta, Direccion = p.Texto });
+            modelo.PuntosConfirmados.Add(new() { Latitud = p.U!.NavegacionLatitud, Longitud = p.U.NavegacionLongitud });
+            modelo.CandidatosConfirmados.Add(new() { DireccionNormalizada = p.Texto, IdHere = p.U.IdHere,
+                Posicion = new() { Latitud = p.U.PosicionLatitud, Longitud = p.U.PosicionLongitud } });
+            modelo.AccesosConfirmados.Add(p.U.AccesoElegido);
+        }
+        modelo.Ruta = await rutas.CalcularGeometriaAsync(modelo.PuntosConfirmados, ct);
+        if (await viajes.ObtenerPorIdAsync(usuarioId, viajeId) is not { } actual || Huella(actual) != Huella(viaje))
+            throw new SeleccionTemporalNoDisponibleException("El viaje cambió. Volvé a abrir el recorrido.");
+        var sesion = new Sesion(usuarioId, viajeId, Huella(viaje), _reloj.GetUtcNow().AddMinutes(10), JsonSerializer.Serialize(modelo));
+        cache.Set(Clave(modelo.Sesion), sesion, TimeSpan.FromMinutes(10));
+        return modelo;
+    }
 
     public async Task<PrevisualizacionRecorridoViewModel?> ObtenerAsync(
         int usuarioId, int viajeId, string? token, CancellationToken ct = default)

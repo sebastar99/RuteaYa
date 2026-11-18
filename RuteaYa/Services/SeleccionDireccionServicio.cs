@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using RuteaYa.Logica;
+using RuteaYa.Logica.DTOs;
 using RuteaYa.Web.Models;
 
 namespace RuteaYa.Web.Services;
@@ -49,6 +50,28 @@ public class SeleccionDireccionServicio(IBusquedaDireccionesServicio busqueda, I
         estado.VenceEnUtc = entrada.Vence;
         estado.Token = Guardar("confirmada", entrada with { Estado = JsonSerializer.Serialize(estado) });
         return estado;
+    }
+
+    public EstadoSeleccionDireccion ConfirmarAutomaticamente(int usuarioId, string ambito, string token)
+    {
+        var entrada = Leer("resuelta", usuarioId, ambito, token);
+        var u = JsonSerializer.Deserialize<EstadoSeleccionDireccion>(entrada.Estado!)!.Ubicacion;
+        bool Valido(PuntoRutaDto p) => p != null && p.Latitud is >= -90 and <= 90 && p.Longitud is >= -180 and <= 180;
+        // Una calle/localidad o una puerta interpolada no identifica un retiro o entrega con suficiente certeza.
+        if (u.TipoResultado is not ("houseNumber" or "place") || u.PosicionEstimada || u.NumeroPuertaCorregido ||
+            u.TipoNumeroPuerta == "interpolated" || !Valido(u.Posicion))
+            throw new ArgumentException("Elegí una dirección más precisa: calle, número y localidad, o un lugar identificado.");
+        var acceso = -1;
+        var distancia = decimal.MaxValue;
+        for (var i = 0; i < u.Accesos.Count; i++)
+        {
+            if (!Valido(u.Accesos[i])) continue;
+            var p = u.Accesos[i];
+            var d = (p.Latitud - u.Posicion.Latitud) * (p.Latitud - u.Posicion.Latitud) +
+                (p.Longitud - u.Posicion.Longitud) * (p.Longitud - u.Posicion.Longitud);
+            if (d < distancia) { distancia = d; acceso = i; }
+        }
+        return Confirmar(usuarioId, ambito, token, acceso);
     }
 
     public EstadoSeleccionDireccion ObtenerConfirmada(int usuarioId, string ambito, string token)

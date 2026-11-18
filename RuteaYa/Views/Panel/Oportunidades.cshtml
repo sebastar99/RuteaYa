@@ -71,16 +71,24 @@ else
     {
         @if (TempData["ErrorSalida"] is string errorSalida) { <div class="panel-alert" role="alert">@errorSalida</div> }
         <div class="panel-card">
-            <h2>Salida concreta</h2>
-            <p>La hora de salida es la publicada en tu viaje. Elegí una fecha de sus días habilitados.
-                Si ya existe, se selecciona la salida guardada sin modificar sus horarios.</p>
-            <form method="post" asp-controller="Oportunidades" asp-action="SeleccionarSalida" class="panel-form">
+            <h2>¿Cuándo vas a realizar el viaje?</h2>
+            <p>Salís a las @Model.HoraSalida.ToString(@"hh\:mm"). Elegí una fecha de los días de tu viaje:
+                @string.Join(", ", Model.DiasHabilitados.OrderBy(d => d).Select(d => new[] { "", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo" }[d])).
+                Si ya elegiste esa fecha, se conserva la salida guardada.</p>
+            <form method="post" asp-controller="Oportunidades" asp-action="SeleccionarSalida" class="panel-form" data-form-salida>
                 <input type="hidden" name="ViajeId" value="@listado.ViajeSeleccionado.Id" />
                 <div class="panel-form-grid">
-                    <div class="panel-field"><label for="Fecha">Fecha de salida</label><input class="panel-input" type="date" id="Fecha" name="Fecha" required /></div>
-                    <div class="panel-field"><label for="OffsetUtcMinutos">Offset UTC en minutos (para una salida nueva)</label><input class="panel-input" type="number" id="OffsetUtcMinutos" name="OffsetUtcMinutos" min="-840" max="840" step="1" /><small>Ingresalo explícitamente: UTC−03:00 = −180; UTC = 0. No se usa la zona del servidor.</small></div>
-                    <div class="panel-field"><label for="LlegadaMaximaLocal">Llegada máxima local (opcional, mismo offset)</label><input class="panel-input" type="datetime-local" id="LlegadaMaximaLocal" name="LlegadaMaximaLocal" /></div>
-                    <div class="panel-field"><label><input type="checkbox" name="LlegadaSinRestriccion" value="true" /> No tengo un límite máximo de llegada</label><small>Si no informás un límite ni marcás esta opción, queda desconocido.</small></div>
+                    <div class="panel-field"><label for="Fecha">Fecha de salida</label><input class="panel-input" type="date" id="Fecha" name="Fecha" data-dias="@string.Join(",", Model.DiasHabilitados)" required /><span data-error-fecha role="status"></span></div>
+                    @if (Model.ZonaAutomatica != null) { <p>Para una salida nueva, usamos el horario de Argentina. Las salidas guardadas conservan su horario original.</p> }
+                    else {
+                        <div class="panel-field"><label for="ZonaHorariaId">¿En qué zona horaria comienza el viaje?</label>
+                            <select class="panel-select" name="ZonaHorariaId" id="ZonaHorariaId"><option value="">Elegí el lugar o zona del horario de salida</option>
+                                @foreach (var zona in TimeZoneInfo.GetSystemTimeZones()) { <option value="@zona.Id">@zona.DisplayName</option> }
+                            </select>
+                        </div>
+                    }
+                    <div class="panel-field"><label for="tipo-limite">Horario de llegada</label><select class="panel-select" id="tipo-limite" name="LlegadaSinRestriccion" data-tipo-limite><option value="true">Sin horario límite</option><option value="false">Establecer horario límite</option></select></div>
+                    <div class="panel-field" data-campo-limite hidden><label for="LlegadaMaximaLocal">Llegar como máximo el (hora del lugar de salida)</label><input class="panel-input" type="datetime-local" id="LlegadaMaximaLocal" name="LlegadaMaximaLocal" disabled /></div>
                 </div>
                 <button class="panel-button" type="submit">Seleccionar salida y evaluar</button>
             </form>
@@ -166,3 +174,4 @@ else
         }
     }
 }
+@section Scripts { <script src="~/js/salida-viaje.js" asp-append-version="true"></script> }

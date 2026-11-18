@@ -71,7 +71,7 @@ public sealed class FormulariosDireccionesServicio(IViajesApiServicio api, IUbic
     public async Task<EstadoSeleccionDireccion> ConfirmarAsync(int usuario, string formulario, string clave, string token, int? acceso, CancellationToken ct)
     {
         var campo = ObtenerCampo(usuario, formulario, clave);
-        var estado = selecciones.Confirmar(usuario, campo.Contexto.AmbitoSeleccion, token, acceso);
+        var estado = selecciones.ConfirmarAutomaticamente(usuario, campo.Contexto.AmbitoSeleccion, token);
         var comprobante = await persistencia.EmitirAsync(usuario, campo.Contexto, estado.Token, ct);
         Leer(usuario, formulario);
         campo.Token = comprobante.Token; campo.Canonica = estado.Ubicacion.DireccionNormalizada; campo.Vence = comprobante.VenceEnUtc;

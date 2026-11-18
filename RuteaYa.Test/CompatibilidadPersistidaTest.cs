@@ -15,7 +15,7 @@ public class CompatibilidadPersistidaTest
     {
         var fecha = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(2));
         while (fecha.DayOfWeek != DayOfWeek.Monday) fecha = fecha.AddDays(1);
-        return new() { ViajeId = viajeId, Fecha = fecha, OffsetUtcMinutos = -180, LlegadaSinRestriccion = true };
+        return new() { ViajeId = viajeId, Fecha = fecha, ZonaHorariaId = ZonaHorariaViaje.Argentina, LlegadaSinRestriccion = true };
     }
 
     [Fact]
@@ -49,8 +49,8 @@ public class CompatibilidadPersistidaTest
         var servicio = new SalidasViajeServicio(db); var seleccion = Seleccion(f.ViajeId);
         if (caso == "dia") seleccion.Fecha = seleccion.Fecha!.Value.AddDays(1);
         if (caso == "inactivo") { (await db.Viajes.SingleAsync()).Activo = false; await db.SaveChangesAsync(); }
-        if (caso == "offset_ausente") seleccion.OffsetUtcMinutos = null;
-        if (caso == "offset_invalido") seleccion.OffsetUtcMinutos = 841;
+        if (caso == "offset_ausente") seleccion.ZonaHorariaId = null;
+        if (caso == "offset_invalido") seleccion.ZonaHorariaId = "zona-inexistente";
         if (caso == "pasada") { var fecha = seleccion.Fecha!.Value.AddYears(-4); while (fecha.DayOfWeek != DayOfWeek.Monday) fecha = fecha.AddDays(1); seleccion.Fecha = fecha; }
         if (caso == "llegada") { seleccion.LlegadaSinRestriccion = false; seleccion.LlegadaMaximaLocal = seleccion.Fecha!.Value.ToDateTime(new TimeOnly(7, 59)); }
         await Assert.ThrowsAsync<ArgumentException>(() => servicio.SeleccionarAsync(7, seleccion));

@@ -15,9 +15,6 @@
             input.value = texto; input.dispatchEvent(new Event('input', { bubbles: true }));
             await wait(() => root.querySelector('[data-sugerencias] button'), 'Sin sugerencias');
             root.querySelector('[data-sugerencias] button').click();
-            await wait(() => !root.querySelector('[data-detalle-direccion]').hidden, 'Lookup falló');
-            const acceso = root.querySelector('select'); acceso.value = '0'; acceso.dispatchEvent(new Event('change'));
-            root.querySelector('[data-confirmar-direccion]').click();
             await wait(() => root.querySelector('[data-confirmacion-direccion]').value, 'No confirmó la ubicación');
         }
         await elegir('envio-retiro', 'Retiro UI'); await elegir('envio-entrega', 'Entrega UI');

@@ -14,7 +14,9 @@ window.RuteaYaRecorridos = (() => {
     const container = document.getElementById('mapa-recorrido');
     const status = document.getElementById('estado-mapa');
     if (!container || !Array.isArray(data?.secciones) || !data.secciones.length ||
-        data.secciones.some(s => !Array.isArray(s) || s.length < 2) || !Array.isArray(data.puntos) || data.puntos.length < 2)
+        data.secciones.some(s => !Array.isArray(s) || s.length < 2) || !Array.isArray(data.puntos) || data.puntos.length < 2 ||
+        !Array.isArray(data.etiquetas) || data.etiquetas.length !== data.puntos.length ||
+        !Number.isFinite(data.distanciaMetros) || !Number.isFinite(data.duracionSegundos))
         throw new Error('El servidor devolvió un recorrido incompleto. No se puede dibujar la ruta.');
     const current = ++version;
     controller?.abort(); controller = new AbortController();
@@ -22,7 +24,7 @@ window.RuteaYaRecorridos = (() => {
     const summary = document.querySelector('[data-resumen-recorrido]');
     const metrics = document.createElement('p'), list = document.createElement('ol');
     metrics.textContent = `${(data.distanciaMetros / 1000).toLocaleString('es-AR')} km · ${(data.duracionSegundos / 60).toLocaleString('es-AR', { maximumFractionDigits: 1 })} minutos estimados. Automóvil, sin tráfico en tiempo real.`;
-    data.etiquetas.forEach((label, i) => { const li = document.createElement('li'); li.textContent = `${label} · HERE ${data.identificadores[i] || 'sin identificador'} · navegación ${data.puntos[i].join(', ')}`; list.append(li); });
+    data.etiquetas.forEach(label => { const li = document.createElement('li'); li.textContent = label; list.append(li); });
     summary.replaceChildren(metrics, list);
     if (map) { map.remove(); map = null; }
     if (typeof L === 'undefined') { status.textContent = 'La ruta se calculó, pero no se pudo cargar Leaflet para dibujarla. Revisá la conexión a los recursos del mapa.'; return; }
@@ -38,14 +40,10 @@ window.RuteaYaRecorridos = (() => {
         label.textContent = `${i + 1}. ${data.etiquetas[i]}`;
         L.marker(point(p)).bindPopup(label).addTo(map);
     });
-    data.posiciones.forEach((p, i) => {
-        const label = document.createElement('span');
-        label.textContent = `Position de referencia: ${data.etiquetas[i]}`;
-        L.circleMarker(point(p), { radius: 6, color: '#555', fillOpacity: 0.4 }).bindPopup(label).addTo(map);
-    });
     const bounds = L.featureGroup(layers).getBounds();
-    data.puntos.concat(data.posiciones).forEach(p => bounds.extend(point(p)));
+    data.puntos.forEach(p => bounds.extend(point(p)));
     map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+    requestAnimationFrame(() => { if (map && current === version) map.invalidateSize?.(); });
     } catch (error) {
         status.textContent = `La ruta se calculó pero no se pudo dibujar: ${error.message}`;
         return;
@@ -96,6 +94,10 @@ window.RuteaYaRecorridos = (() => {
     }
     return { dibujar };
 })();
+document.querySelectorAll('[data-recalcular-recorrido]').forEach(link => link.addEventListener('click', event => {
+    if (link.getAttribute('aria-busy') === 'true') { event.preventDefault(); return; }
+    link.setAttribute('aria-busy', 'true'); link.textContent = 'Calculando recorrido…';
+}));
 const datosRecorrido = document.getElementById('datos-recorrido');
 if (datosRecorrido) {
     try {

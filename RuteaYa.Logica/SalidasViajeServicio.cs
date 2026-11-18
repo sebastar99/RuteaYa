@@ -8,7 +8,7 @@ public sealed class SalidasViajeServicio(RuteaYaDbContext db)
 {
     public async Task<int?> SeleccionarAsync(int conductorId, SeleccionSalidaDto dto, CancellationToken ct = default)
     {
-        var viaje = await db.Viajes.AsNoTracking().Include(v => v.Dias)
+        var viaje = await db.Viajes.AsNoTracking().Include(v => v.Dias).Include(v => v.OrigenUbicacion)
             .SingleOrDefaultAsync(v => v.Id == dto.ViajeId && v.UsuarioId == conductorId, ct);
         if (viaje == null) return null;
         if (!viaje.Activo) throw new ArgumentException("El viaje debe estar activo.");
@@ -24,17 +24,15 @@ public sealed class SalidasViajeServicio(RuteaYaDbContext db)
             // Seleccionar la fecha existente no modifica horarios ni compromisos.
             return existente.Id;
         }
-        if (!dto.OffsetUtcMinutos.HasValue) throw new ArgumentException("Indicá el offset UTC explícito para crear la salida.");
-        if (dto.OffsetUtcMinutos is < -840 or > 840)
-            throw new ArgumentException("El offset UTC debe estar entre -840 y 840 minutos.");
+        var zona = ZonaHorariaViaje.Resolver(viaje, dto.ZonaHorariaId);
         if (viaje.HoraSalida < TimeSpan.Zero || viaje.HoraSalida >= TimeSpan.FromDays(1))
             throw new ArgumentException("El horario de salida del viaje no es válido.");
-        var salida = new DateTimeOffset(dto.Fecha.Value.ToDateTime(TimeOnly.FromTimeSpan(viaje.HoraSalida)), TimeSpan.FromMinutes(dto.OffsetUtcMinutos.Value));
+        var salida = ZonaHorariaViaje.Convertir(dto.Fecha.Value.ToDateTime(TimeOnly.FromTimeSpan(viaje.HoraSalida)), zona);
         if (salida <= DateTimeOffset.UtcNow) throw new ArgumentException("La salida debe ser futura.");
         if (dto.LlegadaSinRestriccion && dto.LlegadaMaximaLocal.HasValue)
             throw new ArgumentException("Informá una llegada máxima o marcá sin límite, no ambas.");
         DateTimeOffset? llegada = dto.LlegadaMaximaLocal.HasValue
-            ? new DateTimeOffset(DateTime.SpecifyKind(dto.LlegadaMaximaLocal.Value, DateTimeKind.Unspecified), salida.Offset) : null;
+            ? ZonaHorariaViaje.Convertir(dto.LlegadaMaximaLocal.Value, zona) : null;
         if (llegada < salida) throw new ArgumentException("La llegada máxima no puede ser anterior a la salida.");
         var nueva = new SalidaViaje { ViajeId = viaje.Id, Fecha = dto.Fecha.Value, FechaHora = salida,
             LlegadaMaxima = llegada, LlegadaSinRestriccion = dto.LlegadaSinRestriccion };
